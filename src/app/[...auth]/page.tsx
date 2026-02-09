@@ -2,6 +2,6 @@
 
 import AppRouter from "@/components/AppRouter";
 
-export default function Page() {
+export default function AuthCatchAll() {
   return <AppRouter />;
 }

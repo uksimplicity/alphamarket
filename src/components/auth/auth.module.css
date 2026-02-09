@@ -1,0 +1,232 @@
+.authPage {
+  position: relative;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 48px 20px;
+  background: #eef2f7;
+  overflow: hidden;
+}
+
+.homeBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  filter: blur(8px) brightness(0.9) saturate(0.95);
+  transform: scale(1.02);
+  pointer-events: none;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(8px);
+  z-index: 1;
+}
+
+.card {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 26px 28px 30px;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: cardIn 0.35s ease;
+  z-index: 2;
+}
+
+.backLink {
+  font-size: 13px;
+  color: #475569;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #f1f5ff;
+  border: 1px solid #e1e8ff;
+  width: fit-content;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, color 0.2s ease,
+    background 0.2s ease;
+}
+
+.backLink::before {
+  content: "←";
+  font-weight: 700;
+  color: #3366ff;
+}
+
+.backLink:hover {
+  color: #1e293b;
+  background: #e9efff;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(51, 102, 255, 0.15);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand img {
+  height: 32px;
+}
+
+.title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+
+.subtitle {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.toggleGroup {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+  border-radius: 14px;
+  background: #eff3ff;
+}
+
+.toggleBtn {
+  border: none;
+  background: transparent;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #4b5563;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggleActive {
+  background: #3366ff;
+  color: #ffffff;
+  box-shadow: 0 10px 20px rgba(51, 102, 255, 0.25);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.input {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  background: #fbfbfd;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  color: #111827;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.input:focus {
+  border-color: #3366ff;
+  box-shadow: 0 0 0 3px rgba(51, 102, 255, 0.15);
+  background: #ffffff;
+}
+
+.rowBetween {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.checkboxRow input {
+  width: 16px;
+  height: 16px;
+  accent-color: #3366ff;
+}
+
+.primaryBtn {
+  border: none;
+  background: #3366ff;
+  color: #ffffff;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.primaryBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 25px rgba(51, 102, 255, 0.25);
+}
+
+.link {
+  color: #3366ff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.footerText {
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.otpInput {
+  letter-spacing: 6px;
+  text-align: center;
+  font-size: 18px;
+}
+
+.resend {
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .authPage {
+    padding: 0;
+  }
+
+  .card {
+    min-height: 100svh;
+    max-width: 100%;
+    border-radius: 0;
+    padding: 24px 20px 32px;
+  }
+}
