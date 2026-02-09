@@ -223,73 +223,151 @@ export default function VendorDashboard() {
 
         <section className={styles.card}>
           <div className={styles.cardTitle}>Recent Orders</div>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Order ID</th>
-                <th>Customer ID</th>
-                <th>Order Date</th>
-                <th>Items</th>
-                <th>Price</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((order) => (
-                <tr key={order.id}>
-                  <td>{order.id}</td>
-                  <td>{order.customer}</td>
-                  <td>{order.date}</td>
-                  <td>{order.items}</td>
-                  <td>{order.price}</td>
-                  <td>
-                    <span className={styles.pill}>{order.status}</span>
-                  </td>
-                  <td>
-                    <button className={styles.actionBtn}>Cancel</button>
-                  </td>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>Customer ID</th>
+                  <th>Order Date</th>
+                  <th>Items</th>
+                  <th>Price</th>
+                  <th>Status</th>
+                  <th>Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {orders.map((order) => (
+                  <tr key={order.id}>
+                    <td>{order.id}</td>
+                    <td>{order.customer}</td>
+                    <td>{order.date}</td>
+                    <td>{order.items}</td>
+                    <td>{order.price}</td>
+                    <td>
+                      <span className={styles.pill}>{order.status}</span>
+                    </td>
+                    <td>
+                      <button className={styles.actionBtn}>Cancel</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section className={styles.card}>
           <div className={styles.cardTitle}>Order Status</div>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Product Name</th>
-                <th>Category</th>
-                <th>Current Stock</th>
-                <th>Status</th>
-                <th>Vendor</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((product, index) => (
-                <tr key={`${product.id}-${index}`}>
-                  <td>
-                    <strong>{product.name}</strong>
-                    <div>{product.id}</div>
-                  </td>
-                  <td>{product.category}</td>
-                  <td>{product.stock}</td>
-                  <td>
-                    <span className={styles.actionBtn}>Low Stock</span>
-                  </td>
-                  <td>{product.vendor}</td>
-                  <td>
-                    <button className={styles.pill}>Order Now</button>
-                  </td>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Product Name</th>
+                  <th>Category</th>
+                  <th>Current Stock</th>
+                  <th>Status</th>
+                  <th>Vendor</th>
+                  <th>Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {products.map((product, index) => (
+                  <tr key={`${product.id}-${index}`}>
+                    <td>
+                      <strong>{product.name}</strong>
+                      <div>{product.id}</div>
+                    </td>
+                    <td>{product.category}</td>
+                    <td>{product.stock}</td>
+                    <td>
+                      <span className={styles.actionBtn}>Low Stock</span>
+                    </td>
+                    <td>{product.vendor}</td>
+                    <td>
+                      <button className={styles.pill}>Order Now</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       </main>
+
+      <nav className={styles.mobileNav} aria-label="Vendor mobile navigation">
+        <Link className={`${styles.mobileNavItem} ${styles.mobileNavItemActive}`} to="/vendor">
+          <span className={styles.mobileNavIcon}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M3 10l9-7 9 7v9a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2v-9z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+          Home
+        </Link>
+        <button className={styles.mobileNavItem} type="button">
+          <span className={styles.mobileNavIcon}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M4 6h16M4 12h16M4 18h10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+          </span>
+          Orders
+        </button>
+        <button className={styles.mobileNavItem} type="button">
+          <span className={styles.mobileNavIcon}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M4 7h16v10H4V7zm3-3h10v3H7V4z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+          Products
+        </button>
+        <button className={styles.mobileNavItem} type="button">
+          <span className={styles.mobileNavIcon}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M4 6h16v12H4V6zm0 0l8 6 8-6"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+          Inbox
+        </button>
+        <button className={styles.mobileNavItem} type="button">
+          <span className={styles.mobileNavIcon}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              <path
+                d="M4 20c1.8-4 13.2-4 16 0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+          </span>
+          Account
+        </button>
+      </nav>
     </div>
   );
 }

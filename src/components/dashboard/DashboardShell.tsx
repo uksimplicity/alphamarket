@@ -141,7 +141,33 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
   });
 
   if (pathname === "/dashboard/home") {
-    return <div className="min-h-screen bg-white">{children}</div>;
+    return (
+      <div className="min-h-screen bg-white pb-24 lg:pb-0">
+        {children}
+        <nav className="fixed bottom-4 left-4 right-4 z-20 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-card backdrop-blur lg:hidden">
+          <div className="grid grid-cols-4 gap-2 text-xs font-semibold text-slate-500">
+            {topNavItems
+              .filter((item) =>
+                ["/dashboard/home", "/dashboard/orders", "/dashboard/wishlist", "/dashboard/profile"].includes(item.href)
+              )
+              .map((item) => {
+                const active = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`rounded-xl px-3 py-2 text-center ${
+                      active ? "bg-brand text-white" : "text-slate-600"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+          </div>
+        </nav>
+      </div>
+    );
   }
 
   return (
