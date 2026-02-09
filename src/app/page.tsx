@@ -523,20 +523,20 @@ export default function Home() {
         </section>
       </div>
 
-    <footer className={styles.footer}>
-      <div className={styles.footerGrid}>
-        <div className={styles.footerLogo}>
-          <div className={styles.logo}>
-            <div className={styles.logoMark}>A</div>
-            <div className={styles.logoText}>
-              Alpha
-              <span>Marketplace</span>
+      <footer className={styles.footer}>
+        <div className={styles.footerGrid}>
+          <div className={styles.footerLogo}>
+            <div className={styles.logo}>
+              <div className={styles.logoMark}>A</div>
+              <div className={styles.logoText}>
+                Alpha
+                <span>Marketplace</span>
+              </div>
             </div>
-          </div>
-          <p>
+            <p>
               The world's most trusted marketplace for high-quality goods,
               connecting buyers and sellers with secure transactions.
-          </p>
+            </p>
             <div className={styles.socials}>
               <span>fb</span>
               <span>in</span>
@@ -564,6 +564,10 @@ export default function Home() {
               <span>Scan to download</span>
             </div>
           </div>
+        </div>
+        <div className={styles.footerDivider} />
+        <div className={styles.footerCopyright}>
+          © 2026 Alpha Marketplace, Inc. All rights reserved.
         </div>
       </footer>
 
