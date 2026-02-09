@@ -1,14 +1,16 @@
 "use client";
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import AuthLayout from "./AuthLayout";
 import styles from "./auth.module.css";
 
-export default function Login() {
+export default function VendorLogin() {
+  const navigate = useNavigate();
+
   return (
     <AuthLayout
-      title="Welcome Back"
-      subtitle="Sign in to continue shopping and manage your account."
+      title="Vendor Sign In"
+      subtitle="Access your vendor dashboard and manage your store."
       footer={
         <div className={styles.footerText}>
           Don't have an account? <Link className={styles.link} to="/signup">Sign Up</Link>
@@ -17,7 +19,10 @@ export default function Login() {
     >
       <form
         className={styles.form}
-        onSubmit={(event) => event.preventDefault()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          navigate("/vendor");
+        }}
       >
         <input className={styles.input} type="email" placeholder="Email" />
         <input className={styles.input} type="password" placeholder="Password" />

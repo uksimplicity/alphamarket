@@ -38,8 +38,8 @@ type Product = {
 const populars: Product[] = [
   {
     title: "Wireless Noise Cancelling Headphones",
-    price: "â‚¦299.00",
-    oldPrice: "â‚¦349.00",
+    price: "₦299.00",
+    oldPrice: "₦349.00",
     badge: "-15%",
     image:
       "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=80",
@@ -48,7 +48,7 @@ const populars: Product[] = [
   },
   {
     title: "Smart Fitness Watch Series 7",
-    price: "â‚¦399.00",
+    price: "₦399.00",
     image:
       "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80",
     rating: "4.8",
@@ -56,8 +56,8 @@ const populars: Product[] = [
   },
   {
     title: "Urban Runner Sneakers",
-    price: "â‚¦129.50",
-    oldPrice: "â‚¦150",
+    price: "₦129.50",
+    oldPrice: "₦150",
     badge: "Sale",
     image:
       "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80",
@@ -66,7 +66,7 @@ const populars: Product[] = [
   },
   {
     title: "Advanced Hydrating Serum",
-    price: "â‚¦45.00",
+    price: "₦45.00",
     image:
       "https://images.unsplash.com/photo-1585238342028-4bbc7c0f0cb5?auto=format&fit=crop&w=900&q=80",
     rating: "4.9",
@@ -74,8 +74,8 @@ const populars: Product[] = [
   },
   {
     title: "Everyday Tech Backpack",
-    price: "â‚¦89.99",
-    oldPrice: "â‚¦110",
+    price: "₦89.99",
+    oldPrice: "₦110",
     badge: "-20%",
     image:
       "https://images.unsplash.com/photo-1509769375558-7c1fefe0f0de?auto=format&fit=crop&w=900&q=80",
@@ -87,8 +87,8 @@ const populars: Product[] = [
 const newArrivals: Product[] = [
   {
     title: "Everyday Tech Backpack",
-    price: "â‚¦89.99",
-    oldPrice: "â‚¦110",
+    price: "₦89.99",
+    oldPrice: "₦110",
     badge: "-20%",
     image:
       "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80",
@@ -97,7 +97,7 @@ const newArrivals: Product[] = [
   },
   {
     title: "Advanced Hydrating Serum",
-    price: "â‚¦45.00",
+    price: "₦45.00",
     image:
       "https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&w=900&q=80",
     rating: "4.9",
@@ -105,8 +105,8 @@ const newArrivals: Product[] = [
   },
   {
     title: "Urban Runner Sneakers",
-    price: "â‚¦129.50",
-    oldPrice: "â‚¦150",
+    price: "₦129.50",
+    oldPrice: "₦150",
     badge: "Sale",
     image:
       "https://images.unsplash.com/photo-1549298916-b41d501d3772?auto=format&fit=crop&w=900&q=80",
@@ -115,7 +115,7 @@ const newArrivals: Product[] = [
   },
   {
     title: "Smart Fitness Watch Series 7",
-    price: "â‚¦399.00",
+    price: "₦399.00",
     image:
       "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?auto=format&fit=crop&w=900&q=80",
     rating: "4.8",
@@ -208,7 +208,7 @@ function Header({ onOpenSearch }: HeaderProps) {
             Orders
           </div>
           <div className={styles.iconLabel}>
-            <button className={styles.iconBtn} aria-label="Login">
+            <Link className={styles.iconBtn} aria-label="Login" to="/login">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <circle
                   cx="12"
@@ -226,8 +226,8 @@ function Header({ onOpenSearch }: HeaderProps) {
                   strokeLinecap="round"
                 />
               </svg>
-            </button>
-            Login
+            </Link>
+            <Link to="/login">Login</Link>
           </div>
           <div className={styles.iconLabel}>
             <button className={styles.iconBtn} aria-label="Cart">
@@ -408,6 +408,14 @@ function ProductCard({ product }: ProductCardProps) {
         {product.badge ? (
           <span className={styles.discountBadge}>{product.badge}</span>
         ) : null}
+        <div className={styles.productActions}>
+          <button className={styles.actionIcon} aria-label="Add to wishlist">
+            ♡
+          </button>
+          <button className={styles.actionIcon} aria-label="Add to cart">
+            🛒
+          </button>
+        </div>
         <img src={product.image} alt={product.title} />
       </div>
       <div className={styles.productTitle}>{product.title}</div>
@@ -552,13 +560,13 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
                 <span>tw</span>
               </div>
             </div>
-            <div>
-              <div className={styles.footerTitle}>Company</div>
-              <div>About Us</div>
-              <div>Careers</div>
-              <div>Press</div>
-              <div>Blog</div>
-            </div>
+          <div className={styles.companyColumn}>
+            <div className={styles.footerTitle}>Company</div>
+            <div>About Us</div>
+            <div>Careers</div>
+            <div>Press</div>
+            <div>Blog</div>
+          </div>
             <div>
               <div className={styles.footerTitle}>Help & Support</div>
               <div>Shipping Info</div>
