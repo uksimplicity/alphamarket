@@ -1,6 +1,8 @@
-"use client";
+import dynamic from "next/dynamic";
 
-import AppRouter from "@/components/AppRouter";
+const AppRouter = dynamic(() => import("@/components/AppRouter"), {
+  ssr: false,
+});
 
 export default function AuthCatchAll() {
   return <AppRouter />;
