@@ -556,13 +556,15 @@
 .footer {
   background: linear-gradient(120deg, #080c14 0%, #0b1325 60%, #0a0f1c 100%);
   color: #d0d5e0;
-  padding: 40px 20px;
+  padding: 40px 0;
   margin-top: 30px;
+  width: 100%;
 }
 
 .footerGrid {
   max-width: 1180px;
   margin: 0 auto;
+  padding: 0 20px;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 30px;
