@@ -584,7 +584,7 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
           </div>
           <div className={styles.footerDivider} />
           <div className={styles.footerCopyright}>
-            Â© 2026 Alpha Marketplace, Inc. All rights reserved.
+            Alpha Market Place © 2026. All rights reserved.
           </div>
         </footer>
       ) : null}
