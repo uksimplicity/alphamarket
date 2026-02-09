@@ -735,10 +735,9 @@
   height: 90px;
   border-radius: 12px;
   background: #ffffff;
-  color: #0f172a;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
+  display: block;
+  object-fit: cover;
+  border: 1px solid #e2e8f0;
 }
 
 @media (max-width: 900px) {

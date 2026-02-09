@@ -39,63 +39,78 @@ export default function ProfilePage() {
 
   return (
     <div className="grid gap-6">
-      <Card>
-        <SectionTitle title="Personal Information" subtitle="Manage your account profile." />
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <input className="rounded-xl border border-slate-200 px-4 py-2 text-sm" defaultValue={data.name} />
-          <input className="rounded-xl border border-slate-200 px-4 py-2 text-sm" defaultValue={data.email} />
-          <input className="rounded-xl border border-slate-200 px-4 py-2 text-sm" defaultValue={data.phone} />
-          <Button>Save Changes</Button>
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-card">
+        <div className="border-b border-slate-200 px-5 py-4 text-lg font-semibold text-slate-900">
+          Account Overview
         </div>
-      </Card>
-
-      <Card>
-        <SectionTitle title="Shipping Addresses" subtitle="Manage your delivery locations." />
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {data.addresses.map((address) => (
-            <div key={address.id} className="rounded-xl border border-slate-200 p-4 text-sm">
-              <div className="font-semibold text-slate-800">{address.label}</div>
-              <div className="text-slate-500">{address.detail}</div>
+        <div className="grid gap-4 p-5 lg:grid-cols-2">
+          <Card className="rounded-xl border border-slate-200 shadow-none">
+            <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
+              Account Details
             </div>
-          ))}
-        </div>
-      </Card>
+            <div className="space-y-2 px-4 py-4 text-sm text-slate-700">
+              <div className="font-semibold text-slate-900">{data.name}</div>
+              <div>{data.email}</div>
+            </div>
+          </Card>
 
-      <Card>
-        <SectionTitle title="Password" subtitle="Update your login credentials." />
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <input className="rounded-xl border border-slate-200 px-4 py-2 text-sm" placeholder="New password" type="password" />
-          <input className="rounded-xl border border-slate-200 px-4 py-2 text-sm" placeholder="Confirm password" type="password" />
-          <Button>Change Password</Button>
-        </div>
-      </Card>
-
-      <Card>
-        <SectionTitle title="Preferences" subtitle="Choose how you want to hear from us." />
-        <div className="mt-4 grid gap-3">
-          {data.preferences.map((pref) => (
-            <label key={pref.id} className="flex items-center justify-between rounded-xl border border-slate-200 p-3 text-sm">
-              <span>{pref.label}</span>
-              <input type="checkbox" defaultChecked={pref.enabled} />
-            </label>
-          ))}
-        </div>
-      </Card>
-
-      <Card>
-        <SectionTitle title="Payment History" subtitle="Your recent transactions." />
-        <div className="mt-4 space-y-3 text-sm">
-          {data.payments.map((payment) => (
-            <div key={payment.id} className="flex items-center justify-between rounded-xl border border-slate-200 p-4">
-              <div>
-                <div className="font-semibold text-slate-800">{payment.amount}</div>
-                <div className="text-xs text-slate-500">{payment.method}</div>
+          <Card className="rounded-xl border border-slate-200 shadow-none">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
+              Address Book
+              <Button className="h-8 px-3 text-xs" variant="ghost">
+                Edit
+              </Button>
+            </div>
+            <div className="space-y-2 px-4 py-4 text-sm text-slate-700">
+              <div className="text-xs uppercase tracking-wide text-slate-400">
+                Your default shipping address:
               </div>
-              <div className="text-xs text-slate-500">{payment.date}</div>
+              <div className="font-semibold text-slate-900">
+                {data.addresses[0]?.label ?? "No default address"}
+              </div>
+              <div>{data.addresses[0]?.detail ?? "Add an address to continue."}</div>
+              <div>{data.phone}</div>
             </div>
-          ))}
+          </Card>
+
+          <Card className="rounded-xl border border-slate-200 shadow-none">
+            <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
+              Alpha Store Credit
+            </div>
+            <div className="flex items-center gap-3 px-4 py-6 text-sm text-slate-700">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700">
+                <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+                  <path
+                    d="M4 6h16v12H4V6zm3 3h6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+              <div>
+                <div className="font-semibold text-slate-900">Alpha store credit balance:</div>
+                <div>₦ 0</div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="rounded-xl border border-slate-200 shadow-none">
+            <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
+              Newsletter Preferences
+            </div>
+            <div className="space-y-3 px-4 py-4 text-sm text-slate-700">
+              <div>
+                Manage your email communications to stay updated with the latest news and offers.
+              </div>
+              <Button className="h-8 px-3 text-xs" variant="ghost">
+                Edit newsletter preferences
+              </Button>
+            </div>
+          </Card>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

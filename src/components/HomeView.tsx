@@ -577,7 +577,12 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
             <div>
               <div className={styles.footerTitle}>Get the App</div>
               <div className={styles.qrBlock}>
-                <div className={styles.qrCode}>QR</div>
+                <img
+                  className={styles.qrCode}
+                  src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https%3A%2F%2Falphamarket-weld.vercel.app%2F"
+                  alt="QR code for Alpha Market Place"
+                  loading="lazy"
+                />
                 <span>Scan to download</span>
               </div>
             </div>
