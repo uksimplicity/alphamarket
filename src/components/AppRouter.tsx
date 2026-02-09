@@ -1,6 +1,4 @@
 "use client";
-
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import EmailVerified from "./auth/EmailVerified";
 import ForgotPassword from "./auth/ForgotPassword";
 import LoginSelector from "./auth/LoginSelector";
@@ -13,6 +11,12 @@ import HomeView from "./HomeView";
 import VendorDashboard from "./vendor/VendorDashboard";
 
 export default function AppRouter() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const { BrowserRouter, Navigate, Route, Routes } = require("react-router-dom");
+
   return (
     <BrowserRouter>
       <Routes>
