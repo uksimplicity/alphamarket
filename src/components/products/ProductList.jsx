@@ -4,9 +4,9 @@ import { useMemo, useState } from "react";
 import { productsData } from "./productData";
 
 export default function ProductList({
-  onView = () => {},
-  onEdit = () => {},
-  onDelete = () => {},
+  onView = (id) => {},
+  onEdit = (id) => {},
+  onDelete = (id) => {},
   onCreate = () => {},
 }) {
   const [rows, setRows] = useState(productsData);
