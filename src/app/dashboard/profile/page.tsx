@@ -90,7 +90,7 @@ export default function ProfilePage() {
                 </svg>
               </span>
               <div>
-                <div className="font-semibold text-slate-900">Alpha store credit balance:</div>
+                <div className="font-semibold text-slate-900">Alpha store credit balance (verified):</div>
                 <div>₦ 0</div>
               </div>
             </div>
@@ -114,5 +114,6 @@ export default function ProfilePage() {
     </div>
   );
 }
+
 
 
