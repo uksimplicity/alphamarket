@@ -23,7 +23,7 @@ const rows = new Array(10).fill(null).map((_, index) => ({
   status: "Published",
 }));
 
-export default function ProductStock({ onAddStock = () => {}, onView = () => {} }) {
+export default function ProductStock({ onAddStock = () => {}, onView = (id) => {} }) {
   return (
     <div className="stock-page">
       <div className="stock-card">
