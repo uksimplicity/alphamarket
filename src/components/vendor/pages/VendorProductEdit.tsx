@@ -56,12 +56,17 @@ export default function VendorProductEdit() {
     );
   }
 
-  const handleChange = (event) => {
+  const handleChange = (
+    event:
+      | React.ChangeEvent<HTMLInputElement>
+      | React.ChangeEvent<HTMLSelectElement>
+      | React.ChangeEvent<HTMLTextAreaElement>
+  ) => {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleVariantChange = (index, field, value) => {
+  const handleVariantChange = (index: number, field: "variant" | "value", value: string) => {
     setVariants((prev) =>
       prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
     );
@@ -71,7 +76,7 @@ export default function VendorProductEdit() {
     setVariants((prev) => [...prev, { variant: "", value: "" }]);
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     window.alert("Changes saved.");
   };
