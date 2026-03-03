@@ -9,6 +9,15 @@ import VendorLogin from "./auth/VendorLogin";
 import VerifyEmail from "./auth/VerifyEmail";
 import HomeView from "./HomeView";
 import VendorDashboard from "./vendor/VendorDashboard";
+import VendorShell from "./vendor/VendorShell";
+import VendorProductsAll from "./vendor/pages/VendorProductsAll";
+import VendorProductsDraft from "./vendor/pages/VendorProductsDraft";
+import VendorProductsStock from "./vendor/pages/VendorProductsStock";
+import VendorProductsReview from "./vendor/pages/VendorProductsReview";
+import VendorProductsCreate from "./vendor/pages/VendorProductsCreate";
+import VendorProductsAddStock from "./vendor/pages/VendorProductsAddStock";
+import VendorProductDetail from "./vendor/pages/VendorProductDetail";
+import VendorProductEdit from "./vendor/pages/VendorProductEdit";
 
 export default function AppRouter() {
   if (typeof window === "undefined") {
@@ -29,7 +38,19 @@ export default function AppRouter() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/email-verified" element={<EmailVerified />} />
-        <Route path="/vendor" element={<VendorDashboard />} />
+
+        <Route path="/vendor" element={<VendorShell />}>
+          <Route index element={<VendorDashboard />} />
+          <Route path="products" element={<VendorProductsAll />} />
+          <Route path="products/create" element={<VendorProductsCreate />} />
+          <Route path="products/draft" element={<VendorProductsDraft />} />
+          <Route path="products/stock" element={<VendorProductsStock />} />
+          <Route path="products/stock/add" element={<VendorProductsAddStock />} />
+          <Route path="products/review" element={<VendorProductsReview />} />
+          <Route path="products/:productId" element={<VendorProductDetail />} />
+          <Route path="products/:productId/edit" element={<VendorProductEdit />} />
+        </Route>
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

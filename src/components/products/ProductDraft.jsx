@@ -1,36 +1,39 @@
- "use client";
+"use client";
 
 import { useMemo, useState } from "react";
-import { productsData } from "./productData";
+import { useNavigate } from "react-router-dom";
+import "@/components/products/ProductDraft.css";
 
-export default function ProductList({
-  onView = () => {},
-  onEdit = () => {},
-  onDelete = () => {},
-  onCreate = () => {},
-}) {
-  const [rows, setRows] = useState(productsData);
+const seedRows = new Array(12).fill(null).map((_, index) => ({
+  id: `73423-${index + 1}`,
+  displayId: "#73423",
+  product: "Product Name",
+  category: "Fashion",
+  price: "₦40,000",
+  vendor: "Devon Lane",
+  status: "Draft",
+}));
+
+export default function ProductDraft() {
+  const navigate = useNavigate();
+  const [rows, setRows] = useState(seedRows);
 
   const handleDelete = (id) => {
     const confirmed = window.confirm("Are you sure you want to delete this item?");
     if (!confirmed) return;
-    setRows((prev) => prev.filter((item) => item.id !== id));
-    onDelete(id);
+    setRows((prev) => prev.filter((row) => row.id !== id));
   };
 
-  const products = useMemo(() => rows, [rows]);
+  const data = useMemo(() => rows, [rows]);
 
   return (
-    <div className="product-page">
-      <div className="product-card">
-        <div className="product-header">
-          <h1>Product List</h1>
-          <button className="btn-primary" type="button" onClick={onCreate}>
-            Create Product
-          </button>
+    <div className="draft-page">
+      <div className="draft-card">
+        <div className="draft-header">
+          <h1>Draft Products</h1>
         </div>
 
-        <div className="product-filters">
+        <div className="draft-filters">
           <div className="search-field">
             <span className="search-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24">
@@ -45,29 +48,25 @@ export default function ProductList({
           <div className="filter-group">
             <select aria-label="Filter by category">
               <option>Category</option>
-              <option>Cloth</option>
               <option>Fashion</option>
+              <option>Cloth</option>
             </select>
             <select aria-label="Filter by vendor">
               <option>Vendor</option>
-              <option>Sk Ibrahim</option>
-              <option>Jerome Bell</option>
+              <option>Devon Lane</option>
             </select>
             <select aria-label="Filter by status">
               <option>Status</option>
-              <option>Publish</option>
               <option>Draft</option>
             </select>
           </div>
         </div>
 
         <div className="table-wrap">
-          <table className="product-table">
+          <table className="draft-table">
             <thead>
               <tr>
-                <th>
-                  <input type="checkbox" aria-label="Select all" />
-                </th>
+                <th><input type="checkbox" aria-label="Select all" /></th>
                 <th>ID</th>
                 <th>Product</th>
                 <th>Category</th>
@@ -78,31 +77,27 @@ export default function ProductList({
               </tr>
             </thead>
             <tbody>
-              {products.map((product) => (
-                <tr key={product.id}>
-                  <td>
-                    <input type="checkbox" aria-label={`Select ${product.name}`} />
-                  </td>
-                  <td>{product.displayId}</td>
+              {data.map((row) => (
+                <tr key={row.id}>
+                  <td><input type="checkbox" aria-label={`Select ${row.product}`} /></td>
+                  <td>{row.displayId}</td>
                   <td>
                     <div className="product-cell">
                       <span className="product-thumb" aria-hidden="true" />
-                      <span className="product-name">{product.name}</span>
+                      <span className="product-name">{row.product}</span>
                     </div>
                   </td>
-                  <td>{product.category}</td>
-                  <td>{product.price}</td>
-                  <td>{product.vendor}</td>
-                  <td>
-                    <span className="status-badge">{product.status}</span>
-                  </td>
+                  <td>{row.category}</td>
+                  <td>{row.price}</td>
+                  <td>{row.vendor}</td>
+                  <td><span className="draft-badge">{row.status}</span></td>
                   <td>
                     <div className="action-icons">
                       <button
                         className="icon-btn view"
                         type="button"
                         aria-label="View"
-                        onClick={() => onView(product.id)}
+                        onClick={() => navigate(`/vendor/products/${row.id}`)}
                       >
                         <svg viewBox="0 0 24 24">
                           <path
@@ -115,7 +110,7 @@ export default function ProductList({
                         className="icon-btn edit"
                         type="button"
                         aria-label="Edit"
-                        onClick={() => onEdit(product.id)}
+                        onClick={() => navigate(`/vendor/products/${row.id}/edit`)}
                       >
                         <svg viewBox="0 0 24 24">
                           <path
@@ -128,7 +123,7 @@ export default function ProductList({
                         className="icon-btn delete"
                         type="button"
                         aria-label="Delete"
-                        onClick={() => handleDelete(product.id)}
+                        onClick={() => handleDelete(row.id)}
                       >
                         <svg viewBox="0 0 24 24">
                           <path

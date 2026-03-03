@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, useLocation } from "react-router-dom";
 
 const items = [
-  { label: "All Products", href: "/dashboard/products" },
-  { label: "Draft Products", href: "/dashboard/products/draft" },
-  { label: "Stock Products", href: "/dashboard/products/stock" },
-  { label: "Product Review", href: "/dashboard/products/review" },
+  { label: "All Products", href: "/vendor/products" },
+  { label: "Draft Products", href: "/vendor/products/draft" },
+  { label: "Stock Products", href: "/vendor/products/stock" },
+  { label: "Product Review", href: "/vendor/products/review" },
 ];
 
 type ManageProductMenuProps = {
@@ -20,7 +19,7 @@ export default function ManageProductMenu({
   defaultOpen = false,
   className = "",
 }: ManageProductMenuProps) {
-  const pathname = usePathname() ?? "";
+  const { pathname } = useLocation();
   const [open, setOpen] = useState(defaultOpen);
 
   const isActive = useMemo(
@@ -68,7 +67,7 @@ export default function ManageProductMenu({
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                to={item.href}
                 className={
                   "mt-1 flex items-center rounded-md border-l-2 px-3 py-2 text-xs font-medium transition-colors " +
                   (active
