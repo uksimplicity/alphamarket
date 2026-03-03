@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { fetcher } from "@/components/dashboard/api";
-import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
+import { Button, ErrorState, Skeleton } from "@/components/dashboard/ui";
 
 type ProfileData = {
   name: string;
@@ -44,7 +44,7 @@ export default function ProfilePage() {
           Account Overview
         </div>
         <div className="grid gap-4 p-5 lg:grid-cols-2">
-          <Card className="rounded-xl border border-slate-200 shadow-none">
+          <div className="rounded-xl border border-slate-200 shadow-none">
             <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
               Account Details
             </div>
@@ -52,9 +52,9 @@ export default function ProfilePage() {
               <div className="font-semibold text-slate-900">{data.name}</div>
               <div>{data.email}</div>
             </div>
-          </Card>
+          </div>
 
-          <Card className="rounded-xl border border-slate-200 shadow-none">
+          <div className="rounded-xl border border-slate-200 shadow-none">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
               Address Book
               <Button className="h-8 px-3 text-xs" variant="ghost">
@@ -71,9 +71,9 @@ export default function ProfilePage() {
               <div>{data.addresses[0]?.detail ?? "Add an address to continue."}</div>
               <div>{data.phone}</div>
             </div>
-          </Card>
+          </div>
 
-          <Card className="rounded-xl border border-slate-200 shadow-none">
+          <div className="rounded-xl border border-slate-200 shadow-none">
             <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
               Alpha Store Credit
             </div>
@@ -94,9 +94,9 @@ export default function ProfilePage() {
                 <div>₦ 0</div>
               </div>
             </div>
-          </Card>
+          </div>
 
-          <Card className="rounded-xl border border-slate-200 shadow-none">
+          <div className="rounded-xl border border-slate-200 shadow-none">
             <div className="border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
               Newsletter Preferences
             </div>
@@ -108,9 +108,11 @@ export default function ProfilePage() {
                 Edit newsletter preferences
               </Button>
             </div>
-          </Card>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+
