@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import "@/components/products/CreateProduct.css";
 
 const initialForm = {
@@ -22,7 +22,7 @@ export default function CreateProduct() {
   const [form, setForm] = useState(initialForm);
   const [variants, setVariants] = useState([{ variant: "", value: "" }]);
   const [discountEnabled, setDiscountEnabled] = useState(true);
-  const navigate = useNavigate();
+  const router = useRouter();
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -260,7 +260,7 @@ export default function CreateProduct() {
           </section>
 
           <div className="form-actions">
-            <button type="button" className="btn-cancel" onClick={() => navigate(-1)}>
+            <button type="button" className="btn-cancel" onClick={() => router.back()}>
               Cancel
             </button>
             <button type="submit" className="btn-save">
