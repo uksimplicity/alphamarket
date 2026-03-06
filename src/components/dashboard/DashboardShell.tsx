@@ -142,7 +142,12 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
 
   if (pathname === "/dashboard/home") {
     return (
-      <div className="min-h-screen bg-white pb-24 lg:pb-0">
+      <div className="relative min-h-screen overflow-hidden bg-slate-50 pb-24 lg:pb-0">
+        <div className="pointer-events-none absolute inset-0 -z-10">
+          <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-brand/10 blur-3xl" />
+          <div className="absolute right-[-120px] top-24 h-80 w-80 rounded-full bg-sky-200/40 blur-3xl" />
+          <div className="absolute bottom-[-160px] left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-amber-200/30 blur-3xl" />
+        </div>
         {children}
         <nav className="fixed bottom-4 left-4 right-4 z-20 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-card backdrop-blur lg:hidden">
           <div className="grid grid-cols-4 gap-2 text-xs font-semibold text-slate-500">
@@ -171,7 +176,12 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="relative min-h-screen overflow-hidden bg-slate-50">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-brand/10 blur-3xl" />
+        <div className="absolute right-[-120px] top-24 h-80 w-80 rounded-full bg-sky-200/40 blur-3xl" />
+        <div className="absolute bottom-[-160px] left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-amber-200/30 blur-3xl" />
+      </div>
       <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 px-4 pb-24 pt-6 lg:grid-cols-[240px_1fr] lg:pb-6">
         <aside className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card lg:block">
           <div className="px-5 pt-5">

@@ -18,6 +18,8 @@ import VendorProductsCreate from "./vendor/pages/VendorProductsCreate";
 import VendorProductsAddStock from "./vendor/pages/VendorProductsAddStock";
 import VendorProductDetail from "./vendor/pages/VendorProductDetail";
 import VendorProductEdit from "./vendor/pages/VendorProductEdit";
+import ProductDetailRoute from "./products/ProductDetailRoute";
+import SellerStoreRoute from "./store/SellerStoreRoute";
 
 export default function AppRouter() {
   if (typeof window === "undefined") {
@@ -38,6 +40,8 @@ export default function AppRouter() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/email-verified" element={<EmailVerified />} />
+        <Route path="/products/:productId" element={<ProductDetailRoute />} />
+        <Route path="/store/:slug" element={<SellerStoreRoute />} />
 
         <Route path="/vendor" element={<VendorShell />}>
           <Route index element={<VendorDashboard />} />

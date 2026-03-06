@@ -3,6 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import styles from "@/app/page.module.css";
+import { addToCart, parsePrice, useCartCount, formatCurrency } from "@/components/commerce/store";
+import {
+  Product,
+  popularProducts,
+  newArrivalProducts,
+} from "@/components/products/catalog";
 
 const weeklyPromotions = [
   {
@@ -22,104 +28,6 @@ const weeklyPromotions = [
     title: "Home Refresh",
     image:
       "https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=900&q=80",
-  },
-];
-
-type Product = {
-  title: string;
-  price: string;
-  oldPrice?: string;
-  badge?: string;
-  image: string;
-  rating: string;
-  reviews: string;
-};
-
-const populars: Product[] = [
-  {
-    title: "Wireless Noise Cancelling Headphones",
-    price: "₦299.00",
-    oldPrice: "₦349.00",
-    badge: "-15%",
-    image:
-      "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=900&q=80",
-    rating: "4.9",
-    reviews: "120",
-  },
-  {
-    title: "Smart Fitness Watch Series 7",
-    price: "₦399.00",
-    image:
-      "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=900&q=80",
-    rating: "4.8",
-    reviews: "85",
-  },
-  {
-    title: "Urban Runner Sneakers",
-    price: "₦129.50",
-    oldPrice: "₦150",
-    badge: "Sale",
-    image:
-      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=900&q=80",
-    rating: "4.7",
-    reviews: "210",
-  },
-  {
-    title: "Advanced Hydrating Serum",
-    price: "₦45.00",
-    image:
-      "https://images.unsplash.com/photo-1585238342028-4bbc7c0f0cb5?auto=format&fit=crop&w=900&q=80",
-    rating: "4.9",
-    reviews: "58",
-  },
-  {
-    title: "Everyday Tech Backpack",
-    price: "₦89.99",
-    oldPrice: "₦110",
-    badge: "-20%",
-    image:
-      "https://images.unsplash.com/photo-1509769375558-7c1fefe0f0de?auto=format&fit=crop&w=900&q=80",
-    rating: "4.6",
-    reviews: "90",
-  },
-];
-
-const newArrivals: Product[] = [
-  {
-    title: "Everyday Tech Backpack",
-    price: "₦89.99",
-    oldPrice: "₦110",
-    badge: "-20%",
-    image:
-      "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80",
-    rating: "4.8",
-    reviews: "110",
-  },
-  {
-    title: "Advanced Hydrating Serum",
-    price: "₦45.00",
-    image:
-      "https://images.unsplash.com/photo-1515377905703-c4788e51af15?auto=format&fit=crop&w=900&q=80",
-    rating: "4.9",
-    reviews: "210",
-  },
-  {
-    title: "Urban Runner Sneakers",
-    price: "₦129.50",
-    oldPrice: "₦150",
-    badge: "Sale",
-    image:
-      "https://images.unsplash.com/photo-1549298916-b41d501d3772?auto=format&fit=crop&w=900&q=80",
-    rating: "4.7",
-    reviews: "140",
-  },
-  {
-    title: "Smart Fitness Watch Series 7",
-    price: "₦399.00",
-    image:
-      "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?auto=format&fit=crop&w=900&q=80",
-    rating: "4.8",
-    reviews: "65",
   },
 ];
 
@@ -161,20 +69,31 @@ function ProductCard({ product }: ProductCardProps) {
           <button className={styles.actionIcon} aria-label="Add to wishlist">
             ♡
           </button>
-          <button className={styles.actionIcon} aria-label="Add to cart">
+          <button
+            className={`${styles.actionIcon} ${styles.actionIconPrimary}`}
+            aria-label="Add to cart"
+            onClick={() =>
+              addToCart({
+                id: product.title,
+                name: product.title,
+                price: parsePrice(product.price),
+                image: product.image,
+              })
+            }
+          >
             🛒
           </button>
         </div>
-        <img src={product.image} alt={product.title} />
+        <Link href={`/products/${product.id}`}><img src={product.image} alt={product.title} /></Link>
       </div>
-      <div className={styles.productTitle}>{product.title}</div>
+      <Link href={`/products/${product.id}`} className={styles.productTitle}>{product.title}</Link>
       <div className={styles.rating}>
         <span className={styles.stars}>*****</span>
         <span className={styles.reviews}>({product.reviews})</span>
       </div>
       <div className={styles.price}>
-        {product.price}
-        {product.oldPrice ? <span>{product.oldPrice}</span> : null}
+        {formatCurrency(parsePrice(product.price))}
+        {product.oldPrice ? <span>{formatCurrency(parsePrice(product.oldPrice))}</span> : null}
       </div>
     </div>
   );
@@ -182,6 +101,7 @@ function ProductCard({ product }: ProductCardProps) {
 
 export default function HomeScreen({ userName }: { userName: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const cartCount = useCartCount();
 
   return (
     <div className={styles.page}>
@@ -224,7 +144,11 @@ export default function HomeScreen({ userName }: { userName: string }) {
                 Alerts
               </div>
               <div className={styles.iconLabel}>
-                <button className={styles.iconBtn} aria-label="Orders">
+                <Link
+                  className={styles.iconBtn}
+                  aria-label="Orders"
+                  href="/dashboard/orders"
+                >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path
                       d="M4 6h16M4 12h16M4 18h10"
@@ -234,7 +158,7 @@ export default function HomeScreen({ userName }: { userName: string }) {
                       strokeLinecap="round"
                     />
                   </svg>
-                </button>
+                </Link>
                 Orders
               </div>
               <div className={styles.iconLabel}>
@@ -287,7 +211,11 @@ export default function HomeScreen({ userName }: { userName: string }) {
                 </div>
               </div>
               <div className={styles.iconLabel}>
-                <button className={styles.iconBtn} aria-label="Cart">
+                <Link
+                  className={styles.iconBtn}
+                  aria-label="Cart"
+                  href="/dashboard/cart"
+                >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path
                       d="M6 6h15l-2 9H7L5 3H2"
@@ -300,13 +228,15 @@ export default function HomeScreen({ userName }: { userName: string }) {
                     <circle cx="9" cy="20" r="1.5" />
                     <circle cx="17" cy="20" r="1.5" />
                   </svg>
-                  <span className={styles.cartBadge}>2</span>
-                </button>
+                  {cartCount > 0 ? (
+                    <span className={styles.cartBadge}>{cartCount}</span>
+                  ) : null}
+                </Link>
                 Cart
               </div>
             </div>
 
-            <button className={styles.mobileCartButton} aria-label="Cart">
+            <Link className={styles.mobileCartButton} aria-label="Cart" href="/dashboard/cart">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   d="M6 6h15l-2 9H7L5 3H2"
@@ -319,8 +249,10 @@ export default function HomeScreen({ userName }: { userName: string }) {
                 <circle cx="9" cy="20" r="1.5" />
                 <circle cx="17" cy="20" r="1.5" />
               </svg>
-              <span className={styles.cartBadge}>2</span>
-            </button>
+              {cartCount > 0 ? (
+                <span className={styles.cartBadge}>{cartCount}</span>
+              ) : null}
+            </Link>
           </div>
 
           <nav className={styles.categories}>
@@ -390,7 +322,7 @@ export default function HomeScreen({ userName }: { userName: string }) {
             <a href="#">View All</a>
           </div>
           <div className={styles.productsGrid}>
-            {populars.map((product) => (
+            {popularProducts.map((product) => (
               <ProductCard key={product.title} product={product} />
             ))}
           </div>
@@ -402,7 +334,7 @@ export default function HomeScreen({ userName }: { userName: string }) {
             <a href="#">View All</a>
           </div>
           <div className={styles.productsGrid}>
-            {newArrivals.map((product) => (
+            {newArrivalProducts.map((product) => (
               <ProductCard key={product.title} product={product} />
             ))}
           </div>
@@ -432,7 +364,7 @@ export default function HomeScreen({ userName }: { userName: string }) {
             <a href="#">View All</a>
           </div>
           <div className={styles.productsGrid}>
-            {populars.concat(populars).map((product, index) => (
+            {popularProducts.concat(popularProducts).map((product, index) => (
               <ProductCard
                 key={`${product.title}-${index}`}
                 product={product}
