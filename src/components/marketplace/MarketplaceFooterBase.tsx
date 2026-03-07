@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import styles from "@/app/page.module.css";
 
 type LinkComponentProps = {
@@ -9,7 +9,7 @@ type LinkComponentProps = {
   children: ReactNode;
 };
 
-export type LinkComponent = (props: LinkComponentProps) => JSX.Element;
+export type LinkComponent = (props: LinkComponentProps) => ReactElement;
 
 export default function MarketplaceFooterBase({
   LinkComponent,
