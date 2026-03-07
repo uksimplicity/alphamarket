@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import styles from "@/app/page.module.css";
 import { useEffect, useState } from "react";
 import { useCartCount } from "@/components/commerce/store";
@@ -12,7 +12,7 @@ type LinkComponentProps = {
   "aria-label"?: string;
 };
 
-export type LinkComponent = (props: LinkComponentProps) => JSX.Element;
+export type LinkComponent = (props: LinkComponentProps) => ReactElement;
 
 export default function MarketplaceHeaderBase({
   LinkComponent,
