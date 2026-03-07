@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { addToCart, formatCurrency, parsePrice } from "@/components/commerce/store";
+import { addToCart, formatCurrency, parsePrice, useCartCount } from "@/components/commerce/store";
 import { Button, Card, SectionTitle } from "@/components/dashboard/ui";
 import { extendedCatalog, type Product } from "@/components/products/catalog";
 import styles from "@/app/page.module.css";
+import CartAddedModal from "@/components/commerce/CartAddedModal";
 
 export default function ProductDetail({
   product,
@@ -19,9 +20,17 @@ export default function ProductDetail({
   const [isFollowing, setIsFollowing] = useState(false);
   const [offerOpen, setOfferOpen] = useState(false);
   const [offerAmount, setOfferAmount] = useState("");
+  const [cartModalOpen, setCartModalOpen] = useState(false);
+  const [cartModalName, setCartModalName] = useState("");
+  const cartCount = useCartCount();
   const relatedProducts = extendedCatalog
     .filter((entry) => entry.id !== product.id)
     .slice(0, 12);
+
+  const handleAddToCart = () => {
+    setCartModalName(product.title);
+    setCartModalOpen(true);
+  };
 
   return (
     <div className={`space-y-10 ${styles.detailPage}`}>
@@ -106,14 +115,15 @@ export default function ProductDetail({
               <div className={`mt-5 sm:grid-cols-2 ${styles.detailCta}`}>
                 <Button variant="ghost" onClick={() => setOfferOpen(true)}>Make offer</Button>
                 <Button
-                  onClick={() =>
+                  onClick={() => {
                     addToCart({
                       id: product.id,
                       name: product.title,
                       price: parsePrice(product.price),
                       image: product.image,
-                    })
-                  }
+                    });
+                    handleAddToCart();
+                  }}
                 >
                   Add to cart
                 </Button>
@@ -310,6 +320,13 @@ export default function ProductDetail({
           </div>
         </div>
       ) : null}
+
+      <CartAddedModal
+        open={cartModalOpen}
+        onClose={() => setCartModalOpen(false)}
+        productName={cartModalName}
+        cartCount={cartCount}
+      />
 
       <div className="space-y-4">
         <SectionTitle title="You may also like..." />

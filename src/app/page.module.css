@@ -686,9 +686,82 @@
   width: 96%;
   margin: 0 auto;
   padding: 0 0;
+  padding-left: 140px;
+  padding-right: 140px;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 24px;
+}
+
+.footerColumn {
+  display: grid;
+  gap: 6px;
+}
+
+.footerList {
+  display: grid;
+  gap: 4px;
+  color: #cbd5f5;
+  font-size: 0.86rem;
+}
+
+.footerApps {
+  display: grid;
+  gap: 16px;
+}
+
+.footerAppButtons {
+  display: grid;
+  gap: 10px;
+}
+
+.footerBadge,
+.footerBadgePrimary {
+  border-radius: 12px;
+  padding: 10px 14px;
+  text-align: left;
+  display: grid;
+  gap: 2px;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: transparent;
+}
+
+.footerBadgePrimary {
+  background: #1d6fdc;
+  border-color: #1d6fdc;
+}
+
+.footerBadgeTop {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+
+.footerBadgeMain {
+  font-size: 0.95rem;
+}
+
+.footerSocialTitle {
+  font-weight: 600;
+  color: #fff;
+}
+
+.footerSocialRow {
+  display: flex;
+  gap: 8px;
+}
+
+.footerSocialRow span {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
 }
 
 .footerLogo {
@@ -748,6 +821,97 @@
   display: block;
   object-fit: cover;
   border: 1px solid #e2e8f0;
+}
+
+.cartModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 60;
+  padding: 18px;
+}
+
+.cartModal {
+  width: min(520px, 100%);
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
+  padding: 32px 28px 26px;
+  position: relative;
+  text-align: center;
+  display: grid;
+  gap: 18px;
+}
+
+.cartModalClose {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.cartModalClose svg {
+  width: 16px;
+  height: 16px;
+}
+
+.cartModalIcon {
+  width: 96px;
+  height: 96px;
+  border-radius: 999px;
+  background: #f4faf6;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.cartModalIcon svg {
+  width: 72px;
+  height: 72px;
+}
+
+.cartModalText {
+  margin: 0;
+  color: #475569;
+  font-size: 0.98rem;
+  line-height: 1.6;
+}
+
+.cartModalText strong {
+  color: #0f172a;
+}
+
+.cartModalButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  background: #1d6fdc;
+  color: #fff;
+  font-weight: 600;
+  border: none;
+  text-decoration: none;
+  box-shadow: 0 12px 24px rgba(29, 111, 220, 0.25);
+}
+
+.cartModalButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+.cartModalButton:hover {
+  background: #1a63c4;
 }
 
 @media (max-width: 900px) {
@@ -876,5 +1040,10 @@
 
   .footerCopyright {
     padding: 0 14px 12px;
+  }
+
+  .footerGrid {
+    padding-left: 16px;
+    padding-right: 16px;
   }
 }

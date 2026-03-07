@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import styles from "@/app/page.module.css";
 import { addToCart, parsePrice, useCartCount, formatCurrency } from "@/components/commerce/store";
+import CartAddedModal from "@/components/commerce/CartAddedModal";
 import {
   Product,
   popularProducts,
@@ -56,6 +57,7 @@ const acrossBorders = [
 
 type ProductCardProps = {
   product: Product;
+  onAddToCart: (product: Product) => void;
 };
 
 type HeaderProps = {
@@ -314,7 +316,7 @@ function BottomNav({ onOpenSearch }: BottomNavProps) {
   );
 }
 
-function ProductCard({ product }: ProductCardProps) {
+function ProductCard({ product, onAddToCart }: ProductCardProps) {
   return (
     <div className={styles.productCard}>
       <div className={styles.productImageWrap}>
@@ -328,14 +330,15 @@ function ProductCard({ product }: ProductCardProps) {
           <button
             className={`${styles.actionIcon} ${styles.actionIconPrimary}`}
             aria-label="Add to cart"
-            onClick={() =>
+            onClick={() => {
               addToCart({
                 id: product.title,
                 name: product.title,
                 price: parsePrice(product.price),
                 image: product.image,
-              })
-            }
+              });
+              onAddToCart(product);
+            }}
           >
             🛒
           </button>
@@ -361,8 +364,15 @@ type HomeViewProps = {
 
 export default function HomeView({ mode = "default" }: HomeViewProps) {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [cartModalOpen, setCartModalOpen] = useState(false);
+  const [cartModalName, setCartModalName] = useState("");
   const cartCount = useCartCount();
   const isBackground = mode === "background";
+
+  const handleAddToCart = (product: Product) => {
+    setCartModalName(product.title);
+    setCartModalOpen(true);
+  };
 
   return (
     <div className={styles.page}>
@@ -412,7 +422,11 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
           </div>
           <div className={styles.productsGrid}>
             {popularProducts.map((product) => (
-              <ProductCard key={product.title} product={product} />
+              <ProductCard
+                key={product.title}
+                product={product}
+                onAddToCart={handleAddToCart}
+              />
             ))}
           </div>
         </section>
@@ -424,7 +438,11 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
           </div>
           <div className={styles.productsGrid}>
             {newArrivalProducts.map((product) => (
-              <ProductCard key={product.title} product={product} />
+              <ProductCard
+                key={product.title}
+                product={product}
+                onAddToCart={handleAddToCart}
+              />
             ))}
           </div>
         </section>
@@ -457,6 +475,7 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
               <ProductCard
                 key={`${product.title}-${index}`}
                 product={product}
+                onAddToCart={handleAddToCart}
               />
             ))}
           </div>
@@ -552,6 +571,16 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
       {!isBackground ? (
         <BottomNav onOpenSearch={() => setMobileSearchOpen(true)} />
       ) : null}
+
+      {!isBackground ? (
+        <CartAddedModal
+          open={cartModalOpen}
+          onClose={() => setCartModalOpen(false)}
+          productName={cartModalName}
+          cartCount={cartCount}
+        />
+      ) : null}
     </div>
   );
 }
+

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { fetcher } from "@/components/dashboard/api";
 import type { ReactNode } from "react";
+import styles from "@/app/page.module.css";
 
 const topNavItems = [
   { href: "/dashboard/home", label: "Home" },
@@ -241,7 +242,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
           </nav>
         </aside>
         <main className="flex flex-col gap-6">
-          <header className="rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-card">
+          <header className="sticky top-4 z-10 rounded-2xl border border-slate-200 bg-white/95 px-6 py-4 shadow-card backdrop-blur">
             <div className="grid items-center gap-4 lg:grid-cols-[auto_1fr_auto]">
               <div />
 
@@ -343,6 +344,74 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+
+      <footer className={styles.footer}>
+        <div className={styles.footerGrid}>
+          <div className={styles.footerColumn}>
+            <div className={styles.footerTitle}>About Us</div>
+            <div className={styles.footerList}>
+              <div>About Alpha Marketplace</div>
+              <div>Privacy Policy</div>
+              <div>Terms & Conditions</div>
+              <div>Our Blog</div>
+              <div>Escrow T&C</div>
+            </div>
+          </div>
+          <div className={styles.footerColumn}>
+            <div className={styles.footerTitle}>Help</div>
+            <div className={styles.footerList}>
+              <div>FAQs</div>
+              <div>support@alphamarket.ng</div>
+              <div>Contact Us</div>
+              <div>+234 812 345 6789</div>
+            </div>
+          </div>
+          <div className={styles.footerColumn}>
+            <div className={styles.footerTitle}>Resources</div>
+            <div className={styles.footerList}>
+              <div>Pricing and Fees</div>
+              <div>Paid Plans</div>
+              <div>Boost Product</div>
+              <div>Escrow on Alpha</div>
+            </div>
+          </div>
+          <div className={styles.footerColumn}>
+            <div className={styles.footerTitle}>Ads Region</div>
+            <div className={styles.footerList}>
+              <div>Lagos</div>
+              <div>Rivers</div>
+              <div>Oyo</div>
+              <div>Ogun</div>
+              <div>Abuja</div>
+            </div>
+          </div>
+          <div className={styles.footerApps}>
+            <div className={styles.footerTitle}>Download our Mobile app</div>
+            <div className={styles.footerAppButtons}>
+              <button className={styles.footerBadge} type="button">
+                <span className={styles.footerBadgeTop}>Get it on</span>
+                <span className={styles.footerBadgeMain}>Google Play</span>
+              </button>
+              <button className={styles.footerBadgePrimary} type="button">
+                <span className={styles.footerBadgeTop}>Download on the</span>
+                <span className={styles.footerBadgeMain}>App Store</span>
+              </button>
+            </div>
+            <div className={styles.footerSocialTitle}>Stay Connected</div>
+            <div className={styles.footerSocialRow}>
+              <span>ig</span>
+              <span>x</span>
+              <span>in</span>
+              <span>fb</span>
+              <span>yt</span>
+            </div>
+          </div>
+        </div>
+        <div className={styles.footerDivider} />
+        <div className={styles.footerCopyright}>
+          Alpha Market Place © 2026. All rights reserved.
+        </div>
+      </footer>
 
       <nav className="fixed bottom-4 left-4 right-4 z-20 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-card backdrop-blur lg:hidden">
         <div className="grid grid-cols-4 gap-2 text-xs font-semibold text-slate-500">

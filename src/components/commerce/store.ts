@@ -171,9 +171,12 @@ function subscribe(eventName: string, callback: () => void) {
 }
 
 export function useCart() {
-  const [cart, setCart] = useState<Cart>(() => getCart());
+  const [cart, setCart] = useState<Cart>({ items: [] });
 
-  useEffect(() => subscribe(CART_EVENT, () => setCart(getCart())), []);
+  useEffect(() => {
+    setCart(getCart());
+    return subscribe(CART_EVENT, () => setCart(getCart()));
+  }, []);
 
   return cart;
 }
