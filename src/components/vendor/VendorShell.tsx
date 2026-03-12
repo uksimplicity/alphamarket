@@ -103,7 +103,7 @@ export default function VendorShell() {
             </div>
           </div>
           <div className={styles.topActions}>
-            <span>🇬🇧</span>
+            <Link to="/vendor/products/create" className={styles.sellButton}>Sell</Link>
             <div className={styles.actionIcon}>
               🔔
               <span className={styles.badge}>5</span>
@@ -276,4 +276,5 @@ export default function VendorShell() {
     </div>
   );
 }
+
 
