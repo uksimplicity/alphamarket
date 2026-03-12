@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { fetcher } from "@/components/dashboard/api";
+import { getAuth, getDisplayName } from "@/components/auth/authStorage";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import styles from "@/app/page.module.css";
 
@@ -140,6 +142,22 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
     queryKey: ["dashboard-profile"],
     queryFn: () => fetcher<{ name: string }>("/dashboard/profile"),
   });
+  const [userName, setUserName] = useState("");
+
+  useEffect(() => {
+    const auth = getAuth();
+    setUserName(getDisplayName(auth?.user));
+
+    function onStorage(e: StorageEvent) {
+      if (e.key === "alpha.auth") {
+        const nextAuth = getAuth();
+        setUserName(getDisplayName(nextAuth?.user));
+      }
+    }
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   if (pathname === "/dashboard/home") {
     return (
@@ -205,7 +223,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
                 />
               </svg>
             </span>
-            My Alpha Account
+            {userName || profile?.name || "My Alpha Account"}
           </Link>
           <nav className="flex flex-col">
             {accountNavItems.map((item) => {
@@ -292,6 +310,26 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
                   </span>
                   Orders
                 </button>
+                <button className="flex flex-col items-center gap-1">
+                  <span className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+                      <path
+                        d="M6 6h15l-2 9H7L5 3H2"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <circle cx="9" cy="20" r="1.5" />
+                      <circle cx="17" cy="20" r="1.5" />
+                    </svg>
+                    <span className="absolute -right-1 -top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand text-[10px] font-semibold text-white">
+                      2
+                    </span>
+                  </span>
+                  Cart
+                </button>
                 <button className="flex items-center gap-2">
                   <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700">
                     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
@@ -312,31 +350,11 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
                     </svg>
                   </span>
                   <span className="text-sm text-slate-700">
-                    {profile?.name ?? "My Account"}
+                    {userName || profile?.name || "My Account"}
                   </span>
                   <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-[10px] text-slate-500">
                     ▾
                   </span>
-                </button>
-                <button className="flex flex-col items-center gap-1">
-                  <span className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700">
-                    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
-                      <path
-                        d="M6 6h15l-2 9H7L5 3H2"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <circle cx="9" cy="20" r="1.5" />
-                      <circle cx="17" cy="20" r="1.5" />
-                    </svg>
-                    <span className="absolute -right-1 -top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand text-[10px] font-semibold text-white">
-                      2
-                    </span>
-                  </span>
-                  Cart
                 </button>
               </div>
             </div>
@@ -438,3 +456,4 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
