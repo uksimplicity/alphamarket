@@ -213,7 +213,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
             </Link>
           </div>
           <Link
-            href="/dashboard/profile"
+            href="/"
             className="mt-4 flex items-center gap-3 bg-slate-200/80 px-5 py-4 text-sm font-semibold text-slate-800"
           >
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white">
@@ -279,7 +279,13 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
               </div>
 
               <div className="flex items-center gap-6 text-xs font-medium text-slate-500">
-                <button className="flex flex-col items-center gap-1">
+                <Link
+                  href="/dashboard/notifications"
+                  className={`flex flex-col items-center gap-1 ${
+                    pathname === "/dashboard/notifications" ? "text-brand" : ""
+                  }`}
+                  aria-current={pathname === "/dashboard/notifications" ? "page" : undefined}
+                >
                   <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700">
                     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
                       <path
@@ -299,8 +305,14 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
                     </svg>
                   </span>
                   Alerts
-                </button>
-                <button className="flex flex-col items-center gap-1">
+                </Link>
+                <Link
+                  href="/dashboard/orders"
+                  className={`flex flex-col items-center gap-1 ${
+                    pathname === "/dashboard/orders" ? "text-brand" : ""
+                  }`}
+                  aria-current={pathname === "/dashboard/orders" ? "page" : undefined}
+                >
                   <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700">
                     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
                       <path
@@ -313,8 +325,14 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
                     </svg>
                   </span>
                   Orders
-                </button>
-                <button className="flex flex-col items-center gap-1">
+                </Link>
+                <Link
+                  href="/dashboard/cart"
+                  className={`flex flex-col items-center gap-1 ${
+                    pathname === "/dashboard/cart" ? "text-brand" : ""
+                  }`}
+                  aria-current={pathname === "/dashboard/cart" ? "page" : undefined}
+                >
                   <span className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700">
                     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
                       <path
@@ -335,7 +353,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
                     ) : null}
                   </span>
                   Cart
-                </button>
+                </Link>
                 <div className="relative">
                   <button
                     className="flex items-center gap-2"
