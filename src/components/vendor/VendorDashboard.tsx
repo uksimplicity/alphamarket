@@ -52,7 +52,7 @@ export default function VendorDashboard() {
 
       <section className={styles.gridWide}>
         <div className={styles.card}>
-          <div className={styles.cardTitle}>Accommodation Revenue</div>
+          <div className={styles.cardTitle}>Revenue by Month</div>
           <div className={styles.cardSubtitle}>(+43%) than last year</div>
           <div className={styles.bars}>
             {new Array(12).fill(null).map((_, index) => (

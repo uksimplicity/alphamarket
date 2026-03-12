@@ -60,18 +60,15 @@ export default function VendorShell() {
           <div className={styles.navItem}>Transactions</div>
         </div>
         <div className={styles.navGroup}>
-          <div className={styles.navLabel}>User Management</div>
-          <div className={styles.navItem}>Staff User</div>
-        </div>
-        <div className={styles.navGroup}>
           <div className={styles.navLabel}>Reports & Analytics</div>
           <div className={styles.navItem}>Sales reports</div>
         </div>
         <div className={styles.navGroup}>
-          <div className={styles.navLabel}>Finance Management</div>
+          <div className={styles.navLabel}>Wallet</div>
           <div className={styles.navItem}>Earning</div>
           <div className={styles.navItem}>Withdraws</div>
           <div className={styles.navItem}>Refunds</div>
+          <div className={styles.navItem}>Escrow</div>
         </div>
         <div className={styles.navGroup}>
           <div className={styles.navLabel}>Promotional Deals</div>
