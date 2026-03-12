@@ -6,11 +6,11 @@ const stats = [
   { label: "Total Sales", value: "₦4,876,000", delta: "+0.1%" },
   { label: "Total Orders", value: "1M", delta: "-0.1%" },
   { label: "Total Customers", value: "50,000", delta: "+0.1%" },
-  { label: "Shipping Delays", value: "500", delta: "-0.1%" },
+  // { label: "Shipping Delays", value: "500", delta: "-0.1%" },
   { label: "Refund Requests", value: "4,876", delta: "+0.1%" },
   { label: "Stock Products", value: "4,876", delta: "-0.1%" },
   { label: "Amount in Escrow", value: "₦1,240,000", delta: "+0.1%" },
-  { label: "Payment Failures", value: "4,876", delta: "+0.1%" },
+  // { label: "Payment Failures", value: "4,876", delta: "+0.1%" },
 ];
 
 const cities = [
