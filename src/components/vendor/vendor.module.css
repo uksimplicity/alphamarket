@@ -156,7 +156,7 @@
 
 .sellButton {
   border: none;
-  background: #0f172a;
+  background: #2563eb;
   color: #ffffff;
   padding: 8px 14px;
   border-radius: 999px;
@@ -166,7 +166,7 @@
 }
 
 .sellButton:hover {
-  background: #111827;
+  background: #1d4ed8;
 }
 
 .actionIcon {
