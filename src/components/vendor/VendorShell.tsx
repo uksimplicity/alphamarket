@@ -16,6 +16,7 @@ export default function VendorShell() {
     role?: string;
   } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     const auth = getAuth();
@@ -111,7 +112,12 @@ export default function VendorShell() {
               ✉️
               <span className={styles.badge}>8</span>
             </div>
-            <div className={`${styles.profile} ${styles.profileMenu}`}>
+            <div
+              className={`${styles.profile} ${styles.profileMenu} ${
+                profileOpen ? styles.profileMenuOpen : ""
+              }`}
+              onClick={() => setProfileOpen((prev) => !prev)}
+            >
               <div className={styles.avatar} />
               <div className={styles.profileMeta}>
                 <span className={styles.profileName}>

@@ -193,7 +193,8 @@
   position: relative;
 }
 
-.profileMenu:hover .profileDropdown {
+.profileMenu:hover .profileDropdown,
+.profileMenuOpen .profileDropdown {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
