@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { fetcher } from "@/components/dashboard/api";
-import { getAuth, getDisplayName } from "@/components/auth/authStorage";
+import { clearAuth, getAuth, getDisplayName } from "@/components/auth/authStorage";
+import { useCartCount } from "@/components/commerce/store";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import styles from "@/app/page.module.css";
@@ -143,6 +144,9 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
     queryFn: () => fetcher<{ name: string }>("/dashboard/profile"),
   });
   const [userName, setUserName] = useState("");
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const cartCount = useCartCount();
 
   useEffect(() => {
     const auth = getAuth();
@@ -324,38 +328,63 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
                       <circle cx="9" cy="20" r="1.5" />
                       <circle cx="17" cy="20" r="1.5" />
                     </svg>
-                    <span className="absolute -right-1 -top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand text-[10px] font-semibold text-white">
-                      2
-                    </span>
+                    {cartCount > 0 ? (
+                      <span className="absolute -right-1 -top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand text-[10px] font-semibold text-white">
+                        {cartCount}
+                      </span>
+                    ) : null}
                   </span>
                   Cart
                 </button>
-                <button className="flex items-center gap-2">
-                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700">
-                    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
-                      <circle
-                        cx="12"
-                        cy="8"
-                        r="4"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      />
-                      <path
-                        d="M4 20c1.8-4 13.2-4 16 0"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      />
-                    </svg>
-                  </span>
-                  <span className="text-sm text-slate-700">
-                    {userName || profile?.name || "My Account"}
-                  </span>
-                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-[10px] text-slate-500">
-                    ▾
-                  </span>
-                </button>
+                <div className="relative">
+                  <button
+                    className="flex items-center gap-2"
+                    type="button"
+                    onClick={() => setUserMenuOpen((prev) => !prev)}
+                    aria-expanded={userMenuOpen}
+                  >
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700">
+                      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+                        <circle
+                          cx="12"
+                          cy="8"
+                          r="4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                        />
+                        <path
+                          d="M4 20c1.8-4 13.2-4 16 0"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                        />
+                      </svg>
+                    </span>
+                    <span className="text-sm text-slate-700">
+                      {userName || profile?.name || "My Account"}
+                    </span>
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-[10px] text-slate-500">
+                      ▾
+                    </span>
+                  </button>
+                  <div
+                    className={`absolute right-0 top-12 z-20 w-40 rounded-xl border border-slate-200 bg-white p-2 text-sm shadow-card ${
+                      userMenuOpen ? "opacity-100" : "pointer-events-none opacity-0"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      className="w-full rounded-lg px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        setShowLogoutConfirm(true);
+                      }}
+                    >
+                      Logout
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </header>
@@ -453,7 +482,36 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
           })}
         </div>
       </nav>
+          {showLogoutConfirm ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
+            <h3 className="text-lg font-semibold text-slate-900">Confirm logout</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Are you sure you want to log out?
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700"
+                onClick={() => setShowLogoutConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white"
+                onClick={() => {
+                  clearAuth();
+                  setShowLogoutConfirm(false);
+                  window.location.href = "/login";
+                }}
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
-
