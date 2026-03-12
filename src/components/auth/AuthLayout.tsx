@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import HomeView from "../HomeView";
 import styles from "./auth.module.css";
 
@@ -20,6 +20,7 @@ export default function AuthLayout({
   footer,
   backHref = "/",
 }: AuthLayoutProps) {
+  const navigate = useNavigate();
   return (
     <div className={styles.authPage}>
       <div className={styles.homeBackdrop} aria-hidden="true">
@@ -27,9 +28,19 @@ export default function AuthLayout({
       </div>
       <div className={styles.backdrop} />
       <div className={styles.card}>
-        <Link className={styles.backLink} to={backHref}>
+        <button
+          type="button"
+          className={styles.backLink}
+          onClick={() => {
+            if (window.history.length > 1) {
+              navigate(-1);
+            } else {
+              navigate(backHref);
+            }
+          }}
+        >
           Back
-        </Link>
+        </button>
         <div className={styles.brand}>
           <img src="/logo.png" alt="Alpha Marketplace" />
         </div>

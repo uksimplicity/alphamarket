@@ -16,6 +16,7 @@ export default function ResetPassword() {
     }
   });
   const [otp, setOtp] = useState("");
+  const [step, setStep] = useState<"otp" | "password">("otp");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -23,6 +24,7 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [resendLoading, setResendLoading] = useState(false);
   const criteria = {
     length: password.length >= 8,
     uppercase: /[A-Z]/.test(password),
@@ -117,124 +119,196 @@ export default function ResetPassword() {
             We couldn't find your email. Please start again.
           </div>
         ) : null}
-        <input
-          className={styles.input}
-          placeholder="OTP code"
-          value={otp}
-          onChange={(event) => setOtp(event.target.value)}
-        />
-        <div className={styles.passwordField}>
-          <input
-            className={`${styles.input} ${styles.inputWithToggle}`}
-            type={showPassword ? "text" : "password"}
-            placeholder="New password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          <button
-            type="button"
-            className={styles.passwordToggle}
-            aria-label={showPassword ? "Hide password" : "Show password"}
-            onClick={() => setShowPassword((prev) => !prev)}
-          >
-            {showPassword ? (
-              <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
-                <path
-                  d="M4 4l16 16M9.5 9.5a3 3 0 0 0 4.2 4.2"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M3 12s3.5-6 9-6 9 6 9 6-1.6 2.8-4.2 4.6M8.2 14.8C6.1 13.4 4.8 12 4.8 12"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
-                <path
-                  d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                />
-                <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            )}
-          </button>
-        </div>
-        <div className={styles.criteriaList}>
-          <span className={criteria.length ? styles.criteriaGood : styles.criteriaBad}>
-            At least 8 characters
-          </span>
-          <span className={criteria.uppercase ? styles.criteriaGood : styles.criteriaBad}>
-            At least 1 uppercase letter
-          </span>
-          <span className={criteria.number ? styles.criteriaGood : styles.criteriaBad}>
-            At least 1 number
-          </span>
-          <span className={criteria.special ? styles.criteriaGood : styles.criteriaBad}>
-            At least 1 special character
-          </span>
-        </div>
-        <div className={styles.passwordField}>
-          <input
-            className={`${styles.input} ${styles.inputWithToggle}`}
-            type={showConfirmPassword ? "text" : "password"}
-            placeholder="Confirm password"
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-          />
-          <button
-            type="button"
-            className={styles.passwordToggle}
-            aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-            onClick={() => setShowConfirmPassword((prev) => !prev)}
-          >
-            {showConfirmPassword ? (
-              <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
-                <path
-                  d="M4 4l16 16M9.5 9.5a3 3 0 0 0 4.2 4.2"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M3 12s3.5-6 9-6 9 6 9 6-1.6 2.8-4.2 4.6M8.2 14.8C6.1 13.4 4.8 12 4.8 12"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
-                <path
-                  d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                />
-                <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            )}
-          </button>
-        </div>
-        {confirmPassword ? (
-          <div
-            className={`${styles.matchText} ${
-              password === confirmPassword ? styles.criteriaGood : styles.criteriaBad
-            }`}
-          >
-            {password === confirmPassword ? "Passwords match" : "Passwords do not match"}
+        {step === "otp" ? (
+          <>
+            <input
+              className={styles.input}
+              placeholder="OTP code"
+              value={otp}
+              onChange={(event) => setOtp(event.target.value)}
+            />
+            <button
+              type="button"
+              className={styles.primaryBtn}
+              onClick={() => {
+                if (!otp) {
+                  setError("Please enter your OTP.");
+                  return;
+                }
+                setError("");
+                setStep("password");
+              }}
+            >
+              Continue
+            </button>
+          </>
+        ) : (
+          <>
+            <div className={styles.passwordField}>
+              <input
+                className={`${styles.input} ${styles.inputWithToggle}`}
+                type={showPassword ? "text" : "password"}
+                placeholder="New password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <button
+                type="button"
+                className={styles.passwordToggle}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                onClick={() => setShowPassword((prev) => !prev)}
+              >
+                {showPassword ? (
+                  <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+                    <path
+                      d="M4 4l16 16M9.5 9.5a3 3 0 0 0 4.2 4.2"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M3 12s3.5-6 9-6 9 6 9 6-1.6 2.8-4.2 4.6M8.2 14.8C6.1 13.4 4.8 12 4.8 12"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+                    <path
+                      d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    />
+                    <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            <div className={styles.criteriaList}>
+              <span className={criteria.length ? styles.criteriaGood : styles.criteriaBad}>
+                At least 8 characters
+              </span>
+              <span className={criteria.uppercase ? styles.criteriaGood : styles.criteriaBad}>
+                At least 1 uppercase letter
+              </span>
+              <span className={criteria.number ? styles.criteriaGood : styles.criteriaBad}>
+                At least 1 number
+              </span>
+              <span className={criteria.special ? styles.criteriaGood : styles.criteriaBad}>
+                At least 1 special character
+              </span>
+            </div>
+            <div className={styles.passwordField}>
+              <input
+                className={`${styles.input} ${styles.inputWithToggle}`}
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="Confirm password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+              />
+              <button
+                type="button"
+                className={styles.passwordToggle}
+                aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+              >
+                {showConfirmPassword ? (
+                  <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+                    <path
+                      d="M4 4l16 16M9.5 9.5a3 3 0 0 0 4.2 4.2"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M3 12s3.5-6 9-6 9 6 9 6-1.6 2.8-4.2 4.6M8.2 14.8C6.1 13.4 4.8 12 4.8 12"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+                    <path
+                      d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    />
+                    <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            {confirmPassword ? (
+              <div
+                className={`${styles.matchText} ${
+                  password === confirmPassword ? styles.criteriaGood : styles.criteriaBad
+                }`}
+              >
+                {password === confirmPassword
+                  ? "Passwords match"
+                  : "Passwords do not match"}
+              </div>
+            ) : null}
+          </>
+        )}
+        {error ? (
+          <div className={styles.errorText}>
+            <div>{error}</div>
+            {error.toLowerCase().includes("expired") ||
+            error.toLowerCase().includes("not found") ? (
+              <button
+                type="button"
+                className={styles.linkButton}
+                disabled={resendLoading}
+                onClick={async () => {
+                  if (!email) return;
+                  setResendLoading(true);
+                  setError("");
+                  try {
+                    const response = await fetch(`/api/auth/resend-verification`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ email, type: "forgot_password" }),
+                    });
+                    if (!response.ok) {
+                      const text = await response.text();
+                      let payload: unknown = null;
+                      try {
+                        payload = text ? JSON.parse(text) : null;
+                      } catch {
+                        payload = text;
+                      }
+                      const message =
+                        typeof payload === "object" && payload && "error" in payload
+                          ? String((payload as { error: unknown }).error)
+                          : `Resend failed (${response.status}).`;
+                      setError(message);
+                      return;
+                    }
+                    setSuccess("OTP resent. Please check your email.");
+                    setStep("otp");
+                  } catch (err) {
+                    setError(
+                      err instanceof Error ? err.message : "Resend failed."
+                    );
+                  } finally {
+                    setResendLoading(false);
+                  }
+                }}
+              >
+                {resendLoading ? "Resending..." : "Resend OTP"}
+              </button>
+            ) : null}
           </div>
         ) : null}
-        {error ? <div className={styles.errorText}>{error}</div> : null}
         {success ? <div className={styles.successText}>{success}</div> : null}
         <button className={styles.primaryBtn} type="submit">
           {loading ? "Resetting..." : "Reset Password"}
