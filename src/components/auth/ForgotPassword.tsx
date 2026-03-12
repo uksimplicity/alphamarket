@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthLayout from "./AuthLayout";
 import styles from "./auth.module.css";
-import { API_BASE } from "../dashboard/api";
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -36,7 +35,7 @@ export default function ForgotPassword() {
           try {
             setLoading(true);
             sessionStorage.setItem("pendingResetEmail", email);
-            const response = await fetch(`${API_BASE}/auth/forgot-password`, {
+            const response = await fetch(`/api/auth/forgot-password`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ email }),

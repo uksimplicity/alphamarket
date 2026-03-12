@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthLayout from "./AuthLayout";
 import styles from "./auth.module.css";
-import { API_BASE } from "../dashboard/api";
 
 export default function SignUp() {
   const [role, setRole] = useState<"user" | "vendor">("user");
@@ -44,7 +43,7 @@ export default function SignUp() {
 
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/auth/register`, {
+      const response = await fetch(`/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

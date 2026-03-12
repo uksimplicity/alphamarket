@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthLayout from "./AuthLayout";
 import styles from "./auth.module.css";
-import { API_BASE } from "../dashboard/api";
 
 export default function VerifyEmail() {
   const navigate = useNavigate();
@@ -41,7 +40,7 @@ export default function VerifyEmail() {
               setInfo("");
               try {
                 setResending(true);
-                const response = await fetch(`${API_BASE}/auth/resend-verification`, {
+                const response = await fetch(`/api/auth/resend-verification`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ email, type: "signup" }),
@@ -93,7 +92,7 @@ export default function VerifyEmail() {
 
           try {
             setLoading(true);
-            const response = await fetch(`${API_BASE}/auth/verify-email`, {
+            const response = await fetch(`/api/auth/verify-email`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ email, otp }),

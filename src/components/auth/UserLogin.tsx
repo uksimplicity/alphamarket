@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthLayout from "./AuthLayout";
 import styles from "./auth.module.css";
-import { API_BASE } from "../dashboard/api";
 import { setAuth } from "./authStorage";
 
 export default function UserLogin() {
@@ -42,7 +41,7 @@ export default function UserLogin() {
 
           try {
             setLoading(true);
-            const response = await fetch(`${API_BASE}/auth/login`, {
+            const response = await fetch(`/api/auth/login`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ email, password }),
@@ -138,7 +137,7 @@ export default function UserLogin() {
               try {
                 setResendLoading(true);
                 const response = await fetch(
-                  `${API_BASE}/auth/resend-verification`,
+                  `/api/auth/resend-verification`,
                   {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
