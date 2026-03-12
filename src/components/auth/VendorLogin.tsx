@@ -10,6 +10,7 @@ export default function VendorLogin() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showVerify, setShowVerify] = useState(false);
@@ -111,13 +112,50 @@ export default function VendorLogin() {
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
-        <input
-          className={styles.input}
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
+        <div className={styles.passwordField}>
+          <input
+            className={`${styles.input} ${styles.inputWithToggle}`}
+            type={showPassword ? "text" : "password"}
+            placeholder="Password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+          <button
+            type="button"
+            className={styles.passwordToggle}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            onClick={() => setShowPassword((prev) => !prev)}
+          >
+            {showPassword ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+                <path
+                  d="M4 4l16 16M9.5 9.5a3 3 0 0 0 4.2 4.2"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M3 12s3.5-6 9-6 9 6 9 6-1.6 2.8-4.2 4.6M8.2 14.8C6.1 13.4 4.8 12 4.8 12"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+                <path
+                  d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+            )}
+          </button>
+        </div>
         <div className={styles.rowBetween}>
           <span />
           <Link className={styles.link} to="/forgot-password">

@@ -144,6 +144,56 @@
   background: #ffffff;
 }
 
+.passwordField {
+  position: relative;
+}
+
+.inputWithToggle {
+  padding-right: 44px;
+}
+
+.passwordToggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  padding: 4px;
+  cursor: pointer;
+  color: #64748b;
+}
+
+.passwordToggle:hover {
+  color: #1e293b;
+}
+
+.passwordHint {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.criteriaList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 12px;
+}
+
+.criteriaBad {
+  color: #b91c1c;
+}
+
+.criteriaGood {
+  color: #166534;
+}
+
+.matchText {
+  font-size: 12px;
+  color: #6b7280;
+}
+
 .rowBetween {
   display: flex;
   align-items: center;
