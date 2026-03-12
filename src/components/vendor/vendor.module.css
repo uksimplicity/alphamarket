@@ -154,6 +154,21 @@
   color: #64748b;
 }
 
+.sellButton {
+  border: none;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sellButton:hover {
+  background: #111827;
+}
+
 .actionIcon {
   width: 30px;
   height: 30px;
