@@ -124,7 +124,7 @@ function Header({ onOpenSearch, cartCount }: HeaderProps) {
             Alerts
           </div>
           <div className={styles.iconLabel}>
-            <Link className={styles.iconBtn} aria-label="Orders" to="/dashboard/orders">
+            <a className={styles.iconBtn} aria-label="Orders" href="/dashboard/orders">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   d="M4 6h16M4 12h16M4 18h10"
@@ -134,11 +134,11 @@ function Header({ onOpenSearch, cartCount }: HeaderProps) {
                   strokeLinecap="round"
                 />
               </svg>
-            </Link>
+            </a>
             Orders
           </div>
           <div className={styles.iconLabel}>
-            <Link className={styles.iconBtn} aria-label="Cart" to="/dashboard/cart">
+            <a className={styles.iconBtn} aria-label="Cart" href="/dashboard/cart">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   d="M6 6h15l-2 9H7L5 3H2"
@@ -154,7 +154,7 @@ function Header({ onOpenSearch, cartCount }: HeaderProps) {
               {cartCount > 0 ? (
                 <span className={styles.cartBadge}>{cartCount}</span>
               ) : null}
-            </Link>
+            </a>
             Cart
           </div>
           {userName ? (
@@ -173,14 +173,14 @@ function Header({ onOpenSearch, cartCount }: HeaderProps) {
                   userMenuOpen ? styles.userDropdownOpen : ""
                 }`}
               >
-                <Link to="/dashboard/home">
+                <a href="/dashboard/home">
                   <span className={styles.dropdownIcon}>•</span>
                   Dashboard
-                </Link>
-                <Link to="/dashboard/profile">
+                </a>
+                <a href="/dashboard/profile">
                   <span className={styles.dropdownIcon}>•</span>
                   Profile
-                </Link>
+                </a>
                 <button
                   type="button"
                   className={styles.accountItem}
@@ -225,7 +225,7 @@ function Header({ onOpenSearch, cartCount }: HeaderProps) {
           )}
         </div>
 
-        <Link className={styles.mobileCartButton} aria-label="Cart" to="/dashboard/cart">
+        <a className={styles.mobileCartButton} aria-label="Cart" href="/dashboard/cart">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path
               d="M6 6h15l-2 9H7L5 3H2"
@@ -241,7 +241,7 @@ function Header({ onOpenSearch, cartCount }: HeaderProps) {
           {cartCount > 0 ? (
             <span className={styles.cartBadge}>{cartCount}</span>
           ) : null}
-        </Link>
+        </a>
       </div>
 
       <nav className={styles.categories}>
@@ -387,9 +387,9 @@ function BottomNav({ onOpenSearch }: BottomNavProps) {
         {userName ? (
           <>
             <button className={styles.accountItem}>{userName}</button>
-            <Link className={styles.accountItem} to="/dashboard/home">
+            <a className={styles.accountItem} href="/dashboard/home">
               Dashboard
-            </Link>
+            </a>
             <button
               className={styles.accountItem}
               onClick={() => {
