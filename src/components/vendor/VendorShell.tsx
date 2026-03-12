@@ -1,12 +1,38 @@
 "use client";
 
 import { Link, Outlet, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
 import ManageProductMenu from "@/components/sidebar/ManageProductMenu";
 import styles from "./vendor.module.css";
+import { getAuth, getDisplayName } from "@/components/auth/authStorage";
 
 export default function VendorShell() {
   const { pathname } = useLocation();
   const isDashboard = pathname === "/vendor" || pathname === "/vendor/";
+  const [vendorName, setVendorName] = useState("");
+  const [vendorDetails, setVendorDetails] = useState<{
+    email?: string;
+    phone?: string;
+    role?: string;
+  } | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+
+  useEffect(() => {
+    const auth = getAuth();
+    setVendorName(getDisplayName(auth?.user));
+    setVendorDetails(auth?.user ?? null);
+
+    function onStorage(e: StorageEvent) {
+      if (e.key === "alpha.auth") {
+        const nextAuth = getAuth();
+        setVendorName(getDisplayName(nextAuth?.user));
+        setVendorDetails(nextAuth?.user ?? null);
+      }
+    }
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   return (
     <div className={styles.page}>
@@ -55,6 +81,16 @@ export default function VendorShell() {
           <div className={styles.navLabel}>Help & Support</div>
           <div className={styles.navItem}>Inbox</div>
         </div>
+        <div className={styles.navGroup}>
+          <div className={styles.navLabel}>Account</div>
+          <button
+            type="button"
+            className={styles.settingsBtn}
+            onClick={() => setShowSettings(true)}
+          >
+            Settings
+          </button>
+        </div>
       </aside>
 
       <main className={styles.main}>
@@ -81,7 +117,9 @@ export default function VendorShell() {
             <div className={`${styles.profile} ${styles.profileMenu}`}>
               <div className={styles.avatar} />
               <div className={styles.profileMeta}>
-                <span className={styles.profileName}>Jacob</span>
+                <span className={styles.profileName}>
+                  {vendorName || "Vendor"}
+                </span>
                 <span className={styles.profileRole}>Vendor</span>
               </div>
               <span className={styles.caret}>▾</span>
@@ -181,6 +219,57 @@ export default function VendorShell() {
           Account
         </button>
       </nav>
+      {showSettings ? (
+        <div className={styles.settingsModal}>
+          <div className={styles.settingsCard}>
+            <h3>Account settings</h3>
+            <p>Review your account details and manage security.</p>
+            <div className={styles.settingsList}>
+              <div className={styles.settingsRow}>
+                <span className={styles.settingsLabel}>Name</span>
+                <span className={styles.settingsValue}>{vendorName || "Vendor"}</span>
+              </div>
+              <div className={styles.settingsRow}>
+                <span className={styles.settingsLabel}>Email</span>
+                <span className={styles.settingsValue}>{vendorDetails?.email ?? "-"}</span>
+              </div>
+              <div className={styles.settingsRow}>
+                <span className={styles.settingsLabel}>Phone</span>
+                <span className={styles.settingsValue}>{vendorDetails?.phone ?? "-"}</span>
+              </div>
+              <div className={styles.settingsRow}>
+                <span className={styles.settingsLabel}>Role</span>
+                <span className={styles.settingsValue}>{vendorDetails?.role ?? "-"}</span>
+              </div>
+            </div>
+            <div className={styles.settingsActions}>
+              <button
+                type="button"
+                className={styles.settingsSecondary}
+                onClick={() => setShowSettings(false)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className={styles.settingsPrimary}
+                onClick={() => {
+                  if (vendorDetails?.email) {
+                    try {
+                      sessionStorage.setItem("pendingResetEmail", vendorDetails.email);
+                    } catch {
+                      // ignore storage errors
+                    }
+                  }
+                  window.location.href = "/forgot-password";
+                }}
+              >
+                Reset password
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

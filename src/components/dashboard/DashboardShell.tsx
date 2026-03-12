@@ -144,18 +144,28 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
     queryFn: () => fetcher<{ name: string }>("/dashboard/profile"),
   });
   const [userName, setUserName] = useState("");
+  const [userDetails, setUserDetails] = useState<{
+    email?: string;
+    phone?: string;
+    role?: string;
+    first_name?: string;
+    last_name?: string;
+  } | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const cartCount = useCartCount();
 
   useEffect(() => {
     const auth = getAuth();
     setUserName(getDisplayName(auth?.user));
+    setUserDetails(auth?.user ?? null);
 
     function onStorage(e: StorageEvent) {
       if (e.key === "alpha.auth") {
         const nextAuth = getAuth();
         setUserName(getDisplayName(nextAuth?.user));
+        setUserDetails(nextAuth?.user ?? null);
       }
     }
 
@@ -261,6 +271,13 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
                 {item.label}
               </Link>
             ))}
+            <button
+              type="button"
+              className="mx-5 mt-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+              onClick={() => setShowSettings(true)}
+            >
+              Settings
+            </button>
           </nav>
         </aside>
         <main className="flex flex-col gap-6">
@@ -388,8 +405,11 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
                   </button>
                   <div
                     className={`absolute right-0 top-12 z-20 w-40 rounded-xl border border-slate-200 bg-white p-2 text-sm shadow-card ${
-                      userMenuOpen ? "opacity-100" : "pointer-events-none opacity-0"
+                      userMenuOpen
+                        ? "pointer-events-auto opacity-100"
+                        : "pointer-events-none opacity-0"
                     }`}
+                    onMouseDown={(event) => event.stopPropagation()}
                   >
                     <button
                       type="button"
@@ -500,7 +520,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
           })}
         </div>
       </nav>
-          {showLogoutConfirm ? (
+      {showLogoutConfirm ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 px-4">
           <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
             <h3 className="text-lg font-semibold text-slate-900">Confirm logout</h3>
@@ -525,6 +545,61 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
                 }}
               >
                 Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {showSettings ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
+            <h3 className="text-lg font-semibold text-slate-900">Account settings</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Review your account details and manage security.
+            </p>
+            <div className="mt-5 grid gap-3 text-sm text-slate-700">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Name</span>
+                <span>
+                  {userName || "My Account"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Email</span>
+                <span>{userDetails?.email ?? "-"}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Phone</span>
+                <span>{userDetails?.phone ?? "-"}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-slate-500">Role</span>
+                <span>{userDetails?.role ?? "-"}</span>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700"
+                onClick={() => setShowSettings(false)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white"
+                onClick={() => {
+                  if (userDetails?.email) {
+                    try {
+                      sessionStorage.setItem("pendingResetEmail", userDetails.email);
+                    } catch {
+                      // ignore storage errors
+                    }
+                  }
+                  window.location.href = "/forgot-password";
+                }}
+              >
+                Reset password
               </button>
             </div>
           </div>
