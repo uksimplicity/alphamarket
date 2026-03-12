@@ -3,21 +3,21 @@
 import styles from "./vendor.module.css";
 
 const stats = [
-  { label: "Total Sales", value: "$4,876", delta: "+0.1%" },
+  { label: "Total Sales", value: "₦4,876,000", delta: "+0.1%" },
   { label: "Total Orders", value: "1M", delta: "-0.1%" },
   { label: "Total Customers", value: "50,000", delta: "+0.1%" },
   { label: "Shipping Delays", value: "500", delta: "-0.1%" },
   { label: "Refund Requests", value: "4,876", delta: "+0.1%" },
   { label: "Stock Products", value: "4,876", delta: "-0.1%" },
-  { label: "Abandoned Carts", value: "4,876", delta: "+0.1%" },
+  { label: "Amount in Escrow", value: "₦1,240,000", delta: "+0.1%" },
   { label: "Payment Failures", value: "4,876", delta: "+0.1%" },
 ];
 
-const countries = [
-  { name: "Canada", value: "2400k" },
-  { name: "Korean", value: "200k" },
-  { name: "France", value: "300k" },
-  { name: "German", value: "48000k" },
+const cities = [
+  { name: "Lagos", value: "₦2.4m" },
+  { name: "Abuja", value: "₦2.0m" },
+  { name: "Port Harcourt", value: "₦1.3m" },
+  { name: "Kano", value: "₦800k" },
 ];
 
 const orders = new Array(5).fill(null).map((_, index) => ({
@@ -25,7 +25,7 @@ const orders = new Array(5).fill(null).map((_, index) => ({
   customer: `#5739${index}`,
   date: "01 Jul, 2022",
   items: "2",
-  price: "$40",
+  price: "₦40,000",
   status: "Processing",
 }));
 
@@ -65,14 +65,14 @@ export default function VendorDashboard() {
           </div>
         </div>
         <div className={styles.card}>
-          <div className={styles.cardTitle}>Top Countries By sales</div>
-          <div className={styles.cardSubtitle}>Total Sale 300M</div>
+          <div className={styles.cardTitle}>Top Cities By Sales</div>
+          <div className={styles.cardSubtitle}>Total Sale ₦300m</div>
           <div className={styles.countryList}>
-            {countries.map((country) => (
-              <div key={country.name} className={styles.countryRow}>
-                <span>{country.name}</span>
+            {cities.map((city) => (
+              <div key={city.name} className={styles.countryRow}>
+                <span>{city.name}</span>
                 <div className={styles.spark} />
-                <strong>{country.value}</strong>
+                <strong>{city.value}</strong>
               </div>
             ))}
           </div>
