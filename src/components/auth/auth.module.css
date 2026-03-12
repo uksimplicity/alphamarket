@@ -189,10 +189,59 @@
   font-size: 13px;
 }
 
+.linkButton {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: #3366ff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.linkButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.verifyNowBtn {
+  border: 1px solid #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.verifyNowBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .footerText {
   text-align: center;
   font-size: 13px;
   color: #6b7280;
+}
+
+.errorText {
+  font-size: 13px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.successText {
+  font-size: 13px;
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 10px 12px;
+  border-radius: 10px;
 }
 
 .otpInput {

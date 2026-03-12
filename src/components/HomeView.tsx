@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import styles from "@/app/page.module.css";
 import { addToCart, parsePrice, useCartCount, formatCurrency } from "@/components/commerce/store";
 import CartAddedModal from "@/components/commerce/CartAddedModal";
+import { clearAuth, getAuth, getDisplayName } from "@/components/auth/authStorage";
 import {
   Product,
   popularProducts,
@@ -66,6 +67,24 @@ type HeaderProps = {
 };
 
 function Header({ onOpenSearch, cartCount }: HeaderProps) {
+  const [userName, setUserName] = useState("");
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const auth = getAuth();
+    setUserName(getDisplayName(auth?.user));
+
+    function onStorage(e: StorageEvent) {
+      if (e.key === "alpha.auth") {
+        const nextAuth = getAuth();
+        setUserName(getDisplayName(nextAuth?.user));
+      }
+    }
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   return (
     <header className={styles.header}>
       <div className={styles.headerTop}>
@@ -119,28 +138,6 @@ function Header({ onOpenSearch, cartCount }: HeaderProps) {
             Orders
           </div>
           <div className={styles.iconLabel}>
-            <Link className={styles.iconBtn} aria-label="Login" to="/login">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle
-                  cx="12"
-                  cy="8"
-                  r="4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                />
-                <path
-                  d="M4 20c1.8-4 13.2-4 16 0"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </Link>
-            <Link to="/login">Login</Link>
-          </div>
-          <div className={styles.iconLabel}>
             <Link className={styles.iconBtn} aria-label="Cart" to="/dashboard/cart">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path
@@ -160,9 +157,72 @@ function Header({ onOpenSearch, cartCount }: HeaderProps) {
             </Link>
             Cart
           </div>
-          <Link className={styles.signupButton} to="/signup">
-            Sign Up
-          </Link>
+          {userName ? (
+            <div className={styles.iconLabel}>
+              <button
+                type="button"
+                className={styles.userMenuTrigger}
+                onClick={() => setUserMenuOpen((prev) => !prev)}
+                aria-expanded={userMenuOpen}
+              >
+                <span className={styles.userName}>{userName}</span>
+                <span className={styles.userCaret}>˅</span>
+              </button>
+              <div
+                className={`${styles.userDropdown} ${
+                  userMenuOpen ? styles.userDropdownOpen : ""
+                }`}
+              >
+                <Link to="/dashboard/home">
+                  <span className={styles.dropdownIcon}>•</span>
+                  Dashboard
+                </Link>
+                <Link to="/dashboard/profile">
+                  <span className={styles.dropdownIcon}>•</span>
+                  Profile
+                </Link>
+                <button
+                  type="button"
+                  className={styles.accountItem}
+                  onClick={() => {
+                    clearAuth();
+                    setUserName("");
+                    setUserMenuOpen(false);
+                  }}
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className={styles.iconLabel}>
+              <Link className={styles.iconBtn} aria-label="Login" to="/login">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle
+                    cx="12"
+                    cy="8"
+                    r="4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  />
+                  <path
+                    d="M4 20c1.8-4 13.2-4 16 0"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </Link>
+              <Link to="/login">Login</Link>
+            </div>
+          )}
+          {userName ? null : (
+            <Link className={styles.signupButton} to="/signup">
+              Sign Up
+            </Link>
+          )}
         </div>
 
         <Link className={styles.mobileCartButton} aria-label="Cart" to="/dashboard/cart">
@@ -207,6 +267,22 @@ type BottomNavProps = {
 
 function BottomNav({ onOpenSearch }: BottomNavProps) {
   const [accountOpen, setAccountOpen] = useState(false);
+  const [userName, setUserName] = useState("");
+
+  useEffect(() => {
+    const auth = getAuth();
+    setUserName(getDisplayName(auth?.user));
+
+    function onStorage(e: StorageEvent) {
+      if (e.key === "alpha.auth") {
+        const nextAuth = getAuth();
+        setUserName(getDisplayName(nextAuth?.user));
+      }
+    }
+
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   return (
     <nav className={styles.bottomNav} aria-label="Primary">
@@ -308,9 +384,34 @@ function BottomNav({ onOpenSearch }: BottomNavProps) {
           accountOpen ? styles.accountMenuOpen : ""
         }`}
       >
-        <button className={styles.accountItem}>Login</button>
-        <button className={styles.accountItem}>Sign Up</button>
-        <button className={styles.accountItem}>Alerts</button>
+        {userName ? (
+          <>
+            <button className={styles.accountItem}>{userName}</button>
+            <Link className={styles.accountItem} to="/dashboard/home">
+              Dashboard
+            </Link>
+            <button
+              className={styles.accountItem}
+              onClick={() => {
+                clearAuth();
+                setUserName("");
+                setAccountOpen(false);
+              }}
+            >
+              Logout
+            </button>
+          </>
+        ) : (
+          <>
+            <Link className={styles.accountItem} to="/login">
+              Login
+            </Link>
+            <Link className={styles.accountItem} to="/signup">
+              Sign Up
+            </Link>
+            <button className={styles.accountItem}>Alerts</button>
+          </>
+        )}
       </div>
     </nav>
   );
