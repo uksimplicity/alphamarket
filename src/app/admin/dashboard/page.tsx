@@ -113,10 +113,7 @@ function normalizeDashboardData(payload: unknown): AdminDashboardData {
         color: "#2563eb",
       },
     ],
-    orderStatus:
-      orderStatus.length > 0
-        ? orderStatus
-        : [{ label: "No data", value: 1, color: chartColors[0] }],
+    orderStatus,
     topCountries,
     recentOrders: [],
     lowStock: [],
@@ -170,15 +167,17 @@ export default function AdminDashboardPage() {
             <div className="mt-2 text-xl font-semibold text-slate-900">
               {card.value}
             </div>
-            <span
-              className={`mt-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                card.trend === "up"
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-rose-100 text-rose-600"
-              }`}
-            >
-              {card.delta}
-            </span>
+            {card.delta ? (
+              <span
+                className={`mt-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                  card.trend === "up"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-rose-100 text-rose-600"
+                }`}
+              >
+                {card.delta}
+              </span>
+            ) : null}
           </div>
         ))}
       </div>
@@ -193,15 +192,17 @@ export default function AdminDashboardPage() {
             <div className="mt-2 text-xl font-semibold text-slate-900">
               {card.value}
             </div>
-            <span
-              className={`mt-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                card.trend === "up"
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-rose-100 text-rose-600"
-              }`}
-            >
-              {card.delta}
-            </span>
+            {card.delta ? (
+              <span
+                className={`mt-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                  card.trend === "up"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-rose-100 text-rose-600"
+                }`}
+              >
+                {card.delta}
+              </span>
+            ) : null}
           </div>
         ))}
       </div>
@@ -287,7 +288,6 @@ export default function AdminDashboardPage() {
             {viewData.topCountries.map((row) => (
               <div key={row.country} className="flex items-center justify-between">
                 <div className="flex items-center gap-2 font-semibold text-slate-700">
-                  <span className="text-base">🏳️</span>
                   {row.country}
                 </div>
                 <div className="flex items-center gap-3">
@@ -387,3 +387,4 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
+

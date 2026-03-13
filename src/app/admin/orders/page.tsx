@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
@@ -13,6 +14,9 @@ type AdminOrder = {
 };
 
 export default function AdminOrdersPage() {
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
+
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-orders"],
     queryFn: async () => {
@@ -69,9 +73,44 @@ export default function AdminOrdersPage() {
     );
   }
 
+  async function runEscrowAction(id: string, action: "release" | "reverse") {
+    if (!id || id === "Unknown") return;
+
+    try {
+      setActionError("");
+      setPendingOrderId(id);
+
+      const notes = window.prompt(
+        action === "release"
+          ? "Optional release notes:"
+          : "Reversal notes (required by backend in many setups):",
+        ""
+      );
+      const payload =
+        action === "reverse" ? { notes: notes || "Reversed by admin" } : notes ? { notes } : {};
+
+      await adminFetcher(`/escrows/${id}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      await refetch();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Escrow action failed.");
+    } finally {
+      setPendingOrderId(null);
+    }
+  }
+
   return (
     <Card>
       <SectionTitle title="Orders" subtitle="Disputes, refunds, and status updates." />
+      {actionError ? (
+        <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {actionError}
+        </div>
+      ) : null}
       <div className="mt-4 space-y-3 text-sm">
         {data.map((order) => (
           <div
@@ -90,8 +129,19 @@ export default function AdminOrdersPage() {
               {order.refund ? "Refunded" : "No refund"}
             </div>
             <div className="flex gap-2">
-              <Button variant="ghost">Force Update</Button>
-              <Button>Refund</Button>
+              <Button
+                variant="ghost"
+                disabled={pendingOrderId === order.id || order.id === "Unknown"}
+                onClick={() => runEscrowAction(order.id, "release")}
+              >
+                {pendingOrderId === order.id ? "Updating..." : "Release"}
+              </Button>
+              <Button
+                disabled={pendingOrderId === order.id || order.id === "Unknown"}
+                onClick={() => runEscrowAction(order.id, "reverse")}
+              >
+                {pendingOrderId === order.id ? "Updating..." : "Reverse"}
+              </Button>
             </div>
           </div>
         ))}

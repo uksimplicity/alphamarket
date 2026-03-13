@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { adminFetcher, asArray, asRecord, pickNumber, pickString } from "@/components/admin/api";
-import { Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
+import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type FinanceData = {
   revenueReport: Array<{ label: string; value: string }>;
@@ -11,6 +12,9 @@ type FinanceData = {
 };
 
 export default function AdminFinancePage() {
+  const [processingPayouts, setProcessingPayouts] = useState(false);
+  const [actionMessage, setActionMessage] = useState("");
+
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-finance"],
     queryFn: async () => {
@@ -104,10 +108,37 @@ export default function AdminFinancePage() {
     );
   }
 
+  async function processPayouts() {
+    try {
+      setActionMessage("");
+      setProcessingPayouts(true);
+      await adminFetcher("/payouts/process", { method: "POST" });
+      setActionMessage("Payout processing started successfully.");
+      await refetch();
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : "Payout processing failed.");
+    } finally {
+      setProcessingPayouts(false);
+    }
+  }
+
   return (
     <div className="grid gap-6">
       <Card>
-        <SectionTitle title="Revenue Reports" subtitle="Summary by period." />
+        <SectionTitle
+          title="Revenue Reports"
+          subtitle="Summary by period."
+          action={
+            <Button disabled={processingPayouts} onClick={processPayouts}>
+              {processingPayouts ? "Processing..." : "Process Payouts"}
+            </Button>
+          }
+        />
+        {actionMessage ? (
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            {actionMessage}
+          </div>
+        ) : null}
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {data.revenueReport.map((entry) => (
             <div

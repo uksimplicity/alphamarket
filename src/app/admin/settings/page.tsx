@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
@@ -16,6 +17,10 @@ type SettingsData = {
 };
 
 export default function AdminSettingsPage() {
+  const [deleteEmail, setDeleteEmail] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState("");
+
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-settings"],
     queryFn: async () => {
@@ -39,13 +44,18 @@ export default function AdminSettingsPage() {
         .filter((admin) => admin.id)
         .filter((admin) => admin.role.includes("admin"));
 
-      const roles = [
-        { id: "buyer", name: "buyer", permissions: 1 },
-        { id: "seller", name: "seller", permissions: 3 },
-        { id: "marketplace_admin", name: "marketplace_admin", permissions: 8 },
-        { id: "rider_admin", name: "rider_admin", permissions: 6 },
-        { id: "super_admin", name: "super_admin", permissions: 10 },
-      ];
+      const roleNames = Array.from(
+        new Set(
+          rows
+            .map((row) => pickString(asRecord(row), ["role", "userRole", "account_role"]))
+            .filter(Boolean)
+        )
+      );
+      const roles = roleNames.map((name) => ({
+        id: name,
+        name,
+        permissions: 0,
+      }));
 
       return { roles, admins } satisfies SettingsData;
     },
@@ -67,6 +77,24 @@ export default function AdminSettingsPage() {
         onRetry={refetch}
       />
     );
+  }
+
+  async function deleteUserByEmail() {
+    if (!deleteEmail.trim()) return;
+    try {
+      setDeleteMessage("");
+      setDeleteLoading(true);
+      await adminFetcher(`/user?email=${encodeURIComponent(deleteEmail.trim())}`, {
+        method: "DELETE",
+      });
+      setDeleteMessage("User deletion request sent successfully.");
+      setDeleteEmail("");
+      await refetch();
+    } catch (err) {
+      setDeleteMessage(err instanceof Error ? err.message : "Failed to delete user.");
+    } finally {
+      setDeleteLoading(false);
+    }
   }
 
   return (
@@ -98,6 +126,26 @@ export default function AdminSettingsPage() {
           subtitle="Manage admin access."
           action={<Button>Add Admin</Button>}
         />
+        <div className="mt-3 grid gap-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3 md:grid-cols-[1fr_auto]">
+          <input
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+            placeholder="Delete user by email"
+            value={deleteEmail}
+            onChange={(event) => setDeleteEmail(event.target.value)}
+          />
+          <Button
+            variant="ghost"
+            disabled={deleteLoading}
+            onClick={deleteUserByEmail}
+          >
+            {deleteLoading ? "Deleting..." : "Delete User"}
+          </Button>
+        </div>
+        {deleteMessage ? (
+          <div className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            {deleteMessage}
+          </div>
+        ) : null}
         <div className="mt-4 space-y-3 text-sm">
           {data.admins.map((admin) => (
             <div

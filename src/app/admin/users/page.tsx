@@ -136,14 +136,25 @@ export default function AdminUsersPage() {
                 <div className="flex justify-start gap-2 md:justify-end">
                   <Button
                     variant="ghost"
+                    disabled={isPendingRow}
                     onClick={() => updateUserStatus(user.id, "suspended")}
                   >
-                    {isPendingRow ? "Updating..." : "Suspend"}
+                    {isPendingRow
+                      ? "Updating..."
+                      : status === "suspended"
+                      ? "Suspended"
+                      : "Suspend"}
                   </Button>
                   <Button
+                    variant={status === "active" ? "ghost" : "primary"}
+                    disabled={isPendingRow}
                     onClick={() => updateUserStatus(user.id, "active")}
                   >
-                    {isPendingRow ? "Updating..." : "Activate"}
+                    {isPendingRow
+                      ? "Updating..."
+                      : status === "active"
+                      ? "Activated"
+                      : "Activate"}
                   </Button>
                 </div>
               </div>

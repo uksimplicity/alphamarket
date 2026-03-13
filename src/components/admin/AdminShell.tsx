@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { getAuth, getDisplayName } from "@/components/auth/authStorage";
 
 const navSections = [
   {
@@ -69,6 +70,15 @@ const navSections = [
 
 export default function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const [adminName, setAdminName] = useState("Admin");
+  const [adminRole, setAdminRole] = useState("Account");
+
+  useEffect(() => {
+    const auth = getAuth();
+    const user = auth?.user;
+    setAdminName(getDisplayName(user));
+    setAdminRole(typeof user?.role === "string" && user.role ? user.role : "Account");
+  }, []);
 
   return (
     <div className="min-h-screen bg-white">
@@ -137,21 +147,15 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                 <span>Theme</span>
                 <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs">
                   N
-                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] text-white">
-                    5
-                  </span>
                 </div>
                 <div className="relative flex h-8 items-center justify-center rounded-full bg-slate-100 px-2 text-[10px]">
                   Msg
-                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] text-white">
-                    8
-                  </span>
                 </div>
                 <div className="group relative flex items-center gap-2">
                   <div className="h-9 w-9 rounded-full bg-brand/20" />
                   <div className="text-xs">
-                    <div className="font-semibold text-slate-800">Alexa Smith</div>
-                    <div className="text-slate-400">Super Admin</div>
+                    <div className="font-semibold text-slate-800">{adminName}</div>
+                    <div className="text-slate-400">{adminRole}</div>
                   </div>
                   <span className="text-slate-400">v</span>
                   <div className="absolute right-0 top-12 hidden min-w-[160px] rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-600 shadow-card group-hover:block">
