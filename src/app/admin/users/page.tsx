@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { adminFetcher, asArray, asRecord, pickNumber, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
@@ -13,6 +14,9 @@ type User = {
 };
 
 export default function AdminUsersPage() {
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
+
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-users"],
     queryFn: async () => {
@@ -55,27 +59,97 @@ export default function AdminUsersPage() {
     );
   }
 
+  async function updateUserStatus(userId: string, status: "active" | "suspended") {
+    try {
+      setActionError("");
+      setPendingUserId(userId);
+
+      await adminFetcher(`/users/${userId}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+
+      await refetch();
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Failed to update user status."
+      );
+    } finally {
+      setPendingUserId(null);
+    }
+  }
+
   return (
     <Card>
-      <SectionTitle title="Users" subtitle="Activate or suspend accounts." />
-      <div className="mt-4 space-y-3 text-sm">
-        {data.map((user) => (
-          <div
-            key={user.id}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3"
-          >
-            <div>
-              <div className="font-semibold text-slate-800">{user.name}</div>
-              <div className="text-xs text-slate-500">{user.email}</div>
-            </div>
-            <div className="text-xs text-slate-500">{user.orders} orders</div>
-            <div className="text-xs font-semibold text-brand">{user.status}</div>
-            <div className="flex gap-2">
-              <Button variant="ghost">Suspend</Button>
-              <Button>Activate</Button>
-            </div>
-          </div>
-        ))}
+      <SectionTitle title="Users" subtitle="Manage account access and status." />
+      {actionError ? (
+        <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {actionError}
+        </div>
+      ) : null}
+
+      <div className="mt-4 rounded-2xl border border-slate-200">
+        <div className="hidden grid-cols-[2.2fr_1fr_1fr_1.2fr] gap-4 border-b border-slate-200 bg-slate-50/80 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
+          <div>User</div>
+          <div>Orders</div>
+          <div>Status</div>
+          <div className="text-right">Actions</div>
+        </div>
+
+        <div className="divide-y divide-slate-200">
+          {data.map((user) => {
+            const status = user.status.toLowerCase();
+            const isPendingRow = pendingUserId === user.id;
+            const badgeTone =
+              status === "active"
+                ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                : status === "pending"
+                ? "bg-amber-50 text-amber-700 ring-amber-200"
+                : "bg-slate-100 text-slate-700 ring-slate-200";
+
+            return (
+              <div
+                key={user.id}
+                className="grid gap-4 px-4 py-4 md:grid-cols-[2.2fr_1fr_1fr_1.2fr] md:items-center md:px-5"
+              >
+                <div className="min-w-0">
+                  <div className="truncate font-semibold text-slate-900">{user.name}</div>
+                  <div className="truncate text-sm text-slate-500">{user.email}</div>
+                </div>
+
+                <div className="text-sm text-slate-600">
+                  <span className="md:hidden text-xs uppercase tracking-wide text-slate-400">
+                    Orders:{" "}
+                  </span>
+                  {user.orders}
+                </div>
+
+                <div>
+                  <span
+                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ring-1 ${badgeTone}`}
+                  >
+                    {user.status}
+                  </span>
+                </div>
+
+                <div className="flex justify-start gap-2 md:justify-end">
+                  <Button
+                    variant="ghost"
+                    onClick={() => updateUserStatus(user.id, "suspended")}
+                  >
+                    {isPendingRow ? "Updating..." : "Suspend"}
+                  </Button>
+                  <Button
+                    onClick={() => updateUserStatus(user.id, "active")}
+                  >
+                    {isPendingRow ? "Updating..." : "Activate"}
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </Card>
   );

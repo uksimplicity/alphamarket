@@ -71,7 +71,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-white">
       <div className="grid grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[260px_1fr]">
         <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
           <div className="mb-6 flex items-center gap-2 font-semibold text-slate-900">
@@ -125,7 +125,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
               >
                 &lt;
               </button>
-              <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
+              <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-[#f7f8fb] px-4 py-2 text-sm text-slate-500">
                 <span aria-hidden="true">Search</span>
                 <input
                   className="w-full bg-transparent outline-none"
