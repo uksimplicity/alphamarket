@@ -149,6 +149,10 @@
   transition: background 0.2s ease, border-color 0.2s ease;
 }
 
+.upload-card input {
+  display: none;
+}
+
 .upload-card:hover {
   background: #f1f5ff;
   border-color: #2563eb;
@@ -176,6 +180,13 @@
 .upload-note {
   font-size: 11px;
   color: #94a3b8;
+}
+
+.upload-filename {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #1e293b;
+  font-weight: 600;
 }
 
 .btn-outline {
@@ -476,6 +487,26 @@
   justify-content: flex-end;
   gap: 10px;
   margin-top: 6px;
+}
+
+.form-error {
+  margin-top: 16px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.form-success {
+  margin-top: 16px;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
 }
 
 .btn-cancel {

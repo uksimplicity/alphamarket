@@ -12,6 +12,27 @@
   padding: 24px;
 }
 
+.product-error {
+  margin-top: 14px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.product-loading,
+.product-empty {
+  margin-top: 14px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
 .product-header {
   display: flex;
   align-items: center;

@@ -1,6 +1,10 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
-async function proxySellerCollection(req: Request, method: "GET" | "POST") {
+async function proxySellerProduct(
+  req: Request,
+  productId: string,
+  method: "GET" | "PUT" | "PATCH" | "DELETE"
+) {
   if (!API_BASE) {
     return new Response(
       JSON.stringify({ error: "NEXT_PUBLIC_API_BASE_URL is not set" }),
@@ -15,13 +19,15 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
     ...(authHeader ? { Authorization: authHeader } : {}),
   };
 
-  const body = method === "GET" ? "" : await req.text();
-  if (method !== "GET") {
+  const hasBody = method !== "GET" && method !== "DELETE";
+  const body = hasBody ? await req.text() : "";
+  if (hasBody) {
     headers["Content-Type"] = "application/json";
   }
 
-  const primaryUrl = `${API_BASE}/seller/products${search}`;
-  const fallbackUrl = `${API_BASE}/auth/seller/products${search}`;
+  const safeId = encodeURIComponent(productId);
+  const primaryUrl = `${API_BASE}/seller/products/${safeId}${search}`;
+  const fallbackUrl = `${API_BASE}/auth/seller/products/${safeId}${search}`;
 
   let res = await fetch(primaryUrl, {
     method,
@@ -58,10 +64,30 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
   });
 }
 
-export async function GET(req: Request) {
-  return proxySellerCollection(req, "GET");
+export async function GET(
+  req: Request,
+  context: { params: { productId: string } }
+) {
+  return proxySellerProduct(req, context.params.productId, "GET");
 }
 
-export async function POST(req: Request) {
-  return proxySellerCollection(req, "POST");
+export async function PUT(
+  req: Request,
+  context: { params: { productId: string } }
+) {
+  return proxySellerProduct(req, context.params.productId, "PUT");
+}
+
+export async function PATCH(
+  req: Request,
+  context: { params: { productId: string } }
+) {
+  return proxySellerProduct(req, context.params.productId, "PATCH");
+}
+
+export async function DELETE(
+  req: Request,
+  context: { params: { productId: string } }
+) {
+  return proxySellerProduct(req, context.params.productId, "DELETE");
 }

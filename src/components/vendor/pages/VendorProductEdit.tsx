@@ -1,44 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { productsData } from "@/components/products/productData";
+import { getAuth } from "@/components/auth/authStorage";
 import "@/components/products/CreateProduct.css";
-
-const variantTableRows = [
-  {
-    skuId: "#73423",
-    variantId: "#73423",
-    color: "Black",
-    size: "L",
-    visible: "1 8x8ml",
-    status: "Active",
-  },
-  {
-    skuId: "#73423",
-    variantId: "#73423",
-    color: "Black",
-    size: "M",
-    visible: "1 8x8ml",
-    status: "Active",
-  },
-];
 
 export default function VendorProductEdit() {
   const { productId } = useParams();
   const navigate = useNavigate();
-  const product = useMemo(
-    () => productsData.find((item) => item.id === productId),
-    [productId]
-  );
+  const [product, setProduct] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const [form, setForm] = useState(() => ({
-    name: product?.name ?? "",
+    name: "",
     slug: "",
-    category: product?.category ?? "",
+    category: "",
     type: "",
     brand: "",
-    vendor: product?.vendor ?? "",
+    vendor: "",
     shortDescription: "",
     tags: "",
     discountTitle: "",
@@ -46,15 +28,88 @@ export default function VendorProductEdit() {
     discountDuration: "",
   }));
   const [variants, setVariants] = useState([{ variant: "", value: "" }]);
-  const [discountEnabled, setDiscountEnabled] = useState(true);
+  const [discountEnabled, setDiscountEnabled] = useState(false);
 
-  if (!product) {
-    return (
-      <div className="create-card">
-        <div className="section-title">Product not found</div>
-      </div>
-    );
-  }
+  const loadProduct = async () => {
+    if (!productId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const auth = getAuth();
+      const token = auth?.access_token;
+      const response = await fetch(`/api/seller/products/${encodeURIComponent(productId)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const text = await response.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      if (!response.ok) {
+        const message =
+          data && typeof data === "object" && "error" in data
+            ? data.error
+            : `Failed to load product (${response.status}).`;
+        throw new Error(String(message));
+      }
+      const payload =
+        data?.data || data?.product || data?.item || data?.product_data || data || null;
+      setProduct(payload);
+
+      const firstDiscount = payload?.discounts?.[0] || null;
+      setDiscountEnabled(Boolean(firstDiscount));
+      setForm({
+        name: payload?.name || payload?.title || "",
+        slug: payload?.slug || "",
+        category:
+          payload?.categoryId ||
+          payload?.category?.id ||
+          payload?.category ||
+          payload?.category_id ||
+          "",
+        type: payload?.productTypeId || payload?.type || "",
+        brand: payload?.brandId || payload?.brand?.id || payload?.brand || "",
+        vendor:
+          payload?.sellerId ||
+          payload?.vendorId ||
+          payload?.seller?.id ||
+          payload?.vendor?.id ||
+          "",
+        shortDescription:
+          payload?.shortDescription ||
+          payload?.short_description ||
+          payload?.description ||
+          "",
+        tags: Array.isArray(payload?.tags) ? payload.tags.join(", ") : payload?.tags || "",
+        discountTitle: firstDiscount?.title || "",
+        discountPrice: firstDiscount?.price ?? "",
+        discountDuration: firstDiscount?.startDate || firstDiscount?.endDate || "",
+      });
+
+      const attrs = Array.isArray(payload?.attributes) ? payload.attributes : [];
+      if (attrs.length > 0) {
+        setVariants(
+          attrs.map((row: any) => ({
+            variant: row?.attribute_id || row?.variant || "",
+            value: row?.attribute_value_id || row?.value || "",
+          }))
+        );
+      } else {
+        setVariants([{ variant: "", value: "" }]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load product.");
+      setProduct(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProduct();
+  }, [productId]);
 
   const handleChange = (
     event:
@@ -76,10 +131,124 @@ export default function VendorProductEdit() {
     setVariants((prev) => [...prev, { variant: "", value: "" }]);
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    window.alert("Changes saved.");
+    setError("");
+    setSuccess("");
+
+    try {
+      const auth = getAuth();
+      const token = auth?.access_token;
+      const sellerId = auth?.user?.id;
+      if (!token) {
+        throw new Error("You must be logged in to update a product.");
+      }
+
+      const payload = {
+        name: form.name,
+        slug: form.slug,
+        categoryId: form.category,
+        productTypeId: form.type,
+        brandId: form.brand,
+        sellerId,
+        shortDescription: form.shortDescription,
+        tags: form.tags
+          ? form.tags
+              .split(",")
+              .map((tag) => tag.trim())
+              .filter(Boolean)
+          : [],
+        attributes: variants
+          .filter((row) => row.variant && row.value)
+          .map((row) => ({
+            attribute_id: row.variant,
+            attribute_value_id: row.value,
+          })),
+        discounts: discountEnabled
+          ? [
+              {
+                active: true,
+                title: form.discountTitle,
+                price: Number(form.discountPrice) || 0,
+                startDate: form.discountDuration,
+                endDate: form.discountDuration,
+              },
+            ]
+          : [],
+      };
+
+      setSaving(true);
+      const response = await fetch(
+        `/api/seller/products/${encodeURIComponent(productId ?? "")}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+      const text = await response.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      if (!response.ok) {
+        const message =
+          data && typeof data === "object" && "error" in data
+            ? data.error
+            : `Update failed (${response.status}).`;
+        throw new Error(String(message));
+      }
+      setSuccess("Product updated successfully.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed.");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const variantTableRows = useMemo(() => {
+    const candidates = product?.variants || product?.variantRows || [];
+    if (!Array.isArray(candidates)) return [];
+    return candidates.map((row: any, index: number) => ({
+      skuId: row?.skuId || row?.sku_id || row?.sku || `SKU-${index + 1}`,
+      variantId: row?.variantId || row?.variant_id || row?.id || `VAR-${index + 1}`,
+      color: row?.color || row?.colour || row?.attribute_value || row?.value || "-",
+      size: row?.size || row?.size_name || "-",
+      visible: row?.visible || row?.quantity || row?.stock || "-",
+      status: row?.status || (row?.active ? "Active" : "Inactive"),
+      image: row?.image || row?.imageUrl || row?.media || "",
+    }));
+  }, [product]);
+
+  if (loading) {
+    return (
+      <div className="create-card">
+        <div className="section-title">Loading product...</div>
+      </div>
+    );
+  }
+
+  if (error && !product) {
+    return (
+      <div className="create-card">
+        <div className="section-title">Unable to load product</div>
+        <div className="details-text">{error}</div>
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className="create-card">
+        <div className="section-title">Product not found</div>
+      </div>
+    );
+  }
 
   return (
     <div className="create-page">
@@ -92,13 +261,13 @@ export default function VendorProductEdit() {
               aria-label="Back"
               onClick={() => navigate(-1)}
             >
-              <span aria-hidden="true">←</span>
+              <span aria-hidden="true">â†</span>
             </button>
             <h1>Edit Product</h1>
           </div>
           <button type="button" className="status-btn">
             Publish
-            <span aria-hidden="true">▾</span>
+            <span aria-hidden="true">â–¾</span>
           </button>
         </div>
 
@@ -162,19 +331,19 @@ export default function VendorProductEdit() {
             <div className="section-title">Media</div>
             <div className="media-grid">
               <button type="button" className="upload-card">
-                <span className="upload-icon">↑</span>
+                <span className="upload-icon">â†‘</span>
                 <div className="upload-title">Upload Cover photo</div>
                 <div className="upload-note">Allowed *.jpeg, *.jpg, *.png</div>
                 <div className="upload-note">Max size 3 MB</div>
               </button>
               <button type="button" className="upload-card">
-                <span className="upload-icon">↑</span>
+                <span className="upload-icon">â†‘</span>
                 <div className="upload-title">Upload Product photo</div>
                 <div className="upload-note">Allowed *.jpeg, *.jpg, *.png</div>
                 <div className="upload-note">Max size 3 MB</div>
               </button>
               <button type="button" className="upload-card">
-                <span className="upload-icon">↑</span>
+                <span className="upload-icon">â†‘</span>
                 <div className="upload-title">Upload Video</div>
                 <div className="upload-note">Allowed *.mp4, *.mov, *.avi</div>
                 <div className="upload-note">Max size 3 MB</div>
@@ -231,31 +400,37 @@ export default function VendorProductEdit() {
                   </tr>
                 </thead>
                 <tbody>
-                  {variantTableRows.map((row, index) => (
-                    <tr key={`row-${index}`}>
-                      <td>{row.skuId}</td>
-                      <td>{row.variantId}</td>
-                      <td>
-                        <span className="thumb-sm" />
-                      </td>
-                      <td>{row.color}</td>
-                      <td>{row.size}</td>
-                      <td>{row.visible}</td>
-                      <td>
-                        <span className="badge-blue">{row.status}</span>
-                      </td>
-                      <td>
-                        <button type="button" className="icon-btn view" aria-label="View">
-                          <svg viewBox="0 0 24 24">
-                            <path
-                              d="M12 5c-5 0-9 5-9 7s4 7 9 7 9-5 9-7-4-7-9-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"
-                              fill="currentColor"
-                            />
-                          </svg>
-                        </button>
-                      </td>
+                  {variantTableRows.length > 0 ? (
+                    variantTableRows.map((row, index) => (
+                      <tr key={`row-${index}`}>
+                        <td>{row.skuId}</td>
+                        <td>{row.variantId}</td>
+                        <td>
+                          <span className="thumb-sm" />
+                        </td>
+                        <td>{row.color}</td>
+                        <td>{row.size}</td>
+                        <td>{row.visible}</td>
+                        <td>
+                          <span className="badge-blue">{row.status}</span>
+                        </td>
+                        <td>
+                          <button type="button" className="icon-btn view" aria-label="View">
+                            <svg viewBox="0 0 24 24">
+                              <path
+                                d="M12 5c-5 0-9 5-9 7s4 7 9 7 9-5 9-7-4-7-9-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"
+                                fill="currentColor"
+                              />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={8}>No variants found.</td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -270,14 +445,20 @@ export default function VendorProductEdit() {
               <option value="sale">Sale</option>
             </select>
             <div className="tag-list">
-              {["Tag 1", "Tag 2"].map((tag) => (
-                <span className="tag-pill" key={tag}>
-                  {tag}
-                  <button type="button" aria-label={`Remove ${tag}`}>
-                    ×
-                  </button>
-                </span>
-              ))}
+              {form.tags
+                ? form.tags
+                    .split(",")
+                    .map((tag) => tag.trim())
+                    .filter(Boolean)
+                    .map((tag) => (
+                      <span className="tag-pill" key={tag}>
+                        {tag}
+                        <button type="button" aria-label={`Remove ${tag}`}>
+                          Ã—
+                        </button>
+                      </span>
+                    ))
+                : null}
             </div>
           </section>
 
@@ -289,7 +470,7 @@ export default function VendorProductEdit() {
               </button>
             </div>
             <div className="discount-toggle">
-              <span>1 Discount</span>
+              <span>{discountEnabled ? "1 Discount" : "No Discount"}</span>
               <label className="switch">
                 <input
                   type="checkbox"
@@ -328,19 +509,25 @@ export default function VendorProductEdit() {
                     onChange={handleChange}
                   />
                 </div>
-                <button type="button" className="trash-btn" onClick={() => setDiscountEnabled(false)}>
-                  <span aria-hidden="true">🗑️</span>
+                <button
+                  type="button"
+                  className="trash-btn"
+                  onClick={() => setDiscountEnabled(false)}
+                >
+                  <span aria-hidden="true">ðŸ—‘ï¸</span>
                 </button>
               </div>
             )}
           </section>
 
+          {error ? <div className="form-error">{error}</div> : null}
+          {success ? <div className="form-success">{success}</div> : null}
           <div className="form-actions">
             <button type="button" className="btn-cancel" onClick={() => navigate(-1)}>
               Cancel
             </button>
-            <button type="submit" className="btn-save">
-              Save
+            <button type="submit" className="btn-save" disabled={saving}>
+              {saving ? "Saving..." : "Save"}
             </button>
           </div>
         </form>

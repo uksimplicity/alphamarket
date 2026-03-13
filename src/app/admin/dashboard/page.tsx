@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { fetcher } from "@/components/dashboard/api";
+import { ErrorState, Skeleton } from "@/components/dashboard/ui";
 
 type AdminDashboardData = {
   statCards: Array<{ label: string; value: string; delta: string; trend: "up" | "down" }>;
@@ -39,113 +40,36 @@ type AdminDashboardData = {
 };
 
 export default function AdminDashboardPage() {
-  const { data } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-dashboard"],
     queryFn: () => fetcher<AdminDashboardData>("/admin/dashboard"),
   });
 
-  const mockData: AdminDashboardData = {
-    statCards: [
-      { label: "Total Sales", value: "N4,765,876", delta: "+0.1%", trend: "up" },
-      { label: "Total Orders", value: "1M", delta: "-0.1%", trend: "down" },
-      { label: "Total Customers", value: "50,000", delta: "+0.1%", trend: "up" },
-      { label: "Shipping Delays", value: "500", delta: "-0.1%", trend: "down" },
-    ],
-    subCards: [
-      { label: "Refund Requests", value: "4,876", delta: "+0.1%", trend: "up" },
-      { label: "Stock Products", value: "4,876", delta: "-0.1%", trend: "down" },
-      { label: "Abandoned Carts", value: "4,876", delta: "+0.1%", trend: "up" },
-      { label: "Payment Failures", value: "4,876", delta: "-0.1%", trend: "down" },
-    ],
-    revenueBars: [
-      { month: "Jan", value: 60 },
-      { month: "Feb", value: 78 },
-      { month: "Mar", value: 52 },
-      { month: "Apr", value: 74 },
-      { month: "May", value: 50 },
-      { month: "Jun", value: 80 },
-      { month: "Jul", value: 90 },
-      { month: "Aug", value: 66 },
-      { month: "Sep", value: 54 },
-      { month: "Oct", value: 62 },
-      { month: "Nov", value: 49 },
-      { month: "Dec", value: 55 },
-    ],
-    fulfillment: [
-      { label: "Shipped orders", value: 30, color: "#2563eb" },
-      { label: "Delivered", value: 56, color: "#22c55e" },
-      { label: "Pending shipments", value: 20, color: "#f59e0b" },
-      { label: "Stuck orders", value: 10, color: "#111827" },
-      { label: "Back Product", value: 2, color: "#ef4444" },
-    ],
-    orderStatus: [
-      { label: "New Shipment", value: 9548, color: "#22c55e" },
-      { label: "Processing", value: 9423, color: "#3b82f6" },
-      { label: "Delivered", value: 24592, color: "#10b981" },
-      { label: "Cancelled", value: 300, color: "#ef4444" },
-      { label: "Failed Delivery", value: 232, color: "#f97316" },
-      { label: "Pending shipments", value: 403, color: "#f59e0b" },
-      { label: "Returned", value: 594, color: "#a855f7" },
-      { label: "Refunded", value: 3934, color: "#e879f9" },
-      { label: "Stuck orders", value: 400, color: "#0ea5e9" },
-    ],
-    topCountries: [
-      { country: "Canada", sales: "2400k", trend: "up" },
-      { country: "Korean", sales: "200k", trend: "down" },
-      { country: "France", sales: "300k", trend: "down" },
-      { country: "German", sales: "48000k", trend: "up" },
-    ],
-    recentOrders: [
-      {
-        id: "#254834",
-        customer: "#57392",
-        date: "01 Jul, 2026",
-        items: "2",
-        price: "N4,000",
-        status: "Processing",
-      },
-      {
-        id: "#254834",
-        customer: "#57392",
-        date: "01 Jul, 2026",
-        items: "2",
-        price: "N76,000",
-        status: "Processing",
-      },
-      {
-        id: "#254834",
-        customer: "#57392",
-        date: "01 Jul, 2026",
-        items: "2",
-        price: "N12,670",
-        status: "Processing",
-      },
-      {
-        id: "#254834",
-        customer: "#57392",
-        date: "01 Jul, 2026",
-        items: "2",
-        price: "N512,000",
-        status: "Processing",
-      },
-      {
-        id: "#254834",
-        customer: "#57392",
-        date: "01 Jul, 2026",
-        items: "2",
-        price: "N2,000",
-        status: "Processing",
-      },
-    ],
-    lowStock: [
-      { id: "1", name: "Product Name", category: "Cloth", stock: "10", vendor: "G-Shop" },
-      { id: "2", name: "Product Name", category: "Cloth", stock: "10", vendor: "G-Shop" },
-      { id: "3", name: "Product Name", category: "Cloth", stock: "10", vendor: "G-Shop" },
-      { id: "4", name: "Product Name", category: "Cloth", stock: "10", vendor: "G-Shop" },
-    ],
-  };
+  if (isLoading) {
+    return (
+      <div className="grid gap-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+        <Skeleton className="h-64" />
+        <Skeleton className="h-64" />
+      </div>
+    );
+  }
 
-  const viewData = data ?? mockData;
+  if (error || !data) {
+    return (
+      <ErrorState
+        message={error instanceof Error ? error.message : "Failed to load dashboard."}
+        onRetry={refetch}
+      />
+    );
+  }
+
+  const viewData = data;
 
   return (
     <div className="grid gap-4">

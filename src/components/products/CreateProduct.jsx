@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import "@/components/products/CreateProduct.css";
+import { getAuth } from "@/components/auth/authStorage";
 
 const initialForm = {
   name: "",
@@ -10,8 +11,13 @@ const initialForm = {
   category: "",
   type: "",
   brand: "",
-  vendor: "",
   shortDescription: "",
+  basePrice: "",
+  stock: "",
+  address: "",
+  location: "",
+  latitude: "",
+  longitude: "",
   tags: "",
   discountTitle: "",
   discountPrice: "",
@@ -22,6 +28,12 @@ export default function CreateProduct() {
   const [form, setForm] = useState(initialForm);
   const [variants, setVariants] = useState([{ variant: "", value: "" }]);
   const [discountEnabled, setDiscountEnabled] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [coverFile, setCoverFile] = useState(null);
+  const [imageFiles, setImageFiles] = useState([]);
+  const [videoFile, setVideoFile] = useState(null);
   const router = useRouter();
 
   const handleChange = (event) => {
@@ -53,9 +65,161 @@ export default function CreateProduct() {
     setDiscountEnabled(false);
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    window.alert("Product saved.");
+    setError("");
+    setSuccess("");
+
+    const auth = getAuth();
+    const token = auth?.access_token;
+    const userStatus = auth?.user?.status;
+
+    if (!token) {
+      setError("You must be logged in to create a product.");
+      return;
+    }
+    if (userStatus && userStatus !== "active") {
+      setError(
+        "Sorry you can not submit your product until your Vendor account is activated, Please contact Alpha Marketplace Administrator"
+      );
+      return;
+    }
+
+    const sellerId = auth?.user?.id;
+    if (!sellerId) {
+      setError("Seller ID is missing. Please log in again.");
+      return;
+    }
+    async function uploadFile(file, folder) {
+      if (!file) return "";
+      const fd = new FormData();
+      fd.append("file", file);
+      if (folder) {
+        fd.append("folder", folder);
+      }
+      const response = await fetch("/api/upload/file", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: fd,
+      });
+      const text = await response.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      if (!response.ok) {
+        const message =
+          data && typeof data === "object" && "error" in data
+            ? data.error
+            : `File upload failed (${response.status}).`;
+        throw new Error(String(message));
+      }
+      return (
+        data?.url ||
+        data?.file_url ||
+        data?.path ||
+        data?.data?.url ||
+        data?.data?.file_url ||
+        data?.data?.path ||
+        ""
+      );
+    }
+    const payload = {
+      address: form.address,
+      attributes: variants
+        .filter((row) => row.variant && row.value)
+        .map((row) => ({
+          attribute_id: row.variant,
+          attribute_value_id: row.value,
+        })),
+      basePrice: Number(form.basePrice) || 0,
+      brandId: form.brand,
+      categoryId: form.category,
+      discounts: discountEnabled
+        ? [
+            {
+              active: true,
+              title: form.discountTitle,
+              price: Number(form.discountPrice) || 0,
+              startDate: form.discountDuration,
+              endDate: form.discountDuration,
+            },
+          ]
+        : [],
+      latitude: 0,
+      location: form.location,
+      longitude: 0,
+      media: {
+        cover: "",
+        images: [],
+        video: "",
+      },
+      name: form.name,
+      productTypeId: form.type,
+      sellerId,
+      shortDescription: form.shortDescription,
+      slug: form.slug,
+      stock: Number(form.stock) || 0,
+      tags: form.tags ? [form.tags] : [],
+    };
+
+    try {
+      setLoading(true);
+      const coverUrl = await uploadFile(coverFile, "products");
+      const imageUrls = imageFiles.length
+        ? await Promise.all(
+            imageFiles.map((file) => uploadFile(file, "products"))
+          )
+        : [];
+      const videoUrl = await uploadFile(videoFile, "products");
+
+      payload.media.cover = coverUrl;
+      payload.media.images = imageUrls.filter(Boolean);
+      payload.media.video = videoUrl;
+
+      const response = await fetch("/api/seller/products", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const text = await response.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+
+      if (!response.ok) {
+        const message =
+          data && typeof data === "object" && "error" in data
+            ? data.error
+            : `Create product failed (${response.status}).`;
+        const textMessage = String(message);
+        if (textMessage.toLowerCase().includes("not found")) {
+          setError(
+            "Sorry you can not submit your product until your Vendor account is activated, Please contact Alpha Marketplace Administrator"
+          );
+          return;
+        }
+        setError(textMessage);
+        return;
+      }
+
+      setSuccess("Product created successfully.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Create product failed.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const variantRows = useMemo(() => variants, [variants]);
@@ -100,8 +264,8 @@ export default function CreateProduct() {
                 <label>Product Type</label>
                 <select name="type" value={form.type} onChange={handleChange}>
                   <option value="">Select</option>
-                  <option value="physical">Physical</option>
-                  <option value="digital">Digital</option>
+                  <option value="product">Product</option>
+                  <option value="service">Service</option>
                 </select>
               </div>
               <div className="field">
@@ -113,12 +277,22 @@ export default function CreateProduct() {
                 </select>
               </div>
               <div className="field">
-                <label>Vendor</label>
-                <select name="vendor" value={form.vendor} onChange={handleChange}>
-                  <option value="">Select</option>
-                  <option value="sk-ibrahim">Sk Ibrahim</option>
-                  <option value="jerome-bell">Jerome Bell</option>
-                </select>
+                <label>Base Price</label>
+                <input
+                  type="number"
+                  name="basePrice"
+                  value={form.basePrice}
+                  onChange={handleChange}
+                />
+              </div>
+              <div className="field">
+                <label>Stock</label>
+                <input
+                  type="number"
+                  name="stock"
+                  value={form.stock}
+                  onChange={handleChange}
+                />
               </div>
             </div>
             <div className="field full">
@@ -130,31 +304,68 @@ export default function CreateProduct() {
                 onChange={handleChange}
               />
             </div>
+            <div className="form-grid">
+              <div className="field">
+                <label>Address</label>
+                <input name="address" value={form.address} onChange={handleChange} />
+              </div>
+              <div className="field">
+                <label>Location</label>
+                <input name="location" value={form.location} onChange={handleChange} />
+              </div>
+            </div>
           </section>
 
           <section className="form-section">
-            <div className="section-title">Media</div>
-            <div className="media-grid">
-              <button type="button" className="upload-card">
-                <span className="upload-icon">↑</span>
-                <div className="upload-title">Upload Cover photo</div>
-                <div className="upload-note">Allowed *.jpeg, *.jpg, *.png</div>
-                <div className="upload-note">Max size 3 MB</div>
-              </button>
-              <button type="button" className="upload-card">
-                <span className="upload-icon">↑</span>
-                <div className="upload-title">Upload Product photo</div>
-                <div className="upload-note">Allowed *.jpeg, *.jpg, *.png</div>
-                <div className="upload-note">Max size 3 MB</div>
-              </button>
-              <button type="button" className="upload-card">
-                <span className="upload-icon">↑</span>
-                <div className="upload-title">Upload Video</div>
-                <div className="upload-note">Allowed *.mp4, *.mov, *.avi</div>
-                <div className="upload-note">Max size 3 MB</div>
-              </button>
-            </div>
-          </section>
+  <div className="section-title">Media</div>
+  <div className="media-grid">
+    <label className="upload-card">
+      <input
+        type="file"
+        accept=".jpg,.jpeg,.png"
+        onChange={(event) => setCoverFile(event.target.files?.[0] ?? null)}
+      />
+      <span className="upload-icon">↑</span>
+      <div className="upload-title">Upload Cover photo</div>
+      <div className="upload-note">Allowed *.jpeg, *.jpg, *.png</div>
+      <div className="upload-note">Max size 3 MB</div>
+      {coverFile ? (
+        <div className="upload-filename">{coverFile.name}</div>
+      ) : null}
+    </label>
+    <label className="upload-card">
+      <input
+        type="file"
+        accept=".jpg,.jpeg,.png"
+        multiple
+        onChange={(event) =>
+          setImageFiles(event.target.files ? Array.from(event.target.files) : [])
+        }
+      />
+      <span className="upload-icon">↑</span>
+      <div className="upload-title">Upload Product photo</div>
+      <div className="upload-note">Allowed *.jpeg, *.jpg, *.png</div>
+      <div className="upload-note">Max size 3 MB</div>
+      {imageFiles.length > 0 ? (
+        <div className="upload-filename">{imageFiles.length} file(s)</div>
+      ) : null}
+    </label>
+    <label className="upload-card">
+      <input
+        type="file"
+        accept=".mp4,.mov,.avi"
+        onChange={(event) => setVideoFile(event.target.files?.[0] ?? null)}
+      />
+      <span className="upload-icon">↑</span>
+      <div className="upload-title">Upload Video (optional)</div>
+      <div className="upload-note">Allowed *.mp4, *.mov, *.avi</div>
+      <div className="upload-note">Max size 3 MB</div>
+      {videoFile ? (
+        <div className="upload-filename">{videoFile.name}</div>
+      ) : null}
+    </label>
+  </div>
+</section>
 
           <section className="form-section">
             <div className="section-row">
@@ -259,12 +470,14 @@ export default function CreateProduct() {
             )}
           </section>
 
+          {error ? <div className="form-error">{error}</div> : null}
+          {success ? <div className="form-success">{success}</div> : null}
           <div className="form-actions">
             <button type="button" className="btn-cancel" onClick={() => router.back()}>
               Cancel
             </button>
-            <button type="submit" className="btn-save">
-              Save
+            <button type="submit" className="btn-save" disabled={loading}>
+              {loading ? "Saving..." : "Save"}
             </button>
           </div>
         </form>
@@ -272,3 +485,4 @@ export default function CreateProduct() {
     </div>
   );
 }
+

@@ -1,30 +1,154 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { productsData } from "@/components/products/productData";
+import { getAuth } from "@/components/auth/authStorage";
 import "@/components/products/CreateProduct.css";
-
-const variantRows = [
-  { skuId: "#73423", variantId: "#73423", color: "Black", size: "L", visible: "1 x 80ml", status: "Active" },
-  { skuId: "#73423", variantId: "#73423", color: "Black", size: "L", visible: "1 x 80ml", status: "Active" },
-];
 
 export default function VendorProductDetail() {
   const { productId } = useParams();
   const navigate = useNavigate();
-  const product = useMemo(
-    () => productsData.find((item) => item.id === productId),
-    [productId]
-  );
+  const [product, setProduct] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  if (!product) {
+  const loadProduct = async () => {
+    if (!productId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const auth = getAuth();
+      const token = auth?.access_token;
+      const response = await fetch(`/api/seller/products/${encodeURIComponent(productId)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const text = await response.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      if (!response.ok) {
+        const message =
+          data && typeof data === "object" && "error" in data
+            ? data.error
+            : `Failed to load product (${response.status}).`;
+        throw new Error(String(message));
+      }
+      const payload =
+        data?.data || data?.product || data?.item || data?.product_data || data || null;
+      setProduct(payload);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load product.");
+      setProduct(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProduct();
+  }, [productId]);
+
+  const summary = useMemo(() => {
+    if (!product) return null;
+    return {
+      id:
+        product?.id ||
+        product?.productId ||
+        product?.product_id ||
+        product?._id ||
+        product?.uuid ||
+        product?.slug ||
+        productId ||
+        "",
+      name: product?.name || product?.title || "Product",
+      category:
+        product?.category?.name ||
+        product?.categoryName ||
+        product?.category ||
+        product?.category_id ||
+        product?.categoryId ||
+        "Category",
+      status:
+        product?.status ||
+        (product?.isPublished ? "Publish" : product?.active === false ? "Draft" : "Publish"),
+      vendor:
+        product?.vendor?.name ||
+        product?.vendorName ||
+        product?.seller?.name ||
+        product?.sellerName ||
+        "Vendor",
+      brand:
+        product?.brand?.name || product?.brandName || product?.brand || product?.brandId || "-",
+      slug: product?.slug || "-",
+      description:
+        product?.shortDescription ||
+        product?.short_description ||
+        product?.description ||
+        "-",
+      media: product?.media || {
+        cover: product?.cover || product?.coverImage || "",
+        images: product?.images || [],
+      },
+      variants: product?.variants || product?.attributes || product?.variantRows || [],
+    };
+  }, [product, productId]);
+
+  const variantRows = useMemo(() => {
+    if (!summary?.variants || !Array.isArray(summary.variants)) return [];
+    return summary.variants.map((row: any, index: number) => ({
+      skuId: row?.skuId || row?.sku_id || row?.sku || `SKU-${index + 1}`,
+      variantId: row?.variantId || row?.variant_id || row?.id || `VAR-${index + 1}`,
+      color: row?.color || row?.colour || row?.attribute_value || row?.value || "-",
+      size: row?.size || row?.size_name || "-",
+      visible: row?.visible || row?.quantity || row?.stock || "-",
+      status: row?.status || (row?.active ? "Active" : "Inactive"),
+    }));
+  }, [summary]);
+
+  const mediaUrls = useMemo(() => {
+    if (!summary?.media) return [];
+    const cover = summary.media?.cover || summary.media?.coverUrl;
+    const images = Array.isArray(summary.media?.images) ? summary.media.images : [];
+    const all = [cover, ...images].filter(Boolean);
+    return all;
+  }, [summary]);
+
+  if (loading) {
+    return (
+      <div className="create-card">
+        <div className="section-title">Loading product...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="create-card">
+        <div className="section-title">Unable to load product</div>
+        <div className="details-text">{error}</div>
+      </div>
+    );
+  }
+
+  if (!summary) {
     return (
       <div className="create-card">
         <div className="section-title">Product not found</div>
       </div>
     );
   }
+
+  const coverStyle =
+    mediaUrls.length > 0
+      ? {
+          backgroundImage: `url(${mediaUrls[0]})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }
+      : undefined;
 
   return (
     <div className="create-page">
@@ -37,11 +161,15 @@ export default function VendorProductDetail() {
               aria-label="Back"
               onClick={() => navigate(-1)}
             >
-              <span aria-hidden="true">←</span>
+              <span aria-hidden="true">â†</span>
             </button>
             <h1>Product Details</h1>
           </div>
-          <button type="button" className="status-btn" onClick={() => navigate(`/vendor/products/${product.id}/edit`)}>
+          <button
+            type="button"
+            className="status-btn"
+            onClick={() => navigate(`/vendor/products/${summary.id}/edit`)}
+          >
             Edit
           </button>
         </div>
@@ -49,43 +177,40 @@ export default function VendorProductDetail() {
         <section className="form-section">
           <div className="section-title">Basic Information</div>
           <div className="details-header">
-            <div className="details-image" />
+            <div className="details-image" style={coverStyle} />
             <div className="details-info">
-              <div className="details-name">{product.name}</div>
+              <div className="details-name">{summary.name}</div>
               <div className="details-meta">
                 <span>Category Name</span>
-                <span>{product.category}</span>
+                <span>{summary.category}</span>
               </div>
             </div>
-            <span className="badge-blue">{product.status}</span>
+            <span className="badge-blue">{summary.status}</span>
           </div>
           <div className="details-section">
             <div className="details-label">Short Description</div>
-            <div className="details-text">
-              Delivery usually takes 2–5 business days, depending on your location and the selected
-              shipping method. You’ll receive a tracking number once your order is shipped.
-            </div>
+            <div className="details-text">{summary.description}</div>
           </div>
           <div className="details-grid">
             <div className="details-card">
-              <div className="details-icon">🏷️</div>
+              <div className="details-icon">ðŸ·ï¸</div>
               <div>
                 <div className="details-title">Brand</div>
-                <div className="details-value">Brand Name</div>
+                <div className="details-value">{summary.brand}</div>
               </div>
             </div>
             <div className="details-card">
-              <div className="details-icon">🛒</div>
+              <div className="details-icon">ðŸ›’</div>
               <div>
                 <div className="details-title">Slug</div>
-                <div className="details-value">Slug Information</div>
+                <div className="details-value">{summary.slug}</div>
               </div>
             </div>
             <div className="details-card">
-              <div className="details-icon">👤</div>
+              <div className="details-icon">ðŸ‘¤</div>
               <div>
                 <div className="details-title">Vendor</div>
-                <div className="details-value">{product.vendor}</div>
+                <div className="details-value">{summary.vendor}</div>
               </div>
             </div>
           </div>
@@ -94,9 +219,21 @@ export default function VendorProductDetail() {
         <section className="form-section">
           <div className="section-title">Media</div>
           <div className="media-thumbs">
-            {new Array(4).fill(null).map((_, index) => (
-              <div className="media-thumb" key={`media-${index}`} />
-            ))}
+            {mediaUrls.length > 0
+              ? mediaUrls.map((url, index) => (
+                  <div
+                    className="media-thumb"
+                    key={`media-${index}`}
+                    style={{
+                      backgroundImage: `url(${url})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                    }}
+                  />
+                ))
+              : new Array(4).fill(null).map((_, index) => (
+                  <div className="media-thumb" key={`media-${index}`} />
+                ))}
           </div>
         </section>
 
@@ -116,21 +253,27 @@ export default function VendorProductDetail() {
                 </tr>
               </thead>
               <tbody>
-                {variantRows.map((row, index) => (
-                  <tr key={`variant-${index}`}>
-                    <td>{row.skuId}</td>
-                    <td>{row.variantId}</td>
-                    <td>
-                      <span className="thumb-sm" />
-                    </td>
-                    <td>{row.color}</td>
-                    <td>{row.size}</td>
-                    <td>{row.visible}</td>
-                    <td>
-                      <span className="badge-blue">{row.status}</span>
-                    </td>
+                {variantRows.length > 0 ? (
+                  variantRows.map((row, index) => (
+                    <tr key={`variant-${index}`}>
+                      <td>{row.skuId}</td>
+                      <td>{row.variantId}</td>
+                      <td>
+                        <span className="thumb-sm" />
+                      </td>
+                      <td>{row.color}</td>
+                      <td>{row.size}</td>
+                      <td>{row.visible}</td>
+                      <td>
+                        <span className="badge-blue">{row.status}</span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7}>No variants found.</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -140,24 +283,30 @@ export default function VendorProductDetail() {
           <div className="section-title">Discount</div>
           <div className="details-grid">
             <div className="details-card">
-              <div className="details-icon">🏷️</div>
+              <div className="details-icon">ðŸ·ï¸</div>
               <div>
                 <div className="details-title">Discount Title</div>
-                <div className="details-value">-</div>
+                <div className="details-value">
+                  {product?.discounts?.[0]?.title || "-"}
+                </div>
               </div>
             </div>
             <div className="details-card">
-              <div className="details-icon">💵</div>
+              <div className="details-icon">ðŸ’µ</div>
               <div>
                 <div className="details-title">Discount Price</div>
-                <div className="details-value">-</div>
+                <div className="details-value">
+                  {product?.discounts?.[0]?.price ?? "-"}
+                </div>
               </div>
             </div>
             <div className="details-card">
-              <div className="details-icon">📅</div>
+              <div className="details-icon">ðŸ“…</div>
               <div>
                 <div className="details-title">Discount Duration</div>
-                <div className="details-value">-</div>
+                <div className="details-value">
+                  {product?.discounts?.[0]?.startDate || "-"}
+                </div>
               </div>
             </div>
           </div>
