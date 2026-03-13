@@ -1,214 +1,186 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+import { getAuth } from "@/components/auth/authStorage";
 import styles from "./vendor.module.css";
 
-const stats = [
-  { label: "Total Sales", value: "₦4,876,000", delta: "+0.1%" },
-  { label: "Total Orders", value: "1M", delta: "-0.1%" },
-  { label: "Total Customers", value: "50,000", delta: "+0.1%" },
-  // { label: "Shipping Delays", value: "500", delta: "-0.1%" },
-  { label: "Refund Requests", value: "4,876", delta: "+0.1%" },
-  { label: "Stock Products", value: "4,876", delta: "-0.1%" },
-  { label: "Amount in Escrow", value: "₦1,240,000", delta: "+0.1%" },
-  // { label: "Payment Failures", value: "4,876", delta: "+0.1%" },
-];
+type SellerProduct = {
+  id: string;
+  name: string;
+  category: string;
+  stock: number;
+  price: number | null;
+  status: string;
+};
 
-const cities = [
-  { name: "Lagos", value: "₦2.4m" },
-  { name: "Abuja", value: "₦2.0m" },
-  { name: "Port Harcourt", value: "₦1.3m" },
-  { name: "Kano", value: "₦800k" },
-];
+function normalizeList(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    const candidates = [record.data, record.products, record.items, record.rows];
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) return candidate;
+    }
+  }
+  return [];
+}
 
-const orders = new Array(5).fill(null).map((_, index) => ({
-  id: `#25483${index}`,
-  customer: `#5739${index}`,
-  date: "01 Jul, 2022",
-  items: "2",
-  price: "₦40,000",
-  status: "Processing",
-}));
-
-const products = new Array(4).fill(null).map((_, index) => ({
-  name: "Product Name",
-  id: `ID: #2345${index}`,
-  category: "Cloth",
-  stock: "10",
-  vendor: "G-Shop",
-}));
+function toNumber(value: unknown, fallback = 0) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return fallback;
+}
 
 export default function VendorDashboard() {
+  const [products, setProducts] = useState<SellerProduct[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      setError("");
+      try {
+        const auth = getAuth();
+        const token = auth?.access_token;
+        const response = await fetch("/api/seller/products", {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        const text = await response.text();
+        let payload: unknown = null;
+        try {
+          payload = text ? JSON.parse(text) : null;
+        } catch {
+          payload = text;
+        }
+        if (!response.ok) {
+          const message =
+            payload && typeof payload === "object" && "error" in payload
+              ? String((payload as { error: unknown }).error)
+              : `Failed to load seller products (${response.status}).`;
+          throw new Error(message);
+        }
+
+        const rows = normalizeList(payload);
+        const normalized = rows.map((row, index) => {
+          const record = row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+          return {
+            id: String(record.id ?? record.product_id ?? record.uuid ?? `product-${index}`),
+            name: String(record.name ?? record.title ?? "Product"),
+            category: String(
+              (record.category && typeof record.category === "object"
+                ? (record.category as Record<string, unknown>).name
+                : null) ??
+                record.category ??
+                record.categoryName ??
+                "Uncategorized"
+            ),
+            stock: toNumber(record.stock ?? record.quantity, 0),
+            price: record.basePrice ?? record.price ? toNumber(record.basePrice ?? record.price, 0) : null,
+            status: String(record.status ?? "unknown"),
+          } satisfies SellerProduct;
+        });
+        setProducts(normalized);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load seller dashboard data.");
+        setProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
+
+  const metrics = useMemo(() => {
+    const totalProducts = products.length;
+    const published = products.filter((product) => product.status.toLowerCase().includes("publish")).length;
+    const draft = products.filter((product) => product.status.toLowerCase().includes("draft")).length;
+    const lowStock = products.filter((product) => product.stock > 0 && product.stock <= 10).length;
+    const outOfStock = products.filter((product) => product.stock <= 0).length;
+    const inventoryValue = products.reduce((sum, product) => {
+      if (product.price === null) return sum;
+      return sum + product.price * Math.max(product.stock, 0);
+    }, 0);
+
+    return {
+      totalProducts,
+      published,
+      draft,
+      lowStock,
+      outOfStock,
+      inventoryValue,
+    };
+  }, [products]);
+
+  const recentProducts = useMemo(() => products.slice(0, 8), [products]);
+
   return (
     <>
+      {error ? <div className={styles.card}>{error}</div> : null}
+
       <section className={styles.gridStats}>
-        {stats.map((item) => (
-          <div key={item.label} className={styles.statCard}>
-            <div className={styles.statLabel}>{item.label}</div>
-            <div className={styles.statValue}>{item.value}</div>
-            <div className={styles.statDelta}>{item.delta}</div>
-          </div>
-        ))}
-      </section>
-
-      <section className={styles.gridWide}>
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>Revenue by Month</div>
-          <div className={styles.cardSubtitle}>(+43%) than last year</div>
-          <div className={styles.bars}>
-            {new Array(12).fill(null).map((_, index) => (
-              <div
-                key={index}
-                className={styles.bar}
-                style={{ height: `${30 + ((index * 7) % 60)}%` }}
-              />
-            ))}
-          </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Total Products</div>
+          <div className={styles.statValue}>{metrics.totalProducts}</div>
         </div>
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>Top Cities By Sales</div>
-          <div className={styles.cardSubtitle}>Total Sale ₦300m</div>
-          <div className={styles.countryList}>
-            {cities.map((city) => (
-              <div key={city.name} className={styles.countryRow}>
-                <span>{city.name}</span>
-                <div className={styles.spark} />
-                <strong>{city.value}</strong>
-              </div>
-            ))}
-          </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Published</div>
+          <div className={styles.statValue}>{metrics.published}</div>
         </div>
-      </section>
-
-      <section className={styles.statusWrap}>
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>Order Status</div>
-          <div className={styles.cardSubtitle}>Summary by shipment</div>
-          <div className={styles.pie} />
-          <div className={styles.legend}>
-            <div className={styles.legendItem}>
-              <span className={styles.dot} style={{ background: "#3366ff" }} />
-              New Shipment
-            </div>
-            <div className={styles.legendItem}>
-              <span className={styles.dot} style={{ background: "#4a77ff" }} />
-              Processing
-            </div>
-            <div className={styles.legendItem}>
-              <span className={styles.dot} style={{ background: "#5d87ff" }} />
-              Delivered
-            </div>
-            <div className={styles.legendItem}>
-              <span className={styles.dot} style={{ background: "#6f97ff" }} />
-              Cancelled
-            </div>
-            <div className={styles.legendItem}>
-              <span className={styles.dot} style={{ background: "#81a7ff" }} />
-              Pending shipments
-            </div>
-            <div className={styles.legendItem}>
-              <span className={styles.dot} style={{ background: "#93b7ff" }} />
-              Returned
-            </div>
-          </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Draft</div>
+          <div className={styles.statValue}>{metrics.draft}</div>
         </div>
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>Order Fulfillment Status</div>
-          <div className={styles.progressList}>
-            {[
-              { label: "Shipped orders", value: "30 (30%)", width: "30%" },
-              { label: "Delivered", value: "40 (56%)", width: "56%" },
-              { label: "Pending shipments", value: "20 (56%)", width: "20%" },
-              { label: "Stuck orders", value: "10 (10%)", width: "10%" },
-              { label: "Back Product", value: "2 (02%)", width: "2%" },
-            ].map((row) => (
-              <div key={row.label}>
-                <div className={styles.progressRow}>
-                  <span>{row.label}</span>
-                  <span>{row.value}</span>
-                </div>
-                <div className={styles.progressBar}>
-                  <div
-                    className={styles.progressFill}
-                    style={{ width: row.width }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Low Stock</div>
+          <div className={styles.statValue}>{metrics.lowStock}</div>
+        </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Out of Stock</div>
+          <div className={styles.statValue}>{metrics.outOfStock}</div>
+        </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Inventory Value</div>
+          <div className={styles.statValue}>N{metrics.inventoryValue.toLocaleString()}</div>
         </div>
       </section>
 
       <section className={styles.card}>
-        <div className={styles.cardTitle}>Recent Orders</div>
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Order ID</th>
-                <th>Customer ID</th>
-                <th>Order Date</th>
-                <th>Items</th>
-                <th>Price</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.map((order) => (
-                <tr key={order.id}>
-                  <td>{order.id}</td>
-                  <td>{order.customer}</td>
-                  <td>{order.date}</td>
-                  <td>{order.items}</td>
-                  <td>{order.price}</td>
-                  <td>
-                    <span className={styles.pill}>{order.status}</span>
-                  </td>
-                  <td>
-                    <button className={styles.actionBtn}>Cancel</button>
-                  </td>
+        <div className={styles.cardTitle}>Recent Products</div>
+        {loading ? <div className={styles.cardSubtitle}>Loading seller data...</div> : null}
+        {!loading && recentProducts.length === 0 ? (
+          <div className={styles.cardSubtitle}>No seller products yet.</div>
+        ) : null}
+        {recentProducts.length > 0 ? (
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Category</th>
+                  <th>Stock</th>
+                  <th>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className={styles.card}>
-        <div className={styles.cardTitle}>Order Status</div>
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Product Name</th>
-                <th>Category</th>
-                <th>Current Stock</th>
-                <th>Status</th>
-                <th>Vendor</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((product, index) => (
-                <tr key={`${product.id}-${index}`}>
-                  <td>
-                    <strong>{product.name}</strong>
-                    <div>{product.id}</div>
-                  </td>
-                  <td>{product.category}</td>
-                  <td>{product.stock}</td>
-                  <td>
-                    <span className={styles.actionBtn}>Low Stock</span>
-                  </td>
-                  <td>{product.vendor}</td>
-                  <td>
-                    <button className={styles.pill}>Order Now</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {recentProducts.map((product) => (
+                  <tr key={product.id}>
+                    <td>{product.name}</td>
+                    <td>{product.category}</td>
+                    <td>{product.stock}</td>
+                    <td>
+                      <span className={styles.pill}>{product.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </section>
     </>
   );

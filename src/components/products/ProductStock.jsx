@@ -1,29 +1,111 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+import { getAuth } from "@/components/auth/authStorage";
 import "@/components/products/ProductStock.css";
 
-const stats = [
-  { label: "Total Products", value: "5030" },
-  { label: "In Stock Products", value: "120" },
-  { label: "Low Stock Products", value: "384" },
-  { label: "Out of Stock", value: "120" },
-];
+function normalizeList(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === "object") {
+    const candidates = [payload.data, payload.products, payload.items, payload.rows];
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) return candidate;
+    }
+  }
+  return [];
+}
 
-const rows = new Array(10).fill(null).map((_, index) => ({
-  id: `73423-${index + 1}`,
-  displayId: "#73423",
-  product: "Product Name",
-  category: "Fashion",
-  price: "₦40,000",
-  quantity: "82 pcs",
-  availability: index % 3 === 1 ? "Low Stock" : index % 3 === 2 ? "Out of Stock" : "Available stock",
-  warehouse: "WVR-001",
-  vendor: "Eleanor Pena",
-  updated: "01 Jul, 2022",
-  status: "Published",
-}));
+function toNumber(value, fallback = 0) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return fallback;
+}
 
-export default function ProductStock({ onAddStock = () => {}, onView = (id) => {} }) {
+export default function ProductStock({ onAddStock = () => {}, onView = () => {} }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      setError("");
+      try {
+        const auth = getAuth();
+        const token = auth?.access_token;
+        const response = await fetch("/api/seller/products", {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        const text = await response.text();
+        let payload = null;
+        try {
+          payload = text ? JSON.parse(text) : null;
+        } catch {
+          payload = text;
+        }
+
+        if (!response.ok) {
+          const message =
+            payload && typeof payload === "object" && "error" in payload
+              ? payload.error
+              : `Failed to load stock products (${response.status}).`;
+          throw new Error(String(message));
+        }
+
+        const list = normalizeList(payload);
+        const mapped = list.map((item, index) => {
+          const id = item?.id || item?.product_id || item?.uuid || `product-${index}`;
+          const stock = toNumber(item?.stock ?? item?.quantity, 0);
+          const availability =
+            stock <= 0 ? "Out of Stock" : stock <= 10 ? "Low Stock" : "Available stock";
+          const price = toNumber(item?.basePrice ?? item?.price, 0);
+
+          return {
+            id,
+            displayId: item?.displayId || item?.code || `#${String(id).slice(-5)}`,
+            product: item?.name || item?.title || "Product",
+            category:
+              item?.category?.name ||
+              item?.categoryName ||
+              item?.category ||
+              "Uncategorized",
+            price: `N${price.toLocaleString()}`,
+            quantity: `${stock} pcs`,
+            availability,
+            warehouse: item?.warehouse || item?.warehouse_code || "-",
+            vendor: item?.seller?.name || item?.vendorName || "-",
+            updated: item?.updated_at || item?.updatedAt || "-",
+            status: item?.status || "unknown",
+          };
+        });
+        setRows(mapped);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load stock products.");
+        setRows([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
+
+  const stats = useMemo(() => {
+    const total = rows.length;
+    const available = rows.filter((row) => row.availability === "Available stock").length;
+    const low = rows.filter((row) => row.availability === "Low Stock").length;
+    const out = rows.filter((row) => row.availability === "Out of Stock").length;
+    return [
+      { label: "Total Products", value: String(total) },
+      { label: "In Stock Products", value: String(available) },
+      { label: "Low Stock Products", value: String(low) },
+      { label: "Out of Stock", value: String(out) },
+    ];
+  }, [rows]);
+
   return (
     <div className="stock-page">
       <div className="stock-card">
@@ -35,6 +117,9 @@ export default function ProductStock({ onAddStock = () => {}, onView = (id) => {
           </div>
         </div>
 
+        {error ? <div className="product-error">{error}</div> : null}
+        {loading ? <div className="product-loading">Loading stock data...</div> : null}
+
         <div className="stock-stats">
           {stats.map((item) => (
             <div className="stat-card" key={item.label}>
@@ -44,98 +129,67 @@ export default function ProductStock({ onAddStock = () => {}, onView = (id) => {
           ))}
         </div>
 
-        <div className="stock-filters">
-          <div className="search-field">
-            <span className="search-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path
-                  d="M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm0-2a9 9 0 1 0 5.65 16.01l4.17 4.17a1 1 0 0 0 1.42-1.42l-4.17-4.17A9 9 0 0 0 11 2z"
-                  fill="currentColor"
-                />
-              </svg>
-            </span>
-            <input type="text" placeholder="Search..." aria-label="Search" />
-          </div>
-          <div className="filter-group">
-            <select aria-label="Filter by category">
-              <option>Category</option>
-              <option>Fashion</option>
-              <option>Cloth</option>
-            </select>
-            <select aria-label="Filter by status">
-              <option>Status</option>
-              <option>Published</option>
-              <option>Draft</option>
-            </select>
-            <select aria-label="Filter by stock range">
-              <option>Stock Range</option>
-              <option>0-20</option>
-              <option>21-50</option>
-            </select>
-            <select aria-label="Filter by date">
-              <option>Date</option>
-              <option>Newest</option>
-              <option>Oldest</option>
-            </select>
-          </div>
-        </div>
-
         <div className="table-wrap">
-          <table className="stock-table">
-            <thead>
-              <tr>
-                <th><input type="checkbox" aria-label="Select all" /></th>
-                <th>ID</th>
-                <th>Product</th>
-                <th>Category</th>
-                <th>Price</th>
-                <th>Quantity</th>
-                <th>Availability</th>
-                <th>Warehouse</th>
-                <th>Vendor</th>
-                <th>Last Updated</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, index) => (
-                <tr key={`${row.id}-${index}`}>
-                  <td><input type="checkbox" aria-label={`Select ${row.product}`} /></td>
-                  <td>{row.displayId}</td>
-                  <td>
-                    <div className="product-cell">
-                      <span className="product-thumb" aria-hidden="true" />
-                      <span className="product-name">{row.product}</span>
-                    </div>
-                  </td>
-                  <td>{row.category}</td>
-                  <td>{row.price}</td>
-                  <td>{row.quantity}</td>
-                  <td>
-                    <span className={`pill ${row.availability.replace(/\s+/g, "-").toLowerCase()}`}>
-                      {row.availability}
-                    </span>
-                  </td>
-                  <td>{row.warehouse}</td>
-                  <td>{row.vendor}</td>
-                  <td>{row.updated}</td>
-                  <td><span className="status-pill">{row.status}</span></td>
-                  <td>
-                    <div className="action-buttons">
-                      <button
-                        className="btn-outline btn-sm"
-                        type="button"
-                        onClick={() => onView(row.id)}
-                      >
-                        View
-                      </button>
-                    </div>
-                  </td>
+          {!loading && rows.length === 0 ? (
+            <div className="product-empty">No stock products yet.</div>
+          ) : null}
+          {rows.length > 0 ? (
+            <table className="stock-table">
+              <thead>
+                <tr>
+                  <th><input type="checkbox" aria-label="Select all" /></th>
+                  <th>ID</th>
+                  <th>Product</th>
+                  <th>Category</th>
+                  <th>Price</th>
+                  <th>Quantity</th>
+                  <th>Availability</th>
+                  <th>Warehouse</th>
+                  <th>Vendor</th>
+                  <th>Last Updated</th>
+                  <th>Status</th>
+                  <th>Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((row, index) => (
+                  <tr key={`${row.id}-${index}`}>
+                    <td><input type="checkbox" aria-label={`Select ${row.product}`} /></td>
+                    <td>{row.displayId}</td>
+                    <td>
+                      <div className="product-cell">
+                        <span className="product-thumb" aria-hidden="true" />
+                        <span className="product-name">{row.product}</span>
+                      </div>
+                    </td>
+                    <td>{row.category}</td>
+                    <td>{row.price}</td>
+                    <td>{row.quantity}</td>
+                    <td>
+                      <span className={`pill ${row.availability.replace(/\s+/g, "-").toLowerCase()}`}>
+                        {row.availability}
+                      </span>
+                    </td>
+                    <td>{row.warehouse}</td>
+                    <td>{row.vendor}</td>
+                    <td>{row.updated}</td>
+                    <td><span className="status-pill">{row.status}</span></td>
+                    <td>
+                      <div className="action-buttons">
+                        <button
+                          className="btn-outline btn-sm"
+                          type="button"
+                          onClick={() => onView(row.id)}
+                        >
+                          View
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
         </div>
       </div>
     </div>

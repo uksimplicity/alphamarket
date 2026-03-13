@@ -1,28 +1,39 @@
 "use client";
 
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ManageProductMenu from "@/components/sidebar/ManageProductMenu";
 import styles from "./vendor.module.css";
 import { getAuth, getDisplayName } from "@/components/auth/authStorage";
 
+function formatRole(role?: string) {
+  if (!role) return "Vendor";
+  return role
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default function VendorShell() {
   const { pathname } = useLocation();
   const isDashboard = pathname === "/vendor" || pathname === "/vendor/";
-  const [vendorName, setVendorName] = useState("");
   const [vendorDetails, setVendorDetails] = useState<{
     email?: string;
     phone?: string;
     role?: string;
-  } | null>(null);
+  } | null>(() => getAuth()?.user ?? null);
+  const [vendorName, setVendorName] = useState(() =>
+    getDisplayName(getAuth()?.user)
+  );
   const [showSettings, setShowSettings] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
-  useEffect(() => {
-    const auth = getAuth();
-    setVendorName(getDisplayName(auth?.user));
-    setVendorDetails(auth?.user ?? null);
+  const roleLabel = useMemo(
+    () => formatRole(vendorDetails?.role),
+    [vendorDetails?.role]
+  );
 
+  useEffect(() => {
     function onStorage(e: StorageEvent) {
       if (e.key === "alpha.auth") {
         const nextAuth = getAuth();
@@ -95,23 +106,17 @@ export default function VendorShell() {
         <div className={styles.topbar}>
           <div className={styles.topLeft}>
             <button className={styles.collapseBtn} aria-label="Collapse sidebar">
-              <span>‹</span>
+              <span>{"<"}</span>
             </button>
             <div className={styles.search}>
-              <span>🔍</span>
+              <span>Search</span>
               <input aria-label="Search" placeholder="Search..." />
             </div>
           </div>
           <div className={styles.topActions}>
-            <Link to="/vendor/products/create" className={styles.sellButton}>Sell</Link>
-            <div className={styles.actionIcon}>
-              🔔
-              <span className={styles.badge}>5</span>
-            </div>
-            <div className={styles.actionIcon}>
-              ✉️
-              <span className={styles.badge}>8</span>
-            </div>
+            <Link to="/vendor/products/create" className={styles.sellButton}>
+              Sell
+            </Link>
             <div
               className={`${styles.profile} ${styles.profileMenu} ${
                 profileOpen ? styles.profileMenuOpen : ""
@@ -123,9 +128,9 @@ export default function VendorShell() {
                 <span className={styles.profileName}>
                   {vendorName || "Vendor"}
                 </span>
-                <span className={styles.profileRole}>Vendor</span>
+                <span className={styles.profileRole}>{roleLabel}</span>
               </div>
-              <span className={styles.caret}>▾</span>
+              <span className={styles.caret}>v</span>
               <div className={styles.profileDropdown}>
                 <button className={styles.profileItem}>Profile</button>
                 <Link className={styles.profileItem} to="/login">
@@ -242,7 +247,7 @@ export default function VendorShell() {
               </div>
               <div className={styles.settingsRow}>
                 <span className={styles.settingsLabel}>Role</span>
-                <span className={styles.settingsValue}>{vendorDetails?.role ?? "-"}</span>
+                <span className={styles.settingsValue}>{roleLabel}</span>
               </div>
             </div>
             <div className={styles.settingsActions}>
@@ -276,5 +281,3 @@ export default function VendorShell() {
     </div>
   );
 }
-
-
