@@ -1,3 +1,5 @@
+import type { NextRequest } from "next/server";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 async function proxySellerProduct(
@@ -65,29 +67,33 @@ async function proxySellerProduct(
 }
 
 export async function GET(
-  req: Request,
-  context: { params: { productId: string } }
+  req: NextRequest,
+  context: { params: Promise<{ productId: string }> }
 ) {
-  return proxySellerProduct(req, context.params.productId, "GET");
+  const { productId } = await context.params;
+  return proxySellerProduct(req, productId, "GET");
 }
 
 export async function PUT(
-  req: Request,
-  context: { params: { productId: string } }
+  req: NextRequest,
+  context: { params: Promise<{ productId: string }> }
 ) {
-  return proxySellerProduct(req, context.params.productId, "PUT");
+  const { productId } = await context.params;
+  return proxySellerProduct(req, productId, "PUT");
 }
 
 export async function PATCH(
-  req: Request,
-  context: { params: { productId: string } }
+  req: NextRequest,
+  context: { params: Promise<{ productId: string }> }
 ) {
-  return proxySellerProduct(req, context.params.productId, "PATCH");
+  const { productId } = await context.params;
+  return proxySellerProduct(req, productId, "PATCH");
 }
 
 export async function DELETE(
-  req: Request,
-  context: { params: { productId: string } }
+  req: NextRequest,
+  context: { params: Promise<{ productId: string }> }
 ) {
-  return proxySellerProduct(req, context.params.productId, "DELETE");
+  const { productId } = await context.params;
+  return proxySellerProduct(req, productId, "DELETE");
 }
