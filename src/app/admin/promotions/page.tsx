@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { adminFetcher } from "@/components/admin/api";
+import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type PromotionsData = {
@@ -13,7 +13,40 @@ type PromotionsData = {
 export default function AdminPromotionsPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-promotions"],
-    queryFn: () => adminFetcher<PromotionsData>("/promotions"),
+    queryFn: async () => {
+      const [brandsPayload, categoriesPayload, tagsPayload] = await Promise.all([
+        adminFetcher<unknown>("/brands?limit=50"),
+        adminFetcher<unknown>("/categories?limit=50"),
+        adminFetcher<unknown>("/tags?limit=50"),
+      ]);
+
+      return {
+        banners: asArray(brandsPayload).map((row, index) => {
+          const record = asRecord(row);
+          return {
+            id: pickString(record, ["id", "uuid"], `brand-${index}`),
+            title: pickString(record, ["name", "title"], "Unnamed brand"),
+            status: pickString(record, ["slug", "website_url"], "brand"),
+          };
+        }),
+        featured: asArray(categoriesPayload).map((row, index) => {
+          const record = asRecord(row);
+          return {
+            id: pickString(record, ["id", "uuid"], `category-${index}`),
+            type: "category",
+            name: pickString(record, ["name", "title"], "Unnamed category"),
+          };
+        }),
+        cms: asArray(tagsPayload).map((row, index) => {
+          const record = asRecord(row);
+          return {
+            id: pickString(record, ["id", "uuid"], `tag-${index}`),
+            title: pickString(record, ["name", "title"], "Unnamed tag"),
+            status: pickString(record, ["slug", "description"], "tag"),
+          };
+        }),
+      } satisfies PromotionsData;
+    },
   });
 
   if (isLoading) {
@@ -38,9 +71,9 @@ export default function AdminPromotionsPage() {
     <div className="grid gap-6">
       <Card>
         <SectionTitle
-          title="Homepage Banners"
-          subtitle="Manage hero banners and rotations."
-          action={<Button>Add Banner</Button>}
+          title="Brands"
+          subtitle="Brand records from the admin catalog."
+          action={<Button>Add Brand</Button>}
         />
         <div className="mt-4 space-y-3 text-sm">
           {data.banners.map((banner) => (
@@ -56,7 +89,7 @@ export default function AdminPromotionsPage() {
       </Card>
 
       <Card>
-        <SectionTitle title="Featured Items" subtitle="Products and vendors spotlight." />
+        <SectionTitle title="Categories" subtitle="Featured catalog categories." />
         <div className="mt-4 space-y-3 text-sm">
           {data.featured.map((item) => (
             <div
@@ -71,7 +104,7 @@ export default function AdminPromotionsPage() {
       </Card>
 
       <Card>
-        <SectionTitle title="CMS Content" subtitle="Static pages and homepage content." />
+        <SectionTitle title="Tags" subtitle="Promotional taxonomy and labels." />
         <div className="mt-4 space-y-3 text-sm">
           {data.cms.map((entry) => (
             <div

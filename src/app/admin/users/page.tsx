@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { adminFetcher } from "@/components/admin/api";
+import { adminFetcher, asArray, asRecord, pickNumber, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type User = {
@@ -15,7 +15,26 @@ type User = {
 export default function AdminUsersPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-users"],
-    queryFn: () => adminFetcher<User[]>("/users"),
+    queryFn: async () => {
+      const payload = await adminFetcher<unknown>("/users?limit=100");
+      const rows = asArray(payload);
+
+      return rows.map((row, index) => {
+        const record = asRecord(row);
+
+        return {
+          id: pickString(record, ["id", "user_id", "uuid"], `user-${index}`),
+          name:
+            pickString(record, ["name", "full_name"]) ||
+            `${pickString(record, ["first_name"])} ${pickString(record, ["last_name"])}`
+              .trim() ||
+            pickString(record, ["email"], "Unknown user"),
+          email: pickString(record, ["email"], "No email"),
+          status: pickString(record, ["status"], "unknown"),
+          orders: pickNumber(record, ["orders", "orders_count", "total_orders"], 0),
+        } satisfies User;
+      });
+    },
   });
 
   if (isLoading) {

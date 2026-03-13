@@ -6,63 +6,64 @@ import type { ReactNode } from "react";
 
 const navSections = [
   {
-    title: "Product Management",
+    title: "Catalog",
     items: [
-      { href: "/admin/products", label: "Manage Product" },
-      { href: "/admin/products", label: "Categories & Attributes" },
-      { href: "/admin/products", label: "Manage Inventory" },
+      { href: "/admin/products", label: "Products" },
+      { href: "/admin/promotions", label: "Categories" },
+      { href: "/admin/promotions", label: "Brands & Tags" },
     ],
   },
   {
-    title: "Order Management",
+    title: "Escrow Management",
     items: [
-      { href: "/admin/orders", label: "Orders" },
-      { href: "/admin/orders", label: "Escrow System" },
-      { href: "/admin/orders", label: "Disputes & Refunds" },
-      { href: "/admin/finance", label: "Transactions" },
+      { href: "/admin/orders", label: "Pending Escrows" },
+      { href: "/admin/orders", label: "Timed-out Escrows" },
+      { href: "/admin/finance", label: "Revenue Report" },
+      { href: "/admin/finance", label: "Escrow Totals" },
     ],
   },
   {
-    title: "User Management",
+    title: "Accounts",
     items: [
       { href: "/admin/users", label: "All Users" },
-      { href: "/admin/vendors", label: "Vendors" },
+      { href: "/admin/vendors", label: "Sellers" },
+      { href: "/admin/notifications", label: "Rider Queue" },
     ],
   },
   {
     title: "Reports & Analytics",
     items: [
-      { href: "/admin/dashboard", label: "Sales reports" },
-      { href: "/admin/dashboard", label: "Seller performance" },
-      { href: "/admin/dashboard", label: "Top products, categories" },
+      { href: "/admin/dashboard", label: "Dashboard Stats" },
+      { href: "/admin/dashboard", label: "Revenue Trends" },
+      { href: "/admin/dashboard", label: "Order Snapshot" },
     ],
   },
   {
-    title: "Finance Management",
+    title: "Finance",
     items: [
-      { href: "/admin/finance", label: "Earning" },
-      { href: "/admin/finance", label: "Withdraws" },
-      { href: "/admin/finance", label: "Refunds" },
+      { href: "/admin/finance", label: "Revenue" },
+      { href: "/admin/finance", label: "Pending Amounts" },
+      { href: "/admin/finance", label: "Timed-out Amounts" },
     ],
   },
   {
-    title: "Promotional Deals",
+    title: "Catalog Setup",
     items: [
-      { href: "/admin/promotions", label: "Coupon" },
-      { href: "/admin/promotions", label: "Flash Sales" },
-      { href: "/admin/promotions", label: "Featured Deal" },
+      { href: "/admin/promotions", label: "Brands" },
+      { href: "/admin/promotions", label: "Categories" },
+      { href: "/admin/promotions", label: "Tags" },
     ],
   },
   {
-    title: "Help & Support",
+    title: "Operations",
     items: [
-      { href: "/admin/notifications", label: "Inbox" },
-      { href: "/admin/notifications", label: "Support & Ticket" },
+      { href: "/admin/notifications", label: "Expired Uploads" },
+      { href: "/admin/settings", label: "Admin Accounts" },
     ],
   },
   {
     title: "Settings",
-    items: [{ href: "/admin/settings", label: "General Settings" }],
+    items: [{ href: "/admin/settings", label: "Roles & Access" }],
   },
 ];
 
@@ -122,26 +123,26 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500"
                 aria-label="Collapse sidebar"
               >
-                ‹
+                &lt;
               </button>
               <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-500">
-                <span>🔍</span>
+                <span aria-hidden="true">Search</span>
                 <input
                   className="w-full bg-transparent outline-none"
                   placeholder="Search..."
                 />
               </div>
               <div className="flex items-center gap-3 text-sm text-slate-500">
-                <span>🇬🇧</span>
-                <span>⌄</span>
+                <span>EN</span>
+                <span>Theme</span>
                 <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs">
-                  🔔
+                  N
                   <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] text-white">
                     5
                   </span>
                 </div>
-                <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs">
-                  ✉️
+                <div className="relative flex h-8 items-center justify-center rounded-full bg-slate-100 px-2 text-[10px]">
+                  Msg
                   <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] text-white">
                     8
                   </span>
@@ -152,7 +153,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                     <div className="font-semibold text-slate-800">Alexa Smith</div>
                     <div className="text-slate-400">Super Admin</div>
                   </div>
-                  <span className="text-slate-400">▾</span>
+                  <span className="text-slate-400">v</span>
                   <div className="absolute right-0 top-12 hidden min-w-[160px] rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-600 shadow-card group-hover:block">
                     <button className="w-full rounded-lg px-3 py-2 text-left hover:bg-blue-50 hover:text-blue-600">
                       Profile

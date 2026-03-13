@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { adminFetcher } from "@/components/admin/api";
+import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type AdminOrder = {
@@ -15,7 +15,40 @@ type AdminOrder = {
 export default function AdminOrdersPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-orders"],
-    queryFn: () => adminFetcher<AdminOrder[]>("/orders"),
+    queryFn: async () => {
+      const [pendingPayload, timedOutPayload] = await Promise.all([
+        adminFetcher<unknown>("/escrows/pending?limit=50"),
+        adminFetcher<unknown>("/escrows/timed-out?limit=50"),
+      ]);
+
+      const pending = asArray(pendingPayload).map((row) => ({
+        row,
+        source: "pending" as const,
+      }));
+      const timedOut = asArray(timedOutPayload).map((row) => ({
+        row,
+        source: "timed_out" as const,
+      }));
+
+      return [...pending, ...timedOut].map(({ row, source }) => {
+        const record = asRecord(row);
+        const status =
+          pickString(record, ["status", "state"], source === "pending" ? "pending" : "timed_out");
+        const loweredStatus = status.toLowerCase();
+
+        return {
+          id: pickString(record, ["id", "order_id", "escrow_id", "reference"], "Unknown"),
+          customer: pickString(
+            record,
+            ["customer", "customer_name", "buyer_name", "buyer_email", "user_email"],
+            "Customer unavailable"
+          ),
+          status,
+          dispute: loweredStatus.includes("dispute") || source === "timed_out",
+          refund: loweredStatus.includes("refund") || loweredStatus.includes("reverse"),
+        };
+      });
+    },
   });
 
   if (isLoading) {

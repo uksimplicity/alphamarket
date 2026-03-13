@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { adminFetcher } from "@/components/admin/api";
+import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type AdminAccount = {
@@ -18,7 +18,37 @@ type SettingsData = {
 export default function AdminSettingsPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-settings"],
-    queryFn: () => adminFetcher<SettingsData>("/settings"),
+    queryFn: async () => {
+      const payload = await adminFetcher<unknown>("/users?limit=100");
+      const rows = asArray(payload);
+
+      const admins = rows
+        .map((row) => {
+          const record = asRecord(row);
+          const role = pickString(record, ["role", "userRole", "account_role"]);
+          return {
+            id: pickString(record, ["id", "user_id", "uuid"]),
+            name:
+              pickString(record, ["name", "full_name"]) ||
+              `${pickString(record, ["first_name"])} ${pickString(record, ["last_name"])}`
+                .trim() ||
+              pickString(record, ["email"], "Unknown admin"),
+            role,
+          };
+        })
+        .filter((admin) => admin.id)
+        .filter((admin) => admin.role.includes("admin"));
+
+      const roles = [
+        { id: "buyer", name: "buyer", permissions: 1 },
+        { id: "seller", name: "seller", permissions: 3 },
+        { id: "marketplace_admin", name: "marketplace_admin", permissions: 8 },
+        { id: "rider_admin", name: "rider_admin", permissions: 6 },
+        { id: "super_admin", name: "super_admin", permissions: 10 },
+      ];
+
+      return { roles, admins } satisfies SettingsData;
+    },
   });
 
   if (isLoading) {

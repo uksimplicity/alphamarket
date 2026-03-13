@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { adminFetcher } from "@/components/admin/api";
+import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type Vendor = {
@@ -15,7 +15,31 @@ type Vendor = {
 export default function AdminVendorsPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-vendors"],
-    queryFn: () => adminFetcher<Vendor[]>("/vendors"),
+    queryFn: async () => {
+      const payload = await adminFetcher<unknown>("/grpc/users?limit=100");
+      const rows = asArray(payload);
+
+      return rows
+        .map((row) => {
+          const record = asRecord(row);
+          const role = pickString(record, ["role", "userRole", "account_role"]).toLowerCase();
+          const id = pickString(record, ["id", "user_id", "uuid"]);
+
+          return {
+            id,
+            role,
+            name: pickString(record, ["name", "full_name"]) ||
+              `${pickString(record, ["first_name"])} ${pickString(record, ["last_name"])}`
+                .trim() ||
+              pickString(record, ["email"], "Unknown vendor"),
+            status: pickString(record, ["status"], "pending"),
+            store: pickString(record, ["store", "store_name", "business_name"], "No store name"),
+            performance: pickString(record, ["performance", "rating", "score"], "No metrics"),
+          } satisfies Vendor & { role: string };
+        })
+        .filter((vendor) => vendor.id)
+        .filter((vendor) => vendor.role.includes("seller") || vendor.role.includes("vendor"));
+    },
   });
 
   if (isLoading) {

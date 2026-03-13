@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { adminFetcher } from "@/components/admin/api";
+import { adminFetcher, asRecord, pickNumber, pickString } from "@/components/admin/api";
 import { ErrorState, Skeleton } from "@/components/dashboard/ui";
 
 type AdminDashboardData = {
@@ -39,10 +39,97 @@ type AdminDashboardData = {
   }>;
 };
 
+const chartColors = ["#16a34a", "#0f766e", "#f97316", "#2563eb"];
+
+function normalizeDashboardData(payload: unknown): AdminDashboardData {
+  const record = asRecord(payload);
+
+  const totalUsers = pickNumber(record, ["total_users", "users_count", "users"], 0);
+  const totalProducts = pickNumber(record, ["total_products", "products_count", "products"], 0);
+  const totalOrders = pickNumber(record, ["total_orders", "orders_count", "orders"], 0);
+  const totalRevenue = pickNumber(record, ["total_revenue", "revenue"], 0);
+  const totalDeliveries = pickNumber(record, ["total_deliveries", "deliveries"], 0);
+  const marketplaceCommission = pickNumber(
+    record,
+    ["marketplace_commission", "commission"],
+    0
+  );
+  const riderCommission = pickNumber(record, ["rider_commission"], 0);
+
+  const statusSource = asRecord(record?.order_status ?? record?.status_breakdown ?? null);
+  const orderStatus = Object.entries(statusSource ?? {}).map(([label, value], index) => ({
+    label,
+    value: typeof value === "number" ? value : Number(value) || 0,
+    color: chartColors[index % chartColors.length],
+  }));
+
+  const topLocationSource =
+    (Array.isArray(record?.top_countries) ? record?.top_countries : null) ??
+    (Array.isArray(record?.top_locations) ? record?.top_locations : null) ??
+    [];
+  const topCountries = topLocationSource.map((row) => {
+    const item = asRecord(row);
+    return {
+      country: pickString(item, ["country", "name", "location"], "Unknown"),
+      sales: String(pickNumber(item, ["sales", "value", "count"], 0)),
+      trend: "up" as const,
+    };
+  });
+
+  return {
+    statCards: [
+      { label: "Total Users", value: String(totalUsers), delta: "", trend: "up" },
+      { label: "Total Products", value: String(totalProducts), delta: "", trend: "up" },
+      { label: "Total Orders", value: String(totalOrders), delta: "", trend: "up" },
+      { label: "Revenue", value: String(totalRevenue), delta: "", trend: "up" },
+    ],
+    subCards: [
+      { label: "Deliveries", value: String(totalDeliveries), delta: "", trend: "up" },
+      {
+        label: "Marketplace Commission",
+        value: String(marketplaceCommission),
+        delta: "",
+        trend: "up",
+      },
+      { label: "Rider Commission", value: String(riderCommission), delta: "", trend: "up" },
+      { label: "Active Statuses", value: String(orderStatus.length), delta: "", trend: "up" },
+    ],
+    revenueBars: [{ month: "Current", value: totalRevenue }],
+    fulfillment: [
+      {
+        label: "Orders vs Deliveries",
+        value: totalOrders > 0 ? Math.min(100, Math.round((totalDeliveries / totalOrders) * 100)) : 0,
+        color: "#16a34a",
+      },
+      {
+        label: "Commission Coverage",
+        value:
+          totalRevenue > 0
+            ? Math.min(
+                100,
+                Math.round(((marketplaceCommission + riderCommission) / totalRevenue) * 100)
+              )
+            : 0,
+        color: "#2563eb",
+      },
+    ],
+    orderStatus:
+      orderStatus.length > 0
+        ? orderStatus
+        : [{ label: "No data", value: 1, color: chartColors[0] }],
+    topCountries,
+    recentOrders: [],
+    lowStock: [],
+  };
+}
+
 export default function AdminDashboardPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-dashboard"],
-    queryFn: () => adminFetcher<AdminDashboardData>("/dashboard"),
+    queryFn: async () => {
+      const payload = await adminFetcher<unknown>("/dashboard");
+      return normalizeDashboardData(payload);
+    },
   });
 
   if (isLoading) {
@@ -122,9 +209,9 @@ export default function AdminDashboardPage() {
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
           <div className="text-sm font-semibold text-slate-800">
-            Accommodation Revenue
+            Revenue Overview
           </div>
-          <div className="text-xs text-slate-400">(+43%) than last year</div>
+          <div className="text-xs text-slate-400">Monthly trend from admin dashboard stats.</div>
           <div className="mt-4 h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={viewData.revenueBars}>
@@ -193,9 +280,9 @@ export default function AdminDashboardPage() {
 
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
           <div className="text-sm font-semibold text-slate-800">
-            Top Countries By sales
+            Top Regions By Sales
           </div>
-          <div className="text-xs text-slate-400">Total Sale 300M</div>
+          <div className="text-xs text-slate-400">Location breakdown from dashboard data.</div>
           <div className="mt-4 space-y-4 text-sm">
             {viewData.topCountries.map((row) => (
               <div key={row.country} className="flex items-center justify-between">
@@ -261,7 +348,7 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
-        <div className="text-sm font-semibold text-slate-800">Order Status</div>
+        <div className="text-sm font-semibold text-slate-800">Low Stock Products</div>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="text-slate-400">

@@ -123,7 +123,7 @@ export default function UserLogin() {
               "super_admin",
             ]);
             if (role && adminRoles.has(role)) {
-              navigate("/admin");
+              window.location.href = "/admin";
             } else {
               navigate("/dashboard/home");
             }

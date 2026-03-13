@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { adminFetcher } from "@/components/admin/api";
+import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type NotificationTemplate = {
@@ -18,7 +18,35 @@ type NotificationsData = {
 export default function AdminNotificationsPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-notifications"],
-    queryFn: () => adminFetcher<NotificationsData>("/notifications"),
+    queryFn: async () => {
+      const [ridersPayload, uploadsPayload] = await Promise.all([
+        adminFetcher<unknown>("/riders/unverified?limit=50"),
+        adminFetcher<unknown>("/uploads/expired?limit=50"),
+      ]);
+
+      return {
+        broadcasts: asArray(ridersPayload).map((row, index) => {
+          const record = asRecord(row);
+          return {
+            id: pickString(record, ["id", "user_id", "uuid"], `rider-${index}`),
+            title:
+              pickString(record, ["name", "full_name"]) ||
+              `${pickString(record, ["first_name"])} ${pickString(record, ["last_name"])}`
+                .trim() ||
+              pickString(record, ["email"], "Unverified rider"),
+            status: pickString(record, ["status"], "awaiting verification"),
+          };
+        }),
+        templates: asArray(uploadsPayload).map((row, index) => {
+          const record = asRecord(row);
+          return {
+            id: pickString(record, ["id", "upload_id", "uuid"], `upload-${index}`),
+            title: pickString(record, ["key", "name", "url"], "Expired upload"),
+            channel: pickString(record, ["created_at", "updated_at"], "expired"),
+          };
+        }),
+      } satisfies NotificationsData;
+    },
   });
 
   if (isLoading) {
@@ -43,9 +71,9 @@ export default function AdminNotificationsPage() {
     <div className="grid gap-6">
       <Card>
         <SectionTitle
-          title="Broadcast Messages"
-          subtitle="Send platform-wide announcements."
-          action={<Button>New Broadcast</Button>}
+          title="Rider Verification Queue"
+          subtitle="Unverified riders that need admin attention."
+          action={<Button>Review Riders</Button>}
         />
         <div className="mt-4 space-y-3 text-sm">
           {data.broadcasts.map((broadcast) => (
@@ -61,7 +89,7 @@ export default function AdminNotificationsPage() {
       </Card>
 
       <Card>
-        <SectionTitle title="Templates" subtitle="Reusable notification templates." />
+        <SectionTitle title="Expired Uploads" subtitle="Uploads that exceeded their retention window." />
         <div className="mt-4 space-y-3 text-sm">
           {data.templates.map((template) => (
             <div

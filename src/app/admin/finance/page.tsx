@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { adminFetcher } from "@/components/admin/api";
+import { adminFetcher, asArray, asRecord, pickNumber, pickString } from "@/components/admin/api";
 import { Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type FinanceData = {
@@ -13,7 +13,77 @@ type FinanceData = {
 export default function AdminFinancePage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-finance"],
-    queryFn: () => adminFetcher<FinanceData>("/finance"),
+    queryFn: async () => {
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+        .toISOString()
+        .slice(0, 10);
+      const endDate = now.toISOString().slice(0, 10);
+
+      const [revenuePayload, pendingPayload, timedOutPayload] = await Promise.all([
+        adminFetcher<unknown>("/reports/revenue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            start_date: startDate,
+            end_date: endDate,
+          }),
+        }),
+        adminFetcher<unknown>("/escrows/pending?limit=20"),
+        adminFetcher<unknown>("/escrows/timed-out?limit=20"),
+      ]);
+
+      const revenue = asRecord(revenuePayload);
+      const pending = asArray(pendingPayload);
+      const timedOut = asArray(timedOutPayload);
+
+      return {
+        revenueReport: [
+          {
+            label: "Period",
+            value: `${pickString(revenue, ["start_date"], startDate)} to ${pickString(
+              revenue,
+              ["end_date"],
+              endDate
+            )}`,
+          },
+          {
+            label: "Total Revenue",
+            value: String(pickNumber(revenue, ["total_revenue"])),
+          },
+          {
+            label: "Total Commission",
+            value: String(pickNumber(revenue, ["total_commission"])),
+          },
+          {
+            label: "Total Orders",
+            value: String(pickNumber(revenue, ["total_orders"])),
+          },
+        ],
+        payouts: pending.map((row, index) => {
+          const record = asRecord(row);
+          return {
+            id: pickString(record, ["id", "escrow_id", "order_id"], `pending-${index}`),
+            vendor: pickString(
+              record,
+              ["vendor", "vendor_name", "seller_name", "seller_id"],
+              "Pending escrow"
+            ),
+            amount: String(pickNumber(record, ["amount", "value", "total"], 0)),
+            status: pickString(record, ["status", "state"], "pending"),
+          };
+        }),
+        transactions: timedOut.map((row, index) => {
+          const record = asRecord(row);
+          return {
+            id: pickString(record, ["id", "escrow_id", "order_id"], `timed-out-${index}`),
+            type: pickString(record, ["status", "state"], "timed_out"),
+            amount: String(pickNumber(record, ["amount", "value", "total"], 0)),
+            date: pickString(record, ["created_at", "updated_at", "date"], "No date"),
+          };
+        }),
+      } satisfies FinanceData;
+    },
   });
 
   if (isLoading) {
