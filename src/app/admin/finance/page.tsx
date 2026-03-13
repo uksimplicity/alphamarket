@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetcher } from "@/components/dashboard/api";
+import { adminFetcher } from "@/components/admin/api";
 import { Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type FinanceData = {
@@ -13,7 +13,7 @@ type FinanceData = {
 export default function AdminFinancePage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-finance"],
-    queryFn: () => fetcher<FinanceData>("/admin/finance"),
+    queryFn: () => adminFetcher<FinanceData>("/finance"),
   });
 
   if (isLoading) {

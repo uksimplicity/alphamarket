@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetcher } from "@/components/dashboard/api";
+import { adminFetcher } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type NotificationTemplate = {
@@ -18,7 +18,7 @@ type NotificationsData = {
 export default function AdminNotificationsPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-notifications"],
-    queryFn: () => fetcher<NotificationsData>("/admin/notifications"),
+    queryFn: () => adminFetcher<NotificationsData>("/notifications"),
   });
 
   if (isLoading) {

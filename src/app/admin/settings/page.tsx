@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetcher } from "@/components/dashboard/api";
+import { adminFetcher } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type AdminAccount = {
@@ -18,7 +18,7 @@ type SettingsData = {
 export default function AdminSettingsPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-settings"],
-    queryFn: () => fetcher<SettingsData>("/admin/settings"),
+    queryFn: () => adminFetcher<SettingsData>("/settings"),
   });
 
   if (isLoading) {

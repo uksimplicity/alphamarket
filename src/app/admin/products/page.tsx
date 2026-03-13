@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetcher } from "@/components/dashboard/api";
+import { adminFetcher } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type Product = {
@@ -15,7 +15,7 @@ type Product = {
 export default function AdminProductsPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-products"],
-    queryFn: () => fetcher<Product[]>("/admin/products"),
+    queryFn: () => adminFetcher<Product[]>("/products"),
   });
 
   if (isLoading) {

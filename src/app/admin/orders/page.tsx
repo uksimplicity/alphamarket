@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetcher } from "@/components/dashboard/api";
+import { adminFetcher } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type AdminOrder = {
@@ -15,7 +15,7 @@ type AdminOrder = {
 export default function AdminOrdersPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-orders"],
-    queryFn: () => fetcher<AdminOrder[]>("/admin/orders"),
+    queryFn: () => adminFetcher<AdminOrder[]>("/orders"),
   });
 
   if (isLoading) {

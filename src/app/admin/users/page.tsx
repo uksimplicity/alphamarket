@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { fetcher } from "@/components/dashboard/api";
+import { adminFetcher } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type User = {
@@ -15,7 +15,7 @@ type User = {
 export default function AdminUsersPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-users"],
-    queryFn: () => fetcher<User[]>("/admin/users"),
+    queryFn: () => adminFetcher<User[]>("/users"),
   });
 
   if (isLoading) {

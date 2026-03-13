@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { fetcher } from "@/components/dashboard/api";
+import { adminFetcher } from "@/components/admin/api";
 import { ErrorState, Skeleton } from "@/components/dashboard/ui";
 
 type AdminDashboardData = {
@@ -42,7 +42,7 @@ type AdminDashboardData = {
 export default function AdminDashboardPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-dashboard"],
-    queryFn: () => fetcher<AdminDashboardData>("/admin/dashboard"),
+    queryFn: () => adminFetcher<AdminDashboardData>("/dashboard"),
   });
 
   if (isLoading) {

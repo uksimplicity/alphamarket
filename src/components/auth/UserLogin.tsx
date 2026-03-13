@@ -73,6 +73,7 @@ export default function UserLogin() {
               return;
             }
 
+            let role: string | undefined;
             if (
               payload &&
               typeof payload === "object" &&
@@ -82,22 +83,50 @@ export default function UserLogin() {
             ) {
               const data = payload.data as {
                 user?: unknown;
+                role?: unknown;
                 access_token?: string;
+                accessToken?: string;
+                token?: string;
                 refresh_token?: string;
                 token_type?: string;
                 expires_in?: number;
               };
-              if (data.user && data.access_token) {
+              if (data.user && typeof data.user === "object") {
+                const userObj = data.user as {
+                  role?: unknown;
+                  userRole?: unknown;
+                  account_role?: unknown;
+                };
+                role = String(
+                  userObj.role ?? userObj.userRole ?? userObj.account_role ?? ""
+                );
+              }
+              const accessToken =
+                data.access_token ?? data.accessToken ?? data.token ?? "";
+              if (data.user && accessToken) {
                 setAuth({
                   user: data.user as Record<string, unknown>,
-                  access_token: data.access_token,
+                  access_token: accessToken,
                   refresh_token: data.refresh_token,
                   token_type: data.token_type,
                   expires_in: data.expires_in,
                 });
               }
+              if (!role && data.role) {
+                role = String(data.role);
+              }
             }
-            navigate("/dashboard/home");
+            const adminRoles = new Set([
+              "admin",
+              "marketplace_admin",
+              "rider_admin",
+              "super_admin",
+            ]);
+            if (role && adminRoles.has(role)) {
+              navigate("/admin");
+            } else {
+              navigate("/dashboard/home");
+            }
           } catch (err) {
             setError(err instanceof Error ? err.message : "Login failed.");
           } finally {
