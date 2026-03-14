@@ -73,11 +73,13 @@ export default function ProductDetailRoute() {
     let mounted = true;
 
     async function loadLiveProduct() {
+      const safeProductId = productId;
+      if (!safeProductId) return;
       setLoading(true);
       try {
         const auth = getAuth();
         const token = auth?.access_token;
-        const response = await fetch(`/api/seller/products/${encodeURIComponent(productId)}`, {
+        const response = await fetch(`/api/seller/products/${encodeURIComponent(safeProductId)}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (!response.ok) return;
@@ -87,7 +89,7 @@ export default function ProductDetailRoute() {
             ? ((payload.data ?? payload.product ?? payload.item ?? payload) as Record<string, unknown>)
             : null;
         if (!record || !mounted) return;
-        setLiveProduct(mapLiveProduct(record, productId));
+        setLiveProduct(mapLiveProduct(record, safeProductId));
       } catch {
         // keep not found state
       } finally {
