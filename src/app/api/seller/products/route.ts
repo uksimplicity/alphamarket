@@ -1,4 +1,6 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
+const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v1`;
 
 async function proxySellerCollection(req: Request, method: "GET" | "POST") {
   if (!API_BASE) {
@@ -8,7 +10,13 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
     );
   }
 
-  const { search } = new URL(req.url);
+  const url = new URL(req.url);
+  const params = new URLSearchParams(url.search);
+  if (method === "GET") {
+    if (!params.has("limit")) params.set("limit", "20");
+    if (!params.has("offset")) params.set("offset", "0");
+  }
+  const search = params.toString() ? `?${params.toString()}` : "";
   const authHeader = req.headers.get("authorization") ?? "";
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -20,42 +28,59 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
     headers["Content-Type"] = "application/json";
   }
 
-  const primaryUrl = `${API_BASE}/seller/products${search}`;
-  const fallbackUrl = `${API_BASE}/auth/seller/products${search}`;
+  const urls = [
+    `${API_V1_BASE}/seller/products${search}`,
+    `${API_BASE}/seller/products${search}`,
+    `${API_BASE}/auth/seller/products${search}`,
+  ];
 
-  let res = await fetch(primaryUrl, {
-    method,
-    headers,
-    body: body || undefined,
-    cache: "no-store",
-  });
+  try {
+    let res: Response | null = null;
+    for (const url of urls) {
+      res = await fetch(url, {
+        method,
+        headers,
+        body: body || undefined,
+        cache: "no-store",
+      });
+      if (res.status !== 404) break;
+    }
 
-  if (res.status === 404) {
-    res = await fetch(fallbackUrl, {
-      method,
-      headers,
-      body: body || undefined,
-      cache: "no-store",
+    if (!res || res.status === 404) {
+      return new Response(
+        JSON.stringify({
+          error: "Upstream endpoint not found.",
+          tried: urls,
+        }),
+        { status: 502, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const text = await res.text();
+    if (res.status >= 500) {
+      console.error("Seller products upstream 5xx", {
+        status: res.status,
+        tried: urls,
+        bodyPreview: text.slice(0, 400),
+      });
+    }
+
+    return new Response(text, {
+      status: res.status,
+      headers: {
+        "Content-Type": res.headers.get("content-type") ?? "application/json",
+      },
     });
-  }
-
-  if (res.status === 404) {
+  } catch (error) {
     return new Response(
       JSON.stringify({
-        error: "Upstream endpoint not found.",
-        tried: [primaryUrl, fallbackUrl],
+        error: "Failed to reach seller products upstream.",
+        details: error instanceof Error ? error.message : "Unknown fetch error",
+        tried: urls,
       }),
       { status: 502, headers: { "Content-Type": "application/json" } }
     );
   }
-
-  const text = await res.text();
-  return new Response(text, {
-    status: res.status,
-    headers: {
-      "Content-Type": res.headers.get("content-type") ?? "application/json",
-    },
-  });
 }
 
 export async function GET(req: Request) {
