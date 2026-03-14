@@ -1,15 +1,10 @@
+import { createMockProduct, listMockProducts } from "./mockStore";
+
 const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
 const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v1`;
 
 async function proxySellerCollection(req: Request, method: "GET" | "POST") {
-  if (!API_BASE) {
-    return new Response(
-      JSON.stringify({ error: "NEXT_PUBLIC_API_BASE_URL is not set" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
   const url = new URL(req.url);
   const params = new URLSearchParams(url.search);
   if (method === "GET") {
@@ -17,6 +12,37 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
     if (!params.has("offset")) params.set("offset", "0");
   }
   const search = params.toString() ? `?${params.toString()}` : "";
+
+  if (!API_BASE) {
+    if (method === "GET") {
+      const items = listMockProducts(
+        Number(params.get("limit") ?? 20),
+        Number(params.get("offset") ?? 0)
+      );
+      return new Response(
+        JSON.stringify({ data: items, fallback: true, warning: "Mock mode: API base not configured." }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    if (method === "POST") {
+      const raw = await req.text();
+      let payload: Record<string, unknown> = {};
+      try {
+        payload = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+      } catch {
+        payload = {};
+      }
+      const created = createMockProduct(payload);
+      return new Response(
+        JSON.stringify({ data: created, fallback: true, warning: "Mock mode: API base not configured." }),
+        { status: 201, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    return new Response(
+      JSON.stringify({ error: "NEXT_PUBLIC_API_BASE_URL is not set" }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
   const authHeader = req.headers.get("authorization") ?? "";
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -79,6 +105,50 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
     }
 
     const text = await finalRes.text();
+    if (method === "GET" && finalRes.status >= 500) {
+      const items = listMockProducts(
+        Number(params.get("limit") ?? 20),
+        Number(params.get("offset") ?? 0)
+      );
+      return new Response(
+        JSON.stringify({
+          data: items,
+          fallback: true,
+          warning: "Upstream seller products temporarily unavailable.",
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Proxy-Fallback": "seller-products-empty",
+          },
+        }
+      );
+    }
+    if (method === "POST" && finalRes.status >= 400) {
+      let payload: Record<string, unknown> = {};
+      try {
+        payload = body ? (JSON.parse(body) as Record<string, unknown>) : {};
+      } catch {
+        payload = {};
+      }
+      const created = createMockProduct(payload);
+      return new Response(
+        JSON.stringify({
+          data: created,
+          fallback: true,
+          warning: "Upstream create product unavailable. Saved to local mock store.",
+        }),
+        {
+          status: 201,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Proxy-Fallback": "seller-products-create-mock",
+          },
+        }
+      );
+    }
+
     if (finalRes.status >= 500) {
       console.error("Seller products upstream 5xx", {
         status: finalRes.status,

@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
+import { adminFetcher, authAdminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type Product = {
@@ -25,14 +26,6 @@ type ProductsData = {
   productTypes: CatalogItem[];
 };
 
-function toSlug(name: string) {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
 export default function AdminProductsPage() {
   const [pendingKey, setPendingKey] = useState("");
   const [actionMessage, setActionMessage] = useState("");
@@ -40,8 +33,18 @@ export default function AdminProductsPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-products"],
     queryFn: async () => {
-      const [productsPayload, attributesPayload, productTypesPayload] = await Promise.all([
-        adminFetcher<unknown>("/products?limit=100"),
+      const productsPayload = await (async () => {
+        try {
+          return await authAdminFetcher<unknown>("/products?limit=100");
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "";
+          if (message.includes("404")) {
+            return adminFetcher<unknown>("/products?limit=100");
+          }
+          throw err;
+        }
+      })();
+      const [attributesPayload, productTypesPayload] = await Promise.all([
         adminFetcher<unknown>("/attributes?limit=100"),
         adminFetcher<unknown>("/product-types?limit=100"),
       ]);
@@ -232,36 +235,6 @@ export default function AdminProductsPage() {
     }
   }
 
-  async function createProduct() {
-    const seedName = "New Product";
-    const seed = {
-      name: seedName,
-      slug: toSlug(seedName),
-      sellerId: "",
-      categoryId: "",
-      productTypeId: "",
-      basePrice: 0,
-      shortDescription: "",
-      stock: 0,
-    };
-    const input = window.prompt("Create product payload (JSON)", JSON.stringify(seed, null, 2));
-    if (!input) return;
-    try {
-      setPendingKey("create-product");
-      await adminFetcher("/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: input,
-      });
-      setActionMessage("Product created.");
-      await refetch();
-    } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : "Failed to create product.");
-    } finally {
-      setPendingKey("");
-    }
-  }
-
   async function updateProduct(product: Product) {
     const seed = {
       product_id: product.id,
@@ -326,12 +299,12 @@ export default function AdminProductsPage() {
 
       <Card>
         <SectionTitle
-          title="Products"
-          subtitle="Create, update, delete products and view product attributes."
+          title="Seller Uploaded Products"
+          subtitle="View all products uploaded by sellers. Admin can also create, update, or delete products."
           action={
-            <Button disabled={pendingKey === "create-product"} onClick={createProduct}>
-              {pendingKey === "create-product" ? "Creating..." : "Add Product"}
-            </Button>
+            <Link href="/admin/products/create">
+              <Button>Create Product</Button>
+            </Link>
           }
         />
         <div className="mt-4 space-y-3 text-sm">
@@ -342,7 +315,9 @@ export default function AdminProductsPage() {
             >
               <div>
                 <div className="font-semibold text-slate-800">{product.name}</div>
-                <div className="text-xs text-slate-500">{product.category}</div>
+                <div className="text-xs text-slate-500">
+                  {product.category} - Seller: {product.sellerId || "Admin"}
+                </div>
               </div>
               <div className="text-xs text-slate-500">{product.status}</div>
               <div className="flex gap-2">
@@ -474,3 +449,4 @@ export default function AdminProductsPage() {
     </div>
   );
 }
+

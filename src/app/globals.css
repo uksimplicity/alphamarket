@@ -41,3 +41,115 @@ button,
 input {
   font-family: inherit;
 }
+
+.admin-theme {
+  --admin-blue: #3366ff;
+  --admin-blue-deep: #1b3ea6;
+  --admin-blue-50: #f2f6ff;
+  --admin-blue-100: #dce8ff;
+  --admin-blue-200: #c4d9ff;
+}
+
+.admin-theme .shadow-card {
+  box-shadow: 0 22px 44px rgba(51, 102, 255, 0.12), 0 8px 18px rgba(27, 62, 166, 0.08) !important;
+}
+
+.admin-theme .border-slate-200 {
+  border-color: var(--admin-blue-100) !important;
+}
+
+.admin-theme .bg-white {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+}
+
+.admin-theme .bg-slate-50,
+.admin-theme .bg-slate-50\/70,
+.admin-theme .bg-slate-50\/80 {
+  background-color: var(--admin-blue-50) !important;
+}
+
+.admin-theme .bg-slate-100 {
+  background-color: var(--admin-blue-100) !important;
+}
+
+.admin-theme .text-slate-900 {
+  color: #0f2f87 !important;
+}
+
+.admin-theme .text-slate-800 {
+  color: #1b3ea6 !important;
+}
+
+.admin-theme .text-slate-700 {
+  color: #234dbf !important;
+}
+
+.admin-theme .text-slate-600 {
+  color: #2d5ed4 !important;
+}
+
+.admin-theme .text-slate-500,
+.admin-theme .text-slate-400 {
+  color: #577ad3 !important;
+}
+
+.admin-theme .hover\:bg-slate-100:hover,
+.admin-theme .hover\:bg-slate-50:hover {
+  background-color: #eaf1ff !important;
+}
+
+.buyer-theme {
+  --buyer-blue: #3366ff;
+  --buyer-blue-deep: #1b3ea6;
+  --buyer-blue-50: #f2f6ff;
+  --buyer-blue-100: #dce8ff;
+}
+
+.buyer-theme .shadow-card {
+  box-shadow: 0 22px 44px rgba(51, 102, 255, 0.12), 0 8px 18px rgba(27, 62, 166, 0.08) !important;
+}
+
+.buyer-theme .border-slate-200,
+.buyer-theme .border-slate-100 {
+  border-color: var(--buyer-blue-100) !important;
+}
+
+.buyer-theme .bg-white {
+  background-color: rgba(255, 255, 255, 0.94) !important;
+}
+
+.buyer-theme .bg-slate-50,
+.buyer-theme .bg-slate-50\/80,
+.buyer-theme .bg-slate-50\/95 {
+  background-color: var(--buyer-blue-50) !important;
+}
+
+.buyer-theme .bg-slate-100 {
+  background-color: #e9f1ff !important;
+}
+
+.buyer-theme .text-slate-900 {
+  color: #0f2f87 !important;
+}
+
+.buyer-theme .text-slate-800 {
+  color: #1b3ea6 !important;
+}
+
+.buyer-theme .text-slate-700 {
+  color: #234dbf !important;
+}
+
+.buyer-theme .text-slate-600 {
+  color: #2d5ed4 !important;
+}
+
+.buyer-theme .text-slate-500,
+.buyer-theme .text-slate-400 {
+  color: #577ad3 !important;
+}
+
+.buyer-theme .hover\:bg-slate-100:hover,
+.buyer-theme .hover\:bg-slate-50:hover {
+  background-color: #eaf1ff !important;
+}

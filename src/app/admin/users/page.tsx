@@ -11,7 +11,18 @@ type User = {
   email: string;
   status: string;
   orders: number;
+  role: "buyer" | "seller" | "rider" | "super_admin";
 };
+
+function normalizeUserRole(value: string): User["role"] {
+  const role = value.toLowerCase().trim();
+  if (role === "seller" || role === "vendor") return "seller";
+  if (role === "rider" || role === "delivery_rider") return "rider";
+  if (role === "super_admin" || role === "admin" || role === "superadmin") {
+    return "super_admin";
+  }
+  return "buyer";
+}
 
 export default function AdminUsersPage() {
   const [pendingUserId, setPendingUserId] = useState<string | null>(null);
@@ -36,6 +47,9 @@ export default function AdminUsersPage() {
           email: pickString(record, ["email"], "No email"),
           status: pickString(record, ["status"], "unknown"),
           orders: pickNumber(record, ["orders", "orders_count", "total_orders"], 0),
+          role: normalizeUserRole(
+            pickString(record, ["role", "user_type", "type"], "buyer")
+          ),
         } satisfies User;
       });
     },
@@ -107,6 +121,14 @@ export default function AdminUsersPage() {
                 : status === "pending"
                 ? "bg-amber-50 text-amber-700 ring-amber-200"
                 : "bg-slate-100 text-slate-700 ring-slate-200";
+            const roleTone =
+              user.role === "super_admin"
+                ? "bg-emerald-100 text-emerald-800 ring-emerald-300"
+                : user.role === "seller"
+                ? "bg-brand text-white ring-blue-400"
+                : user.role === "rider"
+                ? "bg-rose-100 text-rose-800 ring-rose-300"
+                : "bg-sky-100 text-sky-800 ring-sky-300";
 
             return (
               <div
@@ -116,6 +138,13 @@ export default function AdminUsersPage() {
                 <div className="min-w-0">
                   <div className="truncate font-semibold text-slate-900">{user.name}</div>
                   <div className="truncate text-sm text-slate-500">{user.email}</div>
+                  <div className="mt-1">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ring-1 ${roleTone}`}
+                    >
+                      {user.role}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="text-sm text-slate-600">

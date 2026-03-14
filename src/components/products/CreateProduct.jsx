@@ -8,6 +8,7 @@ import { getAuth } from "@/components/auth/authStorage";
 const initialForm = {
   name: "",
   slug: "",
+  sellerId: "",
   category: "",
   type: "",
   brand: "",
@@ -24,10 +25,18 @@ const initialForm = {
   discountDuration: "",
 };
 
-export default function CreateProduct() {
+function isUuid(value) {
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    text
+  );
+}
+
+export default function CreateProduct({ mode = "seller" }) {
   const [form, setForm] = useState(initialForm);
   const [variants, setVariants] = useState([{ variant: "", value: "" }]);
-  const [discountEnabled, setDiscountEnabled] = useState(true);
+  const [discountEnabled, setDiscountEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -78,16 +87,41 @@ export default function CreateProduct() {
       setError("You must be logged in to create a product.");
       return;
     }
-    if (userStatus && userStatus !== "active") {
+    if (mode === "seller" && userStatus && userStatus !== "active") {
       setError(
         "Sorry you can not submit your product until your Vendor account is activated, Please contact Alpha Marketplace Administrator"
       );
       return;
     }
 
-    const sellerId = auth?.user?.id;
+    const sellerId = mode === "admin" ? form.sellerId.trim() : auth?.user?.id;
     if (!sellerId) {
       setError("Seller ID is missing. Please log in again.");
+      return;
+    }
+
+    if (!form.name.trim()) {
+      setError("Product name is required.");
+      return;
+    }
+    if (!form.category.trim()) {
+      setError("Category is required.");
+      return;
+    }
+    if (!isUuid(form.category.trim())) {
+      setError("Category must be a valid category ID (UUID).");
+      return;
+    }
+    if (!form.type.trim()) {
+      setError("Product type is required.");
+      return;
+    }
+    if (!isUuid(form.type.trim())) {
+      setError("Product type must be a valid product type ID (UUID).");
+      return;
+    }
+    if (form.basePrice === "") {
+      setError("Base price is required.");
       return;
     }
     async function uploadFile(file, folder) {
@@ -128,44 +162,65 @@ export default function CreateProduct() {
         ""
       );
     }
+    const normalizedSlug =
+      form.slug.trim() ||
+      form.name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "");
+
     const payload = {
-      address: form.address,
-      attributes: variants
-        .filter((row) => row.variant && row.value)
-        .map((row) => ({
-          attribute_id: row.variant,
-          attribute_value_id: row.value,
-        })),
       basePrice: Number(form.basePrice) || 0,
-      brandId: form.brand,
       categoryId: form.category,
-      discounts: discountEnabled
-        ? [
-            {
-              active: true,
-              title: form.discountTitle,
-              price: Number(form.discountPrice) || 0,
-              startDate: form.discountDuration,
-              endDate: form.discountDuration,
-            },
-          ]
-        : [],
-      latitude: 0,
-      location: form.location,
-      longitude: 0,
+      name: form.name.trim(),
+      productTypeId: form.type,
+      sellerId,
+      slug: normalizedSlug,
       media: {
         cover: "",
         images: [],
         video: "",
       },
-      name: form.name,
-      productTypeId: form.type,
-      sellerId,
-      shortDescription: form.shortDescription,
-      slug: form.slug,
-      stock: Number(form.stock) || 0,
-      tags: form.tags ? [form.tags] : [],
     };
+
+    if (form.address.trim()) payload.address = form.address.trim();
+    if (form.location.trim()) payload.location = form.location.trim();
+    if (form.shortDescription.trim()) {
+      payload.shortDescription = form.shortDescription.trim();
+    }
+    if (form.brand.trim() && isUuid(form.brand.trim())) {
+      payload.brandId = form.brand.trim();
+    }
+    if (form.stock !== "") payload.stock = Number(form.stock) || 0;
+    if (form.tags.trim()) payload.tags = [form.tags.trim()];
+
+    const attributeRows = variants
+      .filter(
+        (row) => isUuid(row.variant?.trim?.() ?? "") && isUuid(row.value?.trim?.() ?? "")
+      )
+      .map((row) => ({
+        attribute_id: row.variant.trim(),
+        attribute_value_id: row.value.trim(),
+      }));
+    if (attributeRows.length > 0) payload.attributes = attributeRows;
+
+    const hasDiscountData =
+      discountEnabled &&
+      form.discountTitle.trim() &&
+      form.discountDuration.trim() &&
+      form.discountPrice !== "";
+    if (hasDiscountData) {
+      payload.discounts = [
+        {
+          active: true,
+          title: form.discountTitle.trim(),
+          price: Number(form.discountPrice) || 0,
+          startDate: form.discountDuration.trim(),
+          endDate: form.discountDuration.trim(),
+        },
+      ];
+    }
 
     try {
       setLoading(true);
@@ -181,7 +236,9 @@ export default function CreateProduct() {
       payload.media.images = imageUrls.filter(Boolean);
       payload.media.video = videoUrl;
 
-      const response = await fetch("/api/seller/products", {
+      const createEndpoint =
+        mode === "admin" ? "/api/auth/admin/products" : "/api/seller/products";
+      const response = await fetch(createEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -200,8 +257,8 @@ export default function CreateProduct() {
 
       if (!response.ok) {
         const message =
-          data && typeof data === "object" && "error" in data
-            ? data.error
+          data && typeof data === "object"
+            ? data.error || data.message || data.details
             : `Create product failed (${response.status}).`;
         const textMessage = String(message);
         if (textMessage.toLowerCase().includes("not found")) {
@@ -252,6 +309,17 @@ export default function CreateProduct() {
                 <label>Slug</label>
                 <input name="slug" value={form.slug} onChange={handleChange} />
               </div>
+              {mode === "admin" ? (
+                <div className="field">
+                  <label>Seller ID</label>
+                  <input
+                    name="sellerId"
+                    value={form.sellerId}
+                    onChange={handleChange}
+                    placeholder="Seller UUID"
+                  />
+                </div>
+              ) : null}
               <div className="field">
                 <label>Category</label>
                 <select name="category" value={form.category} onChange={handleChange}>

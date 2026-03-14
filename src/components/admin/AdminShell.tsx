@@ -9,9 +9,8 @@ const navSections = [
   {
     title: "Catalog",
     items: [
-      { href: "/admin/products", label: "Products" },
-      { href: "/admin/promotions", label: "Categories" },
-      { href: "/admin/promotions", label: "Brands & Tags" },
+      { href: "/admin/products", label: "All Products" },
+      { href: "/admin/products/create", label: "Create Product" },
     ],
   },
   {
@@ -21,6 +20,8 @@ const navSections = [
       { href: "/admin/orders", label: "Timed-out Escrows" },
       { href: "/admin/finance", label: "Revenue Report" },
       { href: "/admin/finance", label: "Escrow Totals" },
+      { href: "/admin/orders#release-escrow", label: "Release Escrow" },
+      { href: "/admin/orders#reverse-escrow", label: "Reverse Escrow" },
     ],
   },
   {
@@ -48,14 +49,6 @@ const navSections = [
     ],
   },
   {
-    title: "Catalog Setup",
-    items: [
-      { href: "/admin/promotions", label: "Brands" },
-      { href: "/admin/promotions", label: "Categories" },
-      { href: "/admin/promotions", label: "Tags" },
-    ],
-  },
-  {
     title: "Operations",
     items: [
       { href: "/admin/notifications", label: "Expired Uploads" },
@@ -72,6 +65,14 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [adminName, setAdminName] = useState("Admin");
   const [adminRole, setAdminRole] = useState("Account");
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [productsOpen, setProductsOpen] = useState(false);
+  const [escrowOpen, setEscrowOpen] = useState(false);
+  const [accountsOpen, setAccountsOpen] = useState(false);
+  const [reportsOpen, setReportsOpen] = useState(false);
+  const [financeOpen, setFinanceOpen] = useState(false);
+  const [operationsOpen, setOperationsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     const auth = getAuth();
@@ -80,10 +81,62 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     setAdminRole(typeof user?.role === "string" && user.role ? user.role : "Account");
   }, []);
 
+  useEffect(() => {
+    if (pathname.startsWith("/admin/products")) {
+      setProductsOpen(true);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (pathname.startsWith("/admin/promotions")) {
+      setCatalogOpen(true);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (pathname.startsWith("/admin/orders") || pathname.startsWith("/admin/finance")) {
+      setEscrowOpen(true);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (
+      pathname.startsWith("/admin/users") ||
+      pathname.startsWith("/admin/vendors") ||
+      pathname.startsWith("/admin/notifications")
+    ) {
+      setAccountsOpen(true);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (pathname.startsWith("/admin/dashboard")) {
+      setReportsOpen(true);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (pathname.startsWith("/admin/finance")) {
+      setFinanceOpen(true);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (pathname.startsWith("/admin/notifications") || pathname.startsWith("/admin/settings")) {
+      setOperationsOpen(true);
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (pathname.startsWith("/admin/settings")) {
+      setSettingsOpen(true);
+    }
+  }, [pathname]);
+
   return (
-    <div className="min-h-screen bg-white">
+    <div className="admin-theme min-h-screen bg-[radial-gradient(circle_at_top_left,_#e8efff_0%,_#f8fbff_35%,_#ffffff_75%)]">
       <div className="grid grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[260px_1fr]">
-        <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
+        <aside className="rounded-2xl border border-blue-100 bg-gradient-to-b from-blue-50/70 via-white to-white p-4 shadow-card">
           <div className="mb-6 flex items-center gap-2 font-semibold text-slate-900">
             <img className="h-8" src="/logo.png" alt="Alpha Marketplace" />
             Alpha Marketplace
@@ -92,8 +145,8 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             href="/admin/dashboard"
             className={`mb-4 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ${
               pathname === "/admin/dashboard"
-                ? "bg-brand/10 text-brand"
-                : "text-slate-600 hover:bg-slate-100"
+                ? "bg-brand text-white shadow-md shadow-blue-200/60"
+                : "text-slate-600 hover:bg-blue-50"
             }`}
           >
             Dashboard
@@ -101,41 +154,308 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           <nav className="flex flex-col gap-4 text-sm">
             {navSections.map((section) => (
               <div key={section.title}>
-                <div className="px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                  {section.title}
-                </div>
-                <div className="mt-2 flex flex-col gap-1">
-                  {section.items.map((item) => {
-                    const active = pathname === item.href;
-                    return (
-                      <Link
-                        key={`${section.title}-${item.label}`}
-                        href={item.href}
-                        className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
-                          active
-                            ? "bg-brand/10 text-brand"
-                            : "text-slate-600 hover:bg-slate-100"
-                        }`}
-                      >
-                        {item.label}
-                      </Link>
-                    );
-                  })}
-                </div>
+                {section.title !== "Escrow Management" &&
+                section.title !== "Accounts" &&
+                section.title !== "Reports & Analytics" &&
+                section.title !== "Finance" &&
+                section.title !== "Operations" &&
+                section.title !== "Settings" ? (
+                  <div className="px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    {section.title}
+                  </div>
+                ) : null}
+                {section.title === "Catalog" ? (
+                  <div className="mt-2 flex flex-col gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setProductsOpen((prev) => !prev)}
+                      aria-expanded={productsOpen}
+                      className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
+                    >
+                      Products
+                    </button>
+                    {productsOpen ? (
+                      <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
+                        {section.items.map((item) => {
+                          const active = pathname === item.href.split("#")[0].split("?")[0];
+                          return (
+                            <Link
+                              key={`${section.title}-${item.label}`}
+                              href={item.href}
+                              className={`relative block py-2 text-sm ${
+                                active
+                                  ? "font-semibold text-brand"
+                                  : "text-slate-600 hover:text-[#1b3ea6]"
+                              }`}
+                            >
+                              <span className="absolute -left-[22px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand/70" />
+                              {item.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setCatalogOpen((prev) => !prev)}
+                      aria-expanded={catalogOpen}
+                      className="mt-1 w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
+                    >
+                      Categories &amp; Attributes
+                    </button>
+                    {catalogOpen ? (
+                      <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
+                        {[
+                          { label: "Categories", href: "/admin/promotions#categories" },
+                          { label: "Attributes", href: "/admin/promotions#attributes" },
+                          { label: "Tags", href: "/admin/promotions#tags" },
+                          { label: "Brand", href: "/admin/promotions#brand" },
+                        ].map((item, index) => {
+                          const active = pathname === "/admin/promotions" && index === 0;
+                          return (
+                            <Link
+                              key={`catalog-tree-${item.label}`}
+                              href={item.href}
+                              className={`relative block py-2 text-sm ${
+                                active
+                                  ? "font-semibold text-brand"
+                                  : "text-slate-600 hover:text-[#1b3ea6]"
+                              }`}
+                            >
+                              <span className="absolute -left-[22px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand/70" />
+                              {item.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : section.title === "Escrow Management" ? (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setEscrowOpen((prev) => !prev)}
+                      aria-expanded={escrowOpen}
+                      className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
+                    >
+                      Escrow Management
+                    </button>
+                    {escrowOpen ? (
+                      <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
+                        {section.items.map((item) => {
+                          const active = pathname === item.href;
+                          return (
+                            <Link
+                              key={`${section.title}-${item.label}`}
+                              href={item.href}
+                              className={`relative block py-2 text-sm ${
+                                active
+                                  ? "font-semibold text-brand"
+                                  : "text-slate-600 hover:text-[#1b3ea6]"
+                              }`}
+                            >
+                              <span className="absolute -left-[22px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand/70" />
+                              {item.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : section.title === "Accounts" ? (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setAccountsOpen((prev) => !prev)}
+                      aria-expanded={accountsOpen}
+                      className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
+                    >
+                      Accounts
+                    </button>
+                    {accountsOpen ? (
+                      <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
+                        {section.items.map((item) => {
+                          const active = pathname === item.href;
+                          return (
+                            <Link
+                              key={`${section.title}-${item.label}`}
+                              href={item.href}
+                              className={`relative block py-2 text-sm ${
+                                active
+                                  ? "font-semibold text-brand"
+                                  : "text-slate-600 hover:text-[#1b3ea6]"
+                              }`}
+                            >
+                              <span className="absolute -left-[22px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand/70" />
+                              {item.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : section.title === "Reports & Analytics" ? (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setReportsOpen((prev) => !prev)}
+                      aria-expanded={reportsOpen}
+                      className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
+                    >
+                      Reports &amp; Analytics
+                    </button>
+                    {reportsOpen ? (
+                      <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
+                        {section.items.map((item) => {
+                          const active = pathname === item.href;
+                          return (
+                            <Link
+                              key={`${section.title}-${item.label}`}
+                              href={item.href}
+                              className={`relative block py-2 text-sm ${
+                                active
+                                  ? "font-semibold text-brand"
+                                  : "text-slate-600 hover:text-[#1b3ea6]"
+                              }`}
+                            >
+                              <span className="absolute -left-[22px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand/70" />
+                              {item.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : section.title === "Finance" ? (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setFinanceOpen((prev) => !prev)}
+                      aria-expanded={financeOpen}
+                      className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
+                    >
+                      Finance
+                    </button>
+                    {financeOpen ? (
+                      <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
+                        {section.items.map((item) => {
+                          const active = pathname === item.href;
+                          return (
+                            <Link
+                              key={`${section.title}-${item.label}`}
+                              href={item.href}
+                              className={`relative block py-2 text-sm ${
+                                active
+                                  ? "font-semibold text-brand"
+                                  : "text-slate-600 hover:text-[#1b3ea6]"
+                              }`}
+                            >
+                              <span className="absolute -left-[22px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand/70" />
+                              {item.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : section.title === "Operations" ? (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setOperationsOpen((prev) => !prev)}
+                      aria-expanded={operationsOpen}
+                      className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
+                    >
+                      Operations
+                    </button>
+                    {operationsOpen ? (
+                      <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
+                        {section.items.map((item) => {
+                          const active = pathname === item.href;
+                          return (
+                            <Link
+                              key={`${section.title}-${item.label}`}
+                              href={item.href}
+                              className={`relative block py-2 text-sm ${
+                                active
+                                  ? "font-semibold text-brand"
+                                  : "text-slate-600 hover:text-[#1b3ea6]"
+                              }`}
+                            >
+                              <span className="absolute -left-[22px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand/70" />
+                              {item.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : section.title === "Settings" ? (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setSettingsOpen((prev) => !prev)}
+                      aria-expanded={settingsOpen}
+                      className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
+                    >
+                      Settings
+                    </button>
+                    {settingsOpen ? (
+                      <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
+                        {section.items.map((item) => {
+                          const active = pathname === item.href;
+                          return (
+                            <Link
+                              key={`${section.title}-${item.label}`}
+                              href={item.href}
+                              className={`relative block py-2 text-sm ${
+                                active
+                                  ? "font-semibold text-brand"
+                                  : "text-slate-600 hover:text-[#1b3ea6]"
+                              }`}
+                            >
+                              <span className="absolute -left-[22px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand/70" />
+                              {item.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="mt-2 flex flex-col gap-1">
+                    {section.items.map((item) => {
+                      const active = pathname === item.href;
+                      return (
+                        <Link
+                          key={`${section.title}-${item.label}`}
+                          href={item.href}
+                          className={`rounded-lg px-3 py-2 text-xs font-medium transition ${
+                            active
+                              ? "bg-brand/10 text-brand"
+                              : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          {item.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ))}
           </nav>
         </aside>
         <main className="flex flex-col gap-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
+          <div className="rounded-2xl border border-blue-100 bg-gradient-to-b from-blue-50/70 via-white to-white p-4 shadow-card">
             <div className="flex flex-wrap items-center gap-4">
               <button
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-500"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-[#1b3ea6]"
                 aria-label="Collapse sidebar"
               >
                 &lt;
               </button>
-              <div className="flex flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-[#f7f8fb] px-4 py-2 text-sm text-slate-500">
+              <div className="flex flex-1 items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-2 text-sm text-slate-600">
                 <span aria-hidden="true">Search</span>
                 <input
                   className="w-full bg-transparent outline-none"
@@ -154,7 +474,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                 <div className="group relative flex items-center gap-2">
                   <div className="h-9 w-9 rounded-full bg-brand/20" />
                   <div className="text-xs">
-                    <div className="font-semibold text-slate-800">{adminName}</div>
+                    <div className="font-semibold text-brand">{adminName}</div>
                     <div className="text-slate-400">{adminRole}</div>
                   </div>
                   <span className="text-slate-400">v</span>
@@ -179,3 +499,4 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
+

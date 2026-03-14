@@ -175,7 +175,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
 
   if (pathname === "/dashboard/home") {
     return (
-      <div className="relative min-h-screen overflow-hidden bg-slate-50 pb-24 lg:pb-0">
+      <div className="buyer-theme relative min-h-screen overflow-hidden bg-slate-50 pb-24 lg:pb-0">
         <div className="pointer-events-none absolute inset-0 -z-10">
           <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-brand/10 blur-3xl" />
           <div className="absolute right-[-120px] top-24 h-80 w-80 rounded-full bg-sky-200/40 blur-3xl" />
@@ -209,7 +209,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-50">
+    <div className="buyer-theme relative min-h-screen overflow-hidden bg-slate-50">
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-32 -left-24 h-72 w-72 rounded-full bg-brand/10 blur-3xl" />
         <div className="absolute right-[-120px] top-24 h-80 w-80 rounded-full bg-sky-200/40 blur-3xl" />

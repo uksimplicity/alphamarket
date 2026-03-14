@@ -86,7 +86,6 @@ export default function VendorDashboard() {
         setProducts(normalized);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load seller dashboard data.");
-        setProducts([]);
       } finally {
         setLoading(false);
       }
@@ -117,10 +116,11 @@ export default function VendorDashboard() {
   }, [products]);
 
   const recentProducts = useMemo(() => products.slice(0, 8), [products]);
+  const hasProducts = products.length > 0;
 
   return (
     <>
-      {error ? <div className={styles.card}>{error}</div> : null}
+      {error && hasProducts ? <div className={styles.card}>{error}</div> : null}
 
       <section className={styles.gridStats}>
         <div className={styles.statCard}>
@@ -152,7 +152,7 @@ export default function VendorDashboard() {
       <section className={styles.card}>
         <div className={styles.cardTitle}>Recent Products</div>
         {loading ? <div className={styles.cardSubtitle}>Loading seller data...</div> : null}
-        {!loading && recentProducts.length === 0 ? (
+        {!loading && !hasProducts ? (
           <div className={styles.cardSubtitle}>No seller products yet.</div>
         ) : null}
         {recentProducts.length > 0 ? (
