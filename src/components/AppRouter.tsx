@@ -18,6 +18,8 @@ import VendorProductsCreate from "./vendor/pages/VendorProductsCreate";
 import VendorProductsAddStock from "./vendor/pages/VendorProductsAddStock";
 import VendorProductDetail from "./vendor/pages/VendorProductDetail";
 import VendorProductEdit from "./vendor/pages/VendorProductEdit";
+import VendorOrders from "./vendor/pages/VendorOrders";
+import VendorOrderDetail from "./vendor/pages/VendorOrderDetail";
 import ProductDetailRoute from "./products/ProductDetailRoute";
 import SellerStoreRoute from "./store/SellerStoreRoute";
 
@@ -53,6 +55,8 @@ export default function AppRouter() {
           <Route path="products/review" element={<VendorProductsReview />} />
           <Route path="products/:productId" element={<VendorProductDetail />} />
           <Route path="products/:productId/edit" element={<VendorProductEdit />} />
+          <Route path="orders" element={<VendorOrders />} />
+          <Route path="orders/:orderId" element={<VendorOrderDetail />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

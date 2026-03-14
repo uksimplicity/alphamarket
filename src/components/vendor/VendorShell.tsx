@@ -2,9 +2,65 @@
 
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
-import ManageProductMenu from "@/components/sidebar/ManageProductMenu";
 import styles from "./vendor.module.css";
 import { getAuth, getDisplayName } from "@/components/auth/authStorage";
+
+type NavItem = {
+  label: string;
+  href: string;
+};
+
+type VendorProfile = {
+  id?: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  first_name?: string;
+  last_name?: string;
+};
+
+const sellerSections: Array<{ title: string; items: NavItem[] }> = [
+  {
+    title: "Products",
+    items: [
+      { label: "All Products", href: "/vendor/products" },
+      { label: "Create Product", href: "/vendor/products/create" },
+      { label: "Draft Products", href: "/vendor/products/draft" },
+      { label: "Stock Products", href: "/vendor/products/stock" },
+      { label: "Add Stock", href: "/vendor/products/stock/add" },
+      { label: "Review Queue", href: "/vendor/products/review" },
+      { label: "Boost Product", href: "#" },
+    ],
+  },
+  {
+    title: "Order Management",
+    items: [
+      { label: "Orders", href: "/vendor/orders" },
+      { label: "Transactions", href: "#" },
+    ],
+  },
+  {
+    title: "Reports & Analytics",
+    items: [{ label: "Sales Reports", href: "#" }],
+  },
+  {
+    title: "Wallet",
+    items: [
+      { label: "Earning", href: "#" },
+      { label: "Withdraws", href: "#" },
+      { label: "Refunds", href: "#" },
+      { label: "Escrow", href: "#" },
+    ],
+  },
+  {
+    title: "Promotional Deals",
+    items: [{ label: "Coupon", href: "#" }],
+  },
+  {
+    title: "Help & Support",
+    items: [{ label: "Inbox", href: "#" }],
+  },
+];
 
 function formatRole(role?: string) {
   if (!role) return "Vendor";
@@ -17,21 +73,33 @@ function formatRole(role?: string) {
 export default function VendorShell() {
   const { pathname } = useLocation();
   const isDashboard = pathname === "/vendor" || pathname === "/vendor/";
-  const [vendorDetails, setVendorDetails] = useState<{
-    email?: string;
-    phone?: string;
-    role?: string;
-  } | null>(() => getAuth()?.user ?? null);
+  const [vendorDetails, setVendorDetails] = useState<VendorProfile | null>(() => getAuth()?.user ?? null);
   const [vendorName, setVendorName] = useState(() =>
     getDisplayName(getAuth()?.user)
   );
   const [showSettings, setShowSettings] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
+  const [productsOpen, setProductsOpen] = useState(pathname.startsWith("/vendor/products"));
+  const [ordersOpen, setOrdersOpen] = useState(false);
+  const [reportsOpen, setReportsOpen] = useState(false);
+  const [walletOpen, setWalletOpen] = useState(false);
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   const roleLabel = useMemo(
     () => formatRole(vendorDetails?.role),
     [vendorDetails?.role]
   );
+  const sectionState: Record<string, [boolean, (value: boolean | ((prev: boolean) => boolean)) => void]> = {
+    Products: [productsOpen, setProductsOpen],
+    "Order Management": [ordersOpen, setOrdersOpen],
+    "Reports & Analytics": [reportsOpen, setReportsOpen],
+    Wallet: [walletOpen, setWalletOpen],
+    "Promotional Deals": [promoOpen, setPromoOpen],
+    "Help & Support": [supportOpen, setSupportOpen],
+  };
 
   useEffect(() => {
     function onStorage(e: StorageEvent) {
@@ -46,52 +114,164 @@ export default function VendorShell() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  useEffect(() => {
+    if (!showSettings) return;
+    let canceled = false;
+
+    async function loadProfile() {
+      setProfileLoading(true);
+      setProfileError("");
+      try {
+        const auth = getAuth();
+        const token = auth?.access_token;
+        const response = await fetch("/api/user/profile", {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+        const text = await response.text();
+        let payload: unknown = null;
+        try {
+          payload = text ? JSON.parse(text) : null;
+        } catch {
+          payload = text;
+        }
+
+        if (!response.ok) {
+          const message =
+            payload && typeof payload === "object" && "error" in payload
+              ? String((payload as { error: unknown }).error)
+              : `Failed to load profile (${response.status}).`;
+          throw new Error(message);
+        }
+
+        const record =
+          payload && typeof payload === "object"
+            ? (((payload as Record<string, unknown>).data ??
+                (payload as Record<string, unknown>).user ??
+                (payload as Record<string, unknown>).profile ??
+                payload) as Record<string, unknown>)
+            : null;
+        if (!record || canceled) return;
+
+        const nextDetails: VendorProfile = {
+          id: String(record.id ?? record.user_id ?? auth?.user?.id ?? ""),
+          email: String(record.email ?? auth?.user?.email ?? ""),
+          phone: String(record.phone ?? auth?.user?.phone ?? ""),
+          role: String(record.role ?? auth?.user?.role ?? "seller"),
+          first_name: String(record.first_name ?? auth?.user?.first_name ?? ""),
+          last_name: String(record.last_name ?? auth?.user?.last_name ?? ""),
+        };
+
+        setVendorDetails(nextDetails);
+        setVendorName((prev) => getDisplayName(nextDetails) || prev);
+      } catch (err) {
+        if (!canceled) {
+          setProfileError(
+            err instanceof Error
+              ? err.message
+              : "Could not fetch profile details from backend."
+          );
+        }
+      } finally {
+        if (!canceled) setProfileLoading(false);
+      }
+    }
+
+    void loadProfile();
+    return () => {
+      canceled = true;
+    };
+  }, [showSettings, vendorName]);
+
   return (
     <div className={styles.page}>
       <aside className={styles.sidebar}>
-        <div className={styles.brand}>
-          <img src="/logo.png" alt="Alpha Marketplace" />
+        <div className="mb-6 flex items-center gap-2 px-2 font-semibold text-slate-900">
+          <img className="h-8" src="/logo.png" alt="Alpha Marketplace" />
+          Alpha Marketplace
         </div>
-        <div className={styles.navGroup}>
+        <div className="mb-4">
           <Link
             to="/vendor"
-            className={`${styles.navItem} ${isDashboard ? styles.navItemActive : ""}`}
+            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ${
+              isDashboard
+                ? "bg-brand text-white shadow-md shadow-blue-200/60"
+                : "text-slate-600 hover:bg-blue-50"
+            }`}
           >
             Dashboard
           </Link>
         </div>
-        <div className={styles.navGroup}>
-          <div className={styles.navLabel}>Product Management</div>
-          <ManageProductMenu />
-          <div className={styles.navItem}>Categories & Attributes</div>
-          <div className={styles.navItem}>Manage Inventory</div>
-        </div>
-        <div className={styles.navGroup}>
-          <div className={styles.navLabel}>Order Management</div>
-          <div className={styles.navItem}>Orders</div>
-          <div className={styles.navItem}>Transactions</div>
-        </div>
-        <div className={styles.navGroup}>
-          <div className={styles.navLabel}>Reports & Analytics</div>
-          <div className={styles.navItem}>Sales reports</div>
-        </div>
-        <div className={styles.navGroup}>
-          <div className={styles.navLabel}>Wallet</div>
-          <div className={styles.navItem}>Earning</div>
-          <div className={styles.navItem}>Withdraws</div>
-          <div className={styles.navItem}>Refunds</div>
-          <div className={styles.navItem}>Escrow</div>
-        </div>
-        <div className={styles.navGroup}>
-          <div className={styles.navLabel}>Promotional Deals</div>
-          <div className={styles.navItem}>Coupon</div>
-        </div>
-        <div className={styles.navGroup}>
-          <div className={styles.navLabel}>Help & Support</div>
-          <div className={styles.navItem}>Inbox</div>
-        </div>
+
+        <nav className="flex flex-col gap-4 text-sm">
+          {sellerSections.map((section) => {
+            const [isOpen, setOpen] = sectionState[section.title];
+            const sectionActive = section.items.some(
+              (item) => item.href !== "#" && pathname.startsWith(item.href)
+            );
+
+            return (
+              <div key={section.title}>
+                <button
+                  type="button"
+                  onClick={() => setOpen((prev) => !prev)}
+                  aria-expanded={isOpen}
+                  className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
+                >
+                  {section.title}
+                </button>
+                {isOpen ? (
+                  <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
+                    {section.items.map((item) => {
+                      const active = item.href !== "#" && pathname.startsWith(item.href);
+                      const sharedClass = `relative block py-2 text-sm ${
+                        active ? "font-semibold text-brand" : "text-slate-600 hover:text-[#1b3ea6]"
+                      }`;
+
+                      if (item.href === "#") {
+                        return (
+                          <button
+                            key={`${section.title}-${item.label}`}
+                            type="button"
+                            className={`${sharedClass} w-full cursor-not-allowed text-left opacity-70`}
+                            disabled
+                          >
+                            <span className="absolute -left-[22px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand/70" />
+                            {item.label}
+                          </button>
+                        );
+                      }
+
+                      return (
+                        <Link
+                          key={`${section.title}-${item.label}`}
+                          to={item.href}
+                          className={sharedClass}
+                        >
+                          <span className="absolute -left-[22px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand/70" />
+                          {item.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {sectionActive && !isOpen ? (
+                  <div className="mt-2 px-3 text-xs text-brand">Active section</div>
+                ) : null}
+              </div>
+            );
+          })}
+        </nav>
+
         <div className={styles.navGroup}>
           <div className={styles.navLabel}>Account</div>
+          <button
+            type="button"
+            className={styles.settingsBtn}
+            onClick={() => setShowSettings(true)}
+          >
+            Profile
+          </button>
           <button
             type="button"
             className={styles.settingsBtn}
@@ -132,7 +312,16 @@ export default function VendorShell() {
               </div>
               <span className={styles.caret}>v</span>
               <div className={styles.profileDropdown}>
-                <button className={styles.profileItem}>Profile</button>
+                <button
+                  type="button"
+                  className={styles.profileItem}
+                  onClick={() => {
+                    setProfileOpen(false);
+                    setShowSettings(true);
+                  }}
+                >
+                  Profile
+                </button>
                 <Link className={styles.profileItem} to="/login">
                   Logout
                 </Link>
@@ -162,7 +351,7 @@ export default function VendorShell() {
           </span>
           Home
         </Link>
-        <button className={styles.mobileNavItem} type="button">
+        <Link className={styles.mobileNavItem} to="/vendor/orders">
           <span className={styles.mobileNavIcon}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
@@ -175,8 +364,8 @@ export default function VendorShell() {
             </svg>
           </span>
           Orders
-        </button>
-        <button className={styles.mobileNavItem} type="button">
+        </Link>
+        <Link className={styles.mobileNavItem} to="/vendor/products">
           <span className={styles.mobileNavIcon}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path
@@ -189,7 +378,7 @@ export default function VendorShell() {
             </svg>
           </span>
           Products
-        </button>
+        </Link>
         <button className={styles.mobileNavItem} type="button">
           <span className={styles.mobileNavIcon}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -232,7 +421,17 @@ export default function VendorShell() {
           <div className={styles.settingsCard}>
             <h3>Account settings</h3>
             <p>Review your account details and manage security.</p>
+            {profileLoading ? (
+              <p className={styles.cardSubtitle}>Loading latest profile from backend...</p>
+            ) : null}
+            {profileError ? (
+              <p className={styles.cardSubtitle}>{profileError}</p>
+            ) : null}
             <div className={styles.settingsList}>
+              <div className={styles.settingsRow}>
+                <span className={styles.settingsLabel}>User ID</span>
+                <span className={styles.settingsValue}>{vendorDetails?.id ?? "-"}</span>
+              </div>
               <div className={styles.settingsRow}>
                 <span className={styles.settingsLabel}>Name</span>
                 <span className={styles.settingsValue}>{vendorName || "Vendor"}</span>

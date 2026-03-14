@@ -335,6 +335,14 @@
   margin-bottom: 4px;
 }
 
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .cardSubtitle {
   font-size: 12px;
   color: #667085;
@@ -448,6 +456,13 @@
   background: #3366ff;
 }
 
+.quickActions {
+  margin: 14px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -484,6 +499,28 @@
 .actionBtn:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 18px rgba(51, 102, 255, 0.15);
+}
+
+.tableFilters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filterInput {
+  min-width: 180px;
+  border: 1px solid #dce8ff;
+  background: #f8fbff;
+  color: #0f172a;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.filterInput:focus {
+  outline: none;
+  border-color: #9db9ff;
+  box-shadow: 0 0 0 3px rgba(51, 102, 255, 0.12);
 }
 
 .tableWrap {
@@ -714,6 +751,15 @@
 
   .card {
     padding: 14px;
+  }
+
+  .tableFilters {
+    width: 100%;
+  }
+
+  .filterInput {
+    min-width: 0;
+    width: 100%;
   }
 
   .table {

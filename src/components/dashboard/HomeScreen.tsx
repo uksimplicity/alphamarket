@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import styles from "@/app/page.module.css";
 import { addToCart, parsePrice, useCartCount, formatCurrency } from "@/components/commerce/store";
 import CartAddedModal from "@/components/commerce/CartAddedModal";
+import { getAuth } from "@/components/auth/authStorage";
 import {
   Product,
   popularProducts,
@@ -60,6 +61,48 @@ type ProductCardProps = {
   onAddToCart: (product: Product) => void;
 };
 
+type LiveProductRecord = Record<string, unknown>;
+
+function normalizeLiveProduct(input: LiveProductRecord, index: number): Product {
+  const id = String(input.id ?? input.product_id ?? input.uuid ?? `live-${index}`);
+  const title = String(input.name ?? input.title ?? "New Product");
+  const numericPrice = Number(input.basePrice ?? input.base_price ?? input.price ?? 0);
+  const price = `₦${Number.isFinite(numericPrice) ? numericPrice.toLocaleString() : "0"}`;
+  const stock = Number(input.stock ?? input.quantity ?? 0);
+  const status = String(input.status ?? "");
+  const isDraft = status.toLowerCase().includes("draft");
+
+  const media =
+    input.media && typeof input.media === "object"
+      ? (input.media as Record<string, unknown>)
+      : null;
+  const images = Array.isArray(media?.images) ? media?.images : [];
+  const image = String(
+    media?.cover ??
+      media?.coverUrl ??
+      images[0] ??
+      input.cover ??
+      input.image ??
+      "https://images.unsplash.com/photo-1557821552-17105176677c?auto=format&fit=crop&w=900&q=80"
+  );
+
+  return {
+    id,
+    title,
+    price,
+    oldPrice: undefined,
+    badge: isDraft ? "Draft" : stock <= 0 ? "Out of Stock" : undefined,
+    image,
+    rating: "4.5",
+    reviews: "0",
+    description: String(input.shortDescription ?? input.description ?? "No description available."),
+    seller: {
+      name: "Marketplace Seller",
+      slug: "marketplace-seller",
+    },
+  };
+}
+
 function ProductCard({ product, onAddToCart }: ProductCardProps) {
   return (
     <div className={styles.productCard}>
@@ -106,7 +149,66 @@ export default function HomeScreen({ userName }: { userName: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartModalOpen, setCartModalOpen] = useState(false);
   const [cartModalName, setCartModalName] = useState("");
+  const [liveProducts, setLiveProducts] = useState<Product[]>([]);
+  const [localProducts, setLocalProducts] = useState<Product[]>([]);
   const cartCount = useCartCount();
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadLiveProducts() {
+      try {
+        const auth = getAuth();
+        const token = auth?.access_token;
+        const response = await fetch("/api/seller/products?limit=50&offset=0", {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!response.ok) return;
+        const payload = await response.json();
+        const rows = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.data)
+            ? payload.data
+            : Array.isArray(payload?.products)
+              ? payload.products
+              : [];
+        if (!mounted || !Array.isArray(rows)) return;
+        const mapped = rows
+          .filter((row) => row && typeof row === "object")
+          .map((row, index) => normalizeLiveProduct(row as LiveProductRecord, index));
+        setLiveProducts(mapped);
+      } catch {
+        // keep static catalog if live load fails
+      }
+    }
+
+    void loadLiveProducts();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("alpha.createdProducts");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const mapped = parsed
+        .filter((row) => row && typeof row === "object")
+        .map((row, index) => normalizeLiveProduct(row as LiveProductRecord, index));
+      setLocalProducts(mapped);
+    } catch {
+      // ignore local parse issues
+    }
+  }, []);
+
+  const mergedPopularProducts = [...localProducts, ...liveProducts, ...popularProducts].filter(
+    (product, index, arr) => arr.findIndex((item) => item.id === product.id) === index
+  );
+  const mergedNewArrivals = [...localProducts, ...liveProducts, ...newArrivalProducts].filter(
+    (product, index, arr) => arr.findIndex((item) => item.id === product.id) === index
+  );
 
   const handleAddToCart = (product: Product) => {
     setCartModalName(product.title);
@@ -332,9 +434,9 @@ export default function HomeScreen({ userName }: { userName: string }) {
             <a href="#">View All</a>
           </div>
           <div className={styles.productsGrid}>
-            {popularProducts.map((product) => (
+            {mergedPopularProducts.map((product) => (
               <ProductCard
-                key={product.title}
+                key={product.id}
                 product={product}
                 onAddToCart={handleAddToCart}
               />
@@ -348,9 +450,9 @@ export default function HomeScreen({ userName }: { userName: string }) {
             <a href="#">View All</a>
           </div>
           <div className={styles.productsGrid}>
-            {newArrivalProducts.map((product) => (
+            {mergedNewArrivals.map((product) => (
               <ProductCard
-                key={product.title}
+                key={product.id}
                 product={product}
                 onAddToCart={handleAddToCart}
               />
