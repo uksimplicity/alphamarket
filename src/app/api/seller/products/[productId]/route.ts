@@ -1,4 +1,9 @@
 import type { NextRequest } from "next/server";
+import {
+  deleteMockProduct,
+  getMockProduct,
+  updateMockProduct,
+} from "../mockStore";
 
 const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
@@ -9,22 +14,70 @@ async function proxySellerProduct(
   productId: string,
   method: "GET" | "PUT" | "PATCH" | "DELETE"
 ) {
+  const { search } = new URL(req.url);
+  const hasBody = method !== "GET" && method !== "DELETE";
+  const body = hasBody ? await req.text() : "";
+  const parseBody = () => {
+    if (!body) return {} as Record<string, unknown>;
+    try {
+      return JSON.parse(body) as Record<string, unknown>;
+    } catch {
+      return {} as Record<string, unknown>;
+    }
+  };
+
   if (!API_BASE) {
+    if (method === "GET") {
+      const item = getMockProduct(productId);
+      if (!item) {
+        return new Response(JSON.stringify({ error: "Product not found." }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ data: item, fallback: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (method === "PUT" || method === "PATCH") {
+      const updated = updateMockProduct(productId, parseBody());
+      if (!updated) {
+        return new Response(JSON.stringify({ error: "Product not found." }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ data: updated, fallback: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (method === "DELETE") {
+      const deleted = deleteMockProduct(productId);
+      if (!deleted) {
+        return new Response(JSON.stringify({ error: "Product not found." }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ success: true, fallback: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     return new Response(
       JSON.stringify({ error: "NEXT_PUBLIC_API_BASE_URL is not set" }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 
-  const { search } = new URL(req.url);
   const authHeader = req.headers.get("authorization") ?? "";
   const headers: Record<string, string> = {
     Accept: "application/json",
     ...(authHeader ? { Authorization: authHeader } : {}),
   };
 
-  const hasBody = method !== "GET" && method !== "DELETE";
-  const body = hasBody ? await req.text() : "";
   if (hasBody) {
     headers["Content-Type"] = "application/json";
   }
@@ -60,6 +113,64 @@ async function proxySellerProduct(
     }
 
     if ((!res || res.status === 404) && !upstreamErrorRes) {
+      if (method === "GET") {
+        const item = getMockProduct(productId);
+        if (item) {
+          return new Response(
+            JSON.stringify({
+              data: item,
+              fallback: true,
+              warning: "Upstream endpoint not found. Returned local mock product.",
+            }),
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json",
+                "X-Proxy-Fallback": "seller-product-detail-mock",
+              },
+            }
+          );
+        }
+      }
+      if (method === "PUT" || method === "PATCH") {
+        const updated = updateMockProduct(productId, parseBody());
+        if (updated) {
+          return new Response(
+            JSON.stringify({
+              data: updated,
+              fallback: true,
+              warning: "Upstream update unavailable. Updated local mock product.",
+            }),
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json",
+                "X-Proxy-Fallback": "seller-product-update-mock",
+              },
+            }
+          );
+        }
+      }
+      if (method === "DELETE") {
+        const deleted = deleteMockProduct(productId);
+        if (deleted) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              fallback: true,
+              warning: "Upstream delete unavailable. Deleted local mock product.",
+            }),
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json",
+                "X-Proxy-Fallback": "seller-product-delete-mock",
+              },
+            }
+          );
+        }
+      }
+
       return new Response(
         JSON.stringify({
           error: "Upstream endpoint not found.",

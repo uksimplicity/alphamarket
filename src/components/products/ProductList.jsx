@@ -13,6 +13,7 @@ export default function ProductList({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
+  const [publishingId, setPublishingId] = useState(null);
 
   const normalizeList = (payload) => {
     const list = Array.isArray(payload)
@@ -42,6 +43,18 @@ export default function ProductList({
       item?.uuid ||
       item?.slug ||
       String(index + 1);
+    const hasPersistentId = Boolean(
+      item?.id || item?.productId || item?.product_id || item?._id || item?.uuid
+    );
+    const rawStatus = String(item?.status || "").trim().toLowerCase();
+    const resolvedStatus =
+      !hasPersistentId
+        ? "draft"
+        : rawStatus && rawStatus !== "draft"
+          ? rawStatus
+          : item?.isPublished === false || item?.active === false
+            ? "draft"
+            : "publish";
     const displayId = item?.displayId || item?.code || `#${String(id).slice(-5)}`;
     return {
       id,
@@ -61,9 +74,7 @@ export default function ProductList({
         item?.seller?.name ||
         item?.sellerName ||
         "-",
-      status:
-        item?.status ||
-        (item?.isPublished ? "Publish" : item?.active === false ? "Draft" : "Publish"),
+      status: resolvedStatus,
     };
   };
 
@@ -139,6 +150,76 @@ export default function ProductList({
       setError(err instanceof Error ? err.message : "Delete failed.");
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleMoveFromDraft = async (id) => {
+    setError("");
+    try {
+      const auth = getAuth();
+      const token = auth?.access_token;
+      if (!token) {
+        throw new Error("You must be logged in to update product status.");
+      }
+
+      setPublishingId(id);
+      let response = await fetch(`/api/seller/products/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          status: "publish",
+          isPublished: true,
+        }),
+      });
+
+      if (response.status === 404 || response.status === 405) {
+        response = await fetch(`/api/seller/products/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            product_id: id,
+            status: "publish",
+            isPublished: true,
+          }),
+        });
+      }
+
+      const text = await response.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+
+      if (!response.ok) {
+        const message =
+          data && typeof data === "object" && ("error" in data || "message" in data)
+            ? data.error || data.message
+            : `Status update failed (${response.status}).`;
+        throw new Error(String(message));
+      }
+
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === id
+            ? {
+                ...row,
+                status: "Publish",
+              }
+            : row
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to move product from draft.");
+    } finally {
+      setPublishingId(null);
     }
   };
 
@@ -229,6 +310,18 @@ export default function ProductList({
                     </td>
                     <td>
                       <div className="action-icons">
+                        {String(product.status).toLowerCase() === "draft" ? (
+                          <button
+                            className="icon-btn"
+                            type="button"
+                            aria-label="Move from draft"
+                            onClick={() => handleMoveFromDraft(product.id)}
+                            disabled={publishingId === product.id}
+                            title="Move from draft"
+                          >
+                            {publishingId === product.id ? "..." : "↑"}
+                          </button>
+                        ) : null}
                         <button
                           className="icon-btn view"
                           type="button"

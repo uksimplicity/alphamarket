@@ -12,6 +12,15 @@ export default function VendorProductDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const formatPrice = (value: unknown) => {
+    if (value === null || value === undefined || value === "") return "-";
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric) && Number.isFinite(numeric)) {
+      return `N${numeric.toLocaleString()}`;
+    }
+    return String(value);
+  };
+
   const loadProduct = async () => {
     if (!productId) return;
     setLoading(true);
@@ -73,7 +82,7 @@ export default function VendorProductDetail() {
         "Category",
       status:
         product?.status ||
-        (product?.isPublished ? "Publish" : product?.active === false ? "Draft" : "Publish"),
+        (product?.isPublished ? "publish" : product?.active === false ? "draft" : "publish"),
       vendor:
         product?.vendor?.name ||
         product?.vendorName ||
@@ -82,7 +91,25 @@ export default function VendorProductDetail() {
         "Vendor",
       brand:
         product?.brand?.name || product?.brandName || product?.brand || product?.brandId || "-",
+      productType:
+        product?.productType?.name ||
+        product?.productTypeName ||
+        product?.productTypeId ||
+        product?.type ||
+        "-",
       slug: product?.slug || "-",
+      sellerId: product?.sellerId || product?.seller_id || product?.seller?.id || "-",
+      stock: product?.stock ?? product?.quantity ?? "-",
+      price:
+        product?.basePrice ??
+        product?.base_price ??
+        product?.price ??
+        product?.amount ??
+        product?.unitPrice ??
+        "-",
+      tags: Array.isArray(product?.tags)
+        ? product.tags.filter(Boolean).join(", ")
+        : product?.tags || "-",
       description:
         product?.shortDescription ||
         product?.short_description ||
@@ -112,8 +139,7 @@ export default function VendorProductDetail() {
     if (!summary?.media) return [];
     const cover = summary.media?.cover || summary.media?.coverUrl;
     const images = Array.isArray(summary.media?.images) ? summary.media.images : [];
-    const all = [cover, ...images].filter(Boolean);
-    return all;
+    return [cover, ...images].filter(Boolean);
   }, [summary]);
 
   if (loading) {
@@ -155,21 +181,12 @@ export default function VendorProductDetail() {
       <div className="create-card">
         <div className="create-header">
           <div className="create-title">
-            <button
-              type="button"
-              className="back-btn"
-              aria-label="Back"
-              onClick={() => navigate(-1)}
-            >
-              <span aria-hidden="true">â†</span>
+            <button type="button" className="back-btn" aria-label="Back" onClick={() => navigate(-1)}>
+              <span aria-hidden="true">{"\u2190"}</span>
             </button>
             <h1>Product Details</h1>
           </div>
-          <button
-            type="button"
-            className="status-btn"
-            onClick={() => navigate(`/vendor/products/${summary.id}/edit`)}
-          >
+          <button type="button" className="status-btn" onClick={() => navigate(`/vendor/products/${summary.id}/edit`)}>
             Edit
           </button>
         </div>
@@ -181,7 +198,7 @@ export default function VendorProductDetail() {
             <div className="details-info">
               <div className="details-name">{summary.name}</div>
               <div className="details-meta">
-                <span>Category Name</span>
+                <span>Category</span>
                 <span>{summary.category}</span>
               </div>
             </div>
@@ -192,27 +209,14 @@ export default function VendorProductDetail() {
             <div className="details-text">{summary.description}</div>
           </div>
           <div className="details-grid">
-            <div className="details-card">
-              <div className="details-icon">ðŸ·ï¸</div>
-              <div>
-                <div className="details-title">Brand</div>
-                <div className="details-value">{summary.brand}</div>
-              </div>
-            </div>
-            <div className="details-card">
-              <div className="details-icon">ðŸ›’</div>
-              <div>
-                <div className="details-title">Slug</div>
-                <div className="details-value">{summary.slug}</div>
-              </div>
-            </div>
-            <div className="details-card">
-              <div className="details-icon">ðŸ‘¤</div>
-              <div>
-                <div className="details-title">Vendor</div>
-                <div className="details-value">{summary.vendor}</div>
-              </div>
-            </div>
+            <div className="details-card"><div className="details-icon">BR</div><div><div className="details-title">Brand</div><div className="details-value">{summary.brand}</div></div></div>
+            <div className="details-card"><div className="details-icon">PR</div><div><div className="details-title">Price</div><div className="details-value">{formatPrice(summary.price)}</div></div></div>
+            <div className="details-card"><div className="details-icon">ST</div><div><div className="details-title">Stock</div><div className="details-value">{summary.stock}</div></div></div>
+            <div className="details-card"><div className="details-icon">TY</div><div><div className="details-title">Product Type</div><div className="details-value">{summary.productType}</div></div></div>
+            <div className="details-card"><div className="details-icon">SL</div><div><div className="details-title">Slug</div><div className="details-value">{summary.slug}</div></div></div>
+            <div className="details-card"><div className="details-icon">VN</div><div><div className="details-title">Vendor</div><div className="details-value">{summary.vendor}</div></div></div>
+            <div className="details-card"><div className="details-icon">ID</div><div><div className="details-title">Seller ID</div><div className="details-value">{summary.sellerId}</div></div></div>
+            <div className="details-card"><div className="details-icon">TG</div><div><div className="details-title">Tags</div><div className="details-value">{summary.tags}</div></div></div>
           </div>
         </section>
 
@@ -231,9 +235,7 @@ export default function VendorProductDetail() {
                     }}
                   />
                 ))
-              : new Array(4).fill(null).map((_, index) => (
-                  <div className="media-thumb" key={`media-${index}`} />
-                ))}
+              : new Array(4).fill(null).map((_, index) => <div className="media-thumb" key={`media-${index}`} />)}
           </div>
         </section>
 
@@ -258,15 +260,11 @@ export default function VendorProductDetail() {
                     <tr key={`variant-${index}`}>
                       <td>{row.skuId}</td>
                       <td>{row.variantId}</td>
-                      <td>
-                        <span className="thumb-sm" />
-                      </td>
+                      <td><span className="thumb-sm" /></td>
                       <td>{row.color}</td>
                       <td>{row.size}</td>
                       <td>{row.visible}</td>
-                      <td>
-                        <span className="badge-blue">{row.status}</span>
-                      </td>
+                      <td><span className="badge-blue">{row.status}</span></td>
                     </tr>
                   ))
                 ) : (
@@ -282,33 +280,9 @@ export default function VendorProductDetail() {
         <section className="form-section">
           <div className="section-title">Discount</div>
           <div className="details-grid">
-            <div className="details-card">
-              <div className="details-icon">ðŸ·ï¸</div>
-              <div>
-                <div className="details-title">Discount Title</div>
-                <div className="details-value">
-                  {product?.discounts?.[0]?.title || "-"}
-                </div>
-              </div>
-            </div>
-            <div className="details-card">
-              <div className="details-icon">ðŸ’µ</div>
-              <div>
-                <div className="details-title">Discount Price</div>
-                <div className="details-value">
-                  {product?.discounts?.[0]?.price ?? "-"}
-                </div>
-              </div>
-            </div>
-            <div className="details-card">
-              <div className="details-icon">ðŸ“…</div>
-              <div>
-                <div className="details-title">Discount Duration</div>
-                <div className="details-value">
-                  {product?.discounts?.[0]?.startDate || "-"}
-                </div>
-              </div>
-            </div>
+            <div className="details-card"><div className="details-icon">DT</div><div><div className="details-title">Discount Title</div><div className="details-value">{product?.discounts?.[0]?.title || "-"}</div></div></div>
+            <div className="details-card"><div className="details-icon">DP</div><div><div className="details-title">Discount Price</div><div className="details-value">{formatPrice(product?.discounts?.[0]?.price ?? "-")}</div></div></div>
+            <div className="details-card"><div className="details-icon">DD</div><div><div className="details-title">Discount Duration</div><div className="details-value">{product?.discounts?.[0]?.startDate || "-"}</div></div></div>
           </div>
         </section>
       </div>

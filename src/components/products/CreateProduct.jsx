@@ -273,6 +273,8 @@ export default function CreateProduct({ mode = "seller" }) {
       productTypeId: form.type,
       sellerId,
       slug: normalizedSlug,
+      status: "publish",
+      isPublished: true,
       media: {
         cover: "",
         images: [],
@@ -368,6 +370,7 @@ export default function CreateProduct({ mode = "seller" }) {
       }
 
       setSuccess("Product created successfully.");
+      router.push(mode === "admin" ? "/admin/products" : "/vendor/products");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Create product failed.");
     } finally {

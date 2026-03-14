@@ -30,11 +30,18 @@ export function listMockProducts(limit = 20, offset = 0) {
 }
 
 export function createMockProduct(input: Record<string, unknown>) {
+  const incomingStatus =
+    typeof input.status === "string" && input.status.trim()
+      ? String(input.status).trim().toLowerCase()
+      : "";
+  const isPublishedFlag = input.isPublished === true || input.is_published === true;
+  const derivedStatus = incomingStatus || (isPublishedFlag ? "publish" : "publish");
+
   const product: MockProduct = {
     ...input,
     id: String(input.id ?? crypto.randomUUID()),
     name: String(input.name ?? "Product"),
-    status: String(input.status ?? "draft"),
+    status: derivedStatus,
     stock: Number(input.stock ?? 0),
     basePrice: Number(input.basePrice ?? 0),
     category:

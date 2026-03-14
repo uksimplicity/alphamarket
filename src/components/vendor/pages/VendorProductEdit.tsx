@@ -21,6 +21,8 @@ export default function VendorProductEdit() {
     type: "",
     brand: "",
     vendor: "",
+    basePrice: "",
+    stock: "",
     shortDescription: "",
     tags: "",
     discountTitle: "",
@@ -77,6 +79,15 @@ export default function VendorProductEdit() {
           payload?.seller?.id ||
           payload?.vendor?.id ||
           "",
+        basePrice: String(
+          payload?.basePrice ??
+            payload?.base_price ??
+            payload?.price ??
+            payload?.amount ??
+            payload?.unitPrice ??
+            ""
+        ),
+        stock: String(payload?.stock ?? payload?.quantity ?? ""),
         shortDescription:
           payload?.shortDescription ||
           payload?.short_description ||
@@ -151,6 +162,8 @@ export default function VendorProductEdit() {
         productTypeId: form.type,
         brandId: form.brand,
         sellerId,
+        basePrice: Number(form.basePrice) || 0,
+        stock: form.stock === "" ? 0 : Number(form.stock) || 0,
         shortDescription: form.shortDescription,
         tags: form.tags
           ? form.tags
@@ -261,13 +274,13 @@ export default function VendorProductEdit() {
               aria-label="Back"
               onClick={() => navigate(-1)}
             >
-              <span aria-hidden="true">â†</span>
+              <span aria-hidden="true">{"\u2190"}</span>
             </button>
             <h1>Edit Product</h1>
           </div>
           <button type="button" className="status-btn">
             Publish
-            <span aria-hidden="true">â–¾</span>
+            <span aria-hidden="true">{"\u25be"}</span>
           </button>
         </div>
 
@@ -314,6 +327,24 @@ export default function VendorProductEdit() {
                   <option value="sk-ibrahim">Sk Ibrahim</option>
                   <option value="jerome-bell">Jerome Bell</option>
                 </select>
+              </div>
+              <div className="field">
+                <label>Base Price</label>
+                <input
+                  type="number"
+                  name="basePrice"
+                  value={form.basePrice}
+                  onChange={handleChange}
+                />
+              </div>
+              <div className="field">
+                <label>Stock</label>
+                <input
+                  type="number"
+                  name="stock"
+                  value={form.stock}
+                  onChange={handleChange}
+                />
               </div>
             </div>
             <div className="field full">
@@ -454,7 +485,7 @@ export default function VendorProductEdit() {
                       <span className="tag-pill" key={tag}>
                         {tag}
                         <button type="button" aria-label={`Remove ${tag}`}>
-                          Ã—
+                          {"\u00d7"}
                         </button>
                       </span>
                     ))
