@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { adminFetcher, asRecord, pickNumber, pickString } from "@/components/admin/api";
+import { adminFetcher, asArray, asRecord, pickNumber, pickString } from "@/components/admin/api";
 import { ErrorState, Skeleton } from "@/components/dashboard/ui";
 
 type AdminDashboardData = {
@@ -41,12 +41,55 @@ type AdminDashboardData = {
 
 const chartColors = ["#16a34a", "#0f766e", "#f97316", "#2563eb"];
 
-function normalizeDashboardData(payload: unknown): AdminDashboardData {
+function pickMetricCount(
+  record: Record<string, unknown> | null,
+  keys: string[],
+  fallback = 0
+): number {
+  if (!record) return fallback;
+
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+    if (Array.isArray(value)) return value.length;
+
+    const nested = asRecord(value);
+    if (!nested) continue;
+
+    const nestedCount = pickNumber(
+      nested,
+      ["total", "count", "length", "users_count", "total_users"],
+      -1
+    );
+    if (nestedCount >= 0) return nestedCount;
+
+    const nestedList = asArray(nested);
+    if (nestedList.length > 0) return nestedList.length;
+  }
+
+  return fallback;
+}
+
+function resolveUsersCount(payload: unknown): number {
+  return asArray(payload).length;
+}
+
+function normalizeDashboardData(
+  payload: unknown,
+  overrides?: { totalUsers?: number }
+): AdminDashboardData {
   const record = asRecord(payload);
 
-  const totalUsers = pickNumber(record, ["total_users", "users_count", "users"], 0);
-  const totalProducts = pickNumber(record, ["total_products", "products_count", "products"], 0);
-  const totalOrders = pickNumber(record, ["total_orders", "orders_count", "orders"], 0);
+  const totalUsers =
+    typeof overrides?.totalUsers === "number"
+      ? overrides.totalUsers
+      : pickMetricCount(record, ["total_users", "users_count", "users"], 0);
+  const totalProducts = pickMetricCount(record, ["total_products", "products_count", "products"], 0);
+  const totalOrders = pickMetricCount(record, ["total_orders", "orders_count", "orders"], 0);
   const totalRevenue = pickNumber(record, ["total_revenue", "revenue"], 0);
   const totalDeliveries = pickNumber(record, ["total_deliveries", "deliveries"], 0);
   const marketplaceCommission = pickNumber(
@@ -124,8 +167,12 @@ export default function AdminDashboardPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-dashboard"],
     queryFn: async () => {
-      const payload = await adminFetcher<unknown>("/dashboard");
-      return normalizeDashboardData(payload);
+      const [dashboardPayload, usersPayload] = await Promise.all([
+        adminFetcher<unknown>("/dashboard"),
+        adminFetcher<unknown>("/users?limit=1000"),
+      ]);
+      const usersCount = resolveUsersCount(usersPayload);
+      return normalizeDashboardData(dashboardPayload, { totalUsers: usersCount });
     },
   });
 
