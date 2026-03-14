@@ -7,13 +7,24 @@ import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/d
 
 type PromotionsData = {
   banners: Array<{ id: string; title: string; status: string }>;
-  featured: Array<{ id: string; type: string; name: string }>;
+  featured: Array<{ id: string; type: string; name: string; createdBy: string; date: string }>;
   cms: Array<{ id: string; title: string; status: string }>;
 };
 
 export default function AdminPromotionsPage() {
   const [pendingKey, setPendingKey] = useState("");
   const [actionMessage, setActionMessage] = useState("");
+  const [categoryForm, setCategoryForm] = useState({
+    name: "",
+    description: "",
+    imageUrl: "",
+    parentCategoryId: "",
+    parentCategoryName: "",
+  });
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
+  const [createdByFilter, setCreatedByFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-promotions"],
@@ -39,6 +50,8 @@ export default function AdminPromotionsPage() {
             id: pickString(record, ["id", "uuid"], `category-${index}`),
             type: "category",
             name: pickString(record, ["name", "title"], "Unnamed category"),
+            createdBy: pickString(record, ["created_by", "createdBy"], "Admin"),
+            date: pickString(record, ["created_at", "date"], "01 Jul, 2022"),
           };
         }),
         cms: asArray(tagsPayload).map((row, index) => {
@@ -90,7 +103,7 @@ export default function AdminPromotionsPage() {
     return { name, slug: toSlug(name), description: "" };
   }
 
-  async function createEntity(type: "brands" | "categories" | "tags") {
+  async function createEntity(type: "brands" | "tags") {
     const seed = buildDefaultPayload(type);
     const input = window.prompt(
       `Create ${type.slice(0, -1)} payload as JSON`,
@@ -115,6 +128,67 @@ export default function AdminPromotionsPage() {
       setPendingKey("");
     }
   }
+
+  async function createCategory() {
+    const name = categoryForm.name.trim();
+    const description = categoryForm.description.trim();
+    const imageUrl = categoryForm.imageUrl.trim();
+    const parentCategoryId = categoryForm.parentCategoryId.trim();
+    const parentCategoryName = categoryForm.parentCategoryName.trim();
+    if (!name) {
+      setActionMessage("Category name is required.");
+      return;
+    }
+
+    try {
+      setActionMessage("");
+      setPendingKey("create-categories");
+      await adminFetcher("/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description,
+          image_url: imageUrl,
+          name,
+          parent_category:
+            parentCategoryId || parentCategoryName
+              ? [
+                  {
+                    id: parentCategoryId,
+                    name: parentCategoryName,
+                  },
+                ]
+              : [],
+        }),
+      });
+      setActionMessage("Category created successfully.");
+      setCategoryForm({
+        name: "",
+        description: "",
+        imageUrl: "",
+        parentCategoryId: "",
+        parentCategoryName: "",
+      });
+      await refetch();
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : "Failed to create categories.");
+    } finally {
+      setPendingKey("");
+    }
+  }
+
+  const filteredCategories = data.featured.filter((item) => {
+    const matchesSearch =
+      !categorySearch.trim() ||
+      item.name.toLowerCase().includes(categorySearch.toLowerCase()) ||
+      item.id.toLowerCase().includes(categorySearch.toLowerCase());
+    const matchesCreator =
+      createdByFilter === "all" ||
+      item.createdBy.toLowerCase() === createdByFilter.toLowerCase();
+    const matchesDate = dateFilter === "all" || item.date.includes(dateFilter);
+
+    return matchesSearch && matchesCreator && matchesDate;
+  });
 
   async function getEntity(type: "brands" | "categories" | "tags", id: string) {
     try {
@@ -233,51 +307,208 @@ export default function AdminPromotionsPage() {
 
       <Card>
         <SectionTitle
-          title="Categories"
-          subtitle="Featured catalog categories."
+          title="Categories List"
           action={
-            <Button
-              disabled={pendingKey === "create-categories"}
-              onClick={() => createEntity("categories")}
-            >
-              {pendingKey === "create-categories" ? "Creating..." : "Add Category"}
+            <Button onClick={() => setShowCategoryForm((prev) => !prev)}>
+              {showCategoryForm ? "Close" : "Create Categories"}
             </Button>
           }
         />
-        <div className="mt-4 space-y-3 text-sm">
-          {data.featured.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between rounded-xl border border-slate-200 p-4"
-            >
+        {showCategoryForm ? (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] lg:items-end">
               <div>
-                <div className="font-semibold text-slate-800">{item.name}</div>
-                <div className="text-xs text-slate-500">{item.type}</div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Category Name
+                </label>
+                <input
+                  value={categoryForm.name}
+                  onChange={(event) =>
+                    setCategoryForm((prev) => ({ ...prev, name: event.target.value }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                  placeholder="e.g. Electronics"
+                />
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  disabled={pendingKey === `get-categories-${item.id}`}
-                  onClick={() => getEntity("categories", item.id)}
-                >
-                  View
-                </Button>
-                <Button
-                  variant="ghost"
-                  disabled={pendingKey === `put-categories-${item.id}`}
-                  onClick={() => updateEntity("categories", item.id, item.name)}
-                >
-                  Edit
-                </Button>
-                <Button
-                  disabled={pendingKey === `delete-categories-${item.id}`}
-                  onClick={() => deleteEntity("categories", item.id)}
-                >
-                  Delete
-                </Button>
-              </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Description
+              </label>
+              <input
+                  value={categoryForm.description}
+                  onChange={(event) =>
+                    setCategoryForm((prev) => ({ ...prev, description: event.target.value }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                placeholder="Optional description"
+              />
             </div>
-          ))}
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Image URL
+              </label>
+              <input
+                value={categoryForm.imageUrl}
+                onChange={(event) =>
+                  setCategoryForm((prev) => ({ ...prev, imageUrl: event.target.value }))
+                }
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                placeholder="https://..."
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Parent Category ID
+              </label>
+              <input
+                value={categoryForm.parentCategoryId}
+                onChange={(event) =>
+                  setCategoryForm((prev) => ({
+                    ...prev,
+                    parentCategoryId: event.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                placeholder="Parent ID"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Parent Category Name
+              </label>
+              <input
+                value={categoryForm.parentCategoryName}
+                onChange={(event) =>
+                  setCategoryForm((prev) => ({
+                    ...prev,
+                    parentCategoryName: event.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                placeholder="Parent name"
+              />
+            </div>
+            <Button
+              disabled={pendingKey === "create-categories"}
+              onClick={createCategory}
+            >
+                {pendingKey === "create-categories" ? "Creating..." : "Create Category"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-center">
+          <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <input
+              value={categorySearch}
+              onChange={(event) => setCategorySearch(event.target.value)}
+              className="w-full bg-transparent text-sm outline-none"
+              placeholder="Search..."
+            />
+          </div>
+          <select
+            value={createdByFilter}
+            onChange={(event) => setCreatedByFilter(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+          >
+            <option value="all">Create by</option>
+            <option value="admin">Admin</option>
+          </select>
+          <select
+            value={dateFilter}
+            onChange={(event) => setDateFilter(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+          >
+            <option value="all">Date</option>
+            <option value="2022">2022</option>
+            <option value="2023">2023</option>
+            <option value="2024">2024</option>
+          </select>
+        </div>
+
+        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full min-w-[820px] text-left text-sm">
+            <thead className="bg-slate-50/80 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3">
+                  <input type="checkbox" aria-label="Select all categories" />
+                </th>
+                <th className="px-4 py-3">ID</th>
+                <th className="px-4 py-3">Icon/ image</th>
+                <th className="px-4 py-3">Category Name</th>
+                <th className="px-4 py-3">Create by</th>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 text-slate-700">
+              {filteredCategories.map((item) => (
+                <tr key={item.id}>
+                  <td className="px-4 py-3">
+                    <input type="checkbox" aria-label={`Select category ${item.name}`} />
+                  </td>
+                  <td className="px-4 py-3">#{item.id.slice(0, 5)}</td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200">
+                      <svg viewBox="0 0 24 24" className="h-4 w-4 text-slate-500" aria-hidden="true">
+                        <path
+                          d="M5 6h14v12H5V6zm3 3l2 2 4-4 3 3"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">{item.name}</td>
+                  <td className="px-4 py-3">{item.createdBy}</td>
+                  <td className="px-4 py-3">{item.date}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="text-slate-500 hover:text-brand"
+                        disabled={pendingKey === `put-categories-${item.id}`}
+                        onClick={() => updateEntity("categories", item.id, item.name)}
+                        aria-label={`Edit category ${item.name}`}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                          <path
+                            d="M4 20l4.5-1 9-9a1.6 1.6 0 0 0 0-2.3l-1.2-1.2a1.6 1.6 0 0 0-2.3 0l-9 9L4 20z"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.7"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        className="text-slate-500 hover:text-rose-500"
+                        disabled={pendingKey === `delete-categories-${item.id}`}
+                        onClick={() => deleteEntity("categories", item.id)}
+                        aria-label={`Delete category ${item.name}`}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                          <path
+                            d="M6 7h12m-9 0v11m6-11v11M9 7V5h6v2m-8 0l1 12h8l1-12"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.7"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
 

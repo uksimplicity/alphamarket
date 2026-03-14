@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import "@/components/products/CreateProduct.css";
 import { getAuth } from "@/components/auth/authStorage";
@@ -35,6 +35,10 @@ function isUuid(value) {
 
 export default function CreateProduct({ mode = "seller" }) {
   const [form, setForm] = useState(initialForm);
+  const [categoryOptions, setCategoryOptions] = useState([]);
+  const [typeOptions, setTypeOptions] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
   const [variants, setVariants] = useState([{ variant: "", value: "" }]);
   const [discountEnabled, setDiscountEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -44,6 +48,98 @@ export default function CreateProduct({ mode = "seller" }) {
   const [imageFiles, setImageFiles] = useState([]);
   const [videoFile, setVideoFile] = useState(null);
   const router = useRouter();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    function asRecord(value) {
+      return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+    }
+
+    function walkRecords(payload, target = []) {
+      if (Array.isArray(payload)) {
+        payload.forEach((item) => walkRecords(item, target));
+        return target;
+      }
+      const record = asRecord(payload);
+      if (!record) return target;
+
+      const hasId = typeof record.id === "string" || typeof record.uuid === "string";
+      const hasName = typeof record.name === "string" || typeof record.title === "string";
+      if (hasId && hasName) target.push(record);
+
+      Object.values(record).forEach((value) => walkRecords(value, target));
+      return target;
+    }
+
+    async function requestJson(url) {
+      const auth = getAuth();
+      const token = auth?.access_token;
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!response.ok) throw new Error(`Request failed (${response.status})`);
+      return response.json();
+    }
+
+    async function fetchOptions(candidates) {
+      let lastError = null;
+      for (const url of candidates) {
+        try {
+          const payload = await requestJson(url);
+          const rows = walkRecords(payload, []);
+          const mapped = rows
+            .map((row) => ({
+              id: String(row.id ?? row.uuid ?? "").trim(),
+              name: String(row.name ?? row.title ?? "").trim(),
+            }))
+            .filter((row) => row.id && row.name);
+          if (mapped.length > 0) return mapped;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      if (lastError) throw lastError;
+      return [];
+    }
+
+    async function loadCatalog() {
+      setCatalogLoading(true);
+      setCatalogError("");
+      try {
+        const [categories, productTypes] = await Promise.all([
+          fetchOptions([
+            "/api/admin/categories?limit=200&offset=0",
+            "/api/auth/admin/categories?limit=200&offset=0",
+            "/api/admin/categories",
+            "/api/auth/admin/categories",
+          ]),
+          fetchOptions([
+            "/api/admin/product-types?limit=200&offset=0",
+            "/api/auth/admin/product-types?limit=200&offset=0",
+            "/api/admin/product-types",
+            "/api/auth/admin/product-types",
+          ]),
+        ]);
+        if (!isMounted) return;
+        setCategoryOptions(categories);
+        setTypeOptions(productTypes);
+      } catch (error) {
+        if (!isMounted) return;
+        setCatalogError(error instanceof Error ? error.message : "Failed to load catalog options.");
+      } finally {
+        if (isMounted) setCatalogLoading(false);
+      }
+    }
+
+    loadCatalog();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -323,17 +419,27 @@ export default function CreateProduct({ mode = "seller" }) {
               <div className="field">
                 <label>Category</label>
                 <select name="category" value={form.category} onChange={handleChange}>
-                  <option value="">Select</option>
-                  <option value="fashion">Fashion</option>
-                  <option value="cloth">Cloth</option>
+                  <option value="">
+                    {catalogLoading ? "Loading categories..." : "Select Category"}
+                  </option>
+                  {categoryOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="field">
                 <label>Product Type</label>
                 <select name="type" value={form.type} onChange={handleChange}>
-                  <option value="">Select</option>
-                  <option value="product">Product</option>
-                  <option value="service">Service</option>
+                  <option value="">
+                    {catalogLoading ? "Loading product types..." : "Select Product Type"}
+                  </option>
+                  {typeOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="field">
@@ -363,6 +469,7 @@ export default function CreateProduct({ mode = "seller" }) {
                 />
               </div>
             </div>
+            {catalogError ? <div className="form-error">{catalogError}</div> : null}
             <div className="field full">
               <label>Short Description</label>
               <textarea

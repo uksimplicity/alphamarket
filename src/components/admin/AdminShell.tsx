@@ -88,7 +88,13 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
-    if (pathname.startsWith("/admin/promotions")) {
+    if (
+      pathname.startsWith("/admin/promotions") ||
+      pathname.startsWith("/admin/categories") ||
+      pathname.startsWith("/admin/attributes") ||
+      pathname.startsWith("/admin/tags") ||
+      pathname.startsWith("/admin/brands")
+    ) {
       setCatalogOpen(true);
     }
   }, [pathname]);
@@ -206,12 +212,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                     {catalogOpen ? (
                       <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
                         {[
-                          { label: "Categories", href: "/admin/promotions#categories" },
-                          { label: "Attributes", href: "/admin/promotions#attributes" },
-                          { label: "Tags", href: "/admin/promotions#tags" },
-                          { label: "Brand", href: "/admin/promotions#brand" },
-                        ].map((item, index) => {
-                          const active = pathname === "/admin/promotions" && index === 0;
+                          { label: "Categories", href: "/admin/categories" },
+                          { label: "Attributes", href: "/admin/attributes" },
+                          { label: "Tags", href: "/admin/tags" },
+                          { label: "Brand", href: "/admin/brands" },
+                        ].map((item) => {
+                          const active = pathname === item.href.split("#")[0].split("?")[0];
                           return (
                             <Link
                               key={`catalog-tree-${item.label}`}
