@@ -24,7 +24,7 @@ function toNumber(value, fallback = 0) {
   return fallback;
 }
 
-export default function ProductStock({ onAddStock = () => {}, onView = () => {} }) {
+export default function ProductStock({ onAddStock = () => {}, onView = (_id) => {} }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
