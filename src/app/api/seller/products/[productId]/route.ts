@@ -30,14 +30,19 @@ async function proxySellerProduct(
   }
 
   const safeId = encodeURIComponent(productId);
-  const urls = [
-    `${API_V1_BASE}/seller/products/${safeId}${search}`,
-    `${API_BASE}/seller/products/${safeId}${search}`,
-    `${API_BASE}/auth/seller/products/${safeId}${search}`,
-  ];
+  const urls = Array.from(
+    new Set([
+      `${API_V1_BASE}/seller/products/${safeId}${search}`,
+      `${API_BASE}/seller/products/${safeId}${search}`,
+      `${API_BASE}/auth/seller/products/${safeId}${search}`,
+    ])
+  );
 
   try {
     let res: Response | null = null;
+    let upstreamErrorRes: Response | null = null;
+    const attempts: Array<{ url: string; status: number }> = [];
+
     for (const url of urls) {
       res = await fetch(url, {
         method,
@@ -45,10 +50,16 @@ async function proxySellerProduct(
         body: body || undefined,
         cache: "no-store",
       });
-      if (res.status !== 404) break;
+      attempts.push({ url, status: res.status });
+      if (res.status === 404) continue;
+      if (res.status >= 500) {
+        upstreamErrorRes = res;
+        continue;
+      }
+      break;
     }
 
-    if (!res || res.status === 404) {
+    if ((!res || res.status === 404) && !upstreamErrorRes) {
       return new Response(
         JSON.stringify({
           error: "Upstream endpoint not found.",
@@ -58,20 +69,32 @@ async function proxySellerProduct(
       );
     }
 
-    const text = await res.text();
-    if (res.status >= 500) {
+    const finalRes = upstreamErrorRes ?? res;
+    if (!finalRes) {
+      return new Response(
+        JSON.stringify({
+          error: "Seller product proxy had no upstream response.",
+          tried: urls,
+        }),
+        { status: 502, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const text = await finalRes.text();
+    if (finalRes.status >= 500) {
       console.error("Seller product upstream 5xx", {
-        status: res.status,
+        status: finalRes.status,
         productId,
         tried: urls,
+        attempts,
         bodyPreview: text.slice(0, 400),
       });
     }
 
     return new Response(text, {
-      status: res.status,
+      status: finalRes.status,
       headers: {
-        "Content-Type": res.headers.get("content-type") ?? "application/json",
+        "Content-Type": finalRes.headers.get("content-type") ?? "application/json",
       },
     });
   } catch (error) {
