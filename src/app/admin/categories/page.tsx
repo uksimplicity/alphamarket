@@ -179,13 +179,15 @@ export default function AdminCategoriesPage() {
     );
   }
 
+  const categories = data ?? [];
+
   async function createCategory() {
     const name = categoryForm.name.trim();
     if (!name) {
       setActionMessage("Category name is required.");
       return;
     }
-    const exists = data.some((item) => item.name.trim().toLowerCase() === name.toLowerCase());
+    const exists = categories.some((item) => item.name.trim().toLowerCase() === name.toLowerCase());
     if (exists) {
       setActionMessage("Category name already exists. Please use a different name.");
       return;
@@ -196,7 +198,8 @@ export default function AdminCategoriesPage() {
       setPendingKey("create-categories");
       const parentCategoryName = categoryForm.parentCategoryName.trim();
       const resolvedParentCategoryId =
-        data.find((item) => item.name.toLowerCase() === parentCategoryName.toLowerCase())?.id ?? "";
+        categories.find((item) => item.name.toLowerCase() === parentCategoryName.toLowerCase())
+          ?.id ?? "";
 
       await callCategoryEndpoint("/categories", {
         method: "POST",
@@ -271,7 +274,7 @@ export default function AdminCategoriesPage() {
     }
   }
 
-  const filteredCategories = data.filter((item) => {
+  const filteredCategories = categories.filter((item) => {
     const matchesSearch =
       !categorySearch.trim() ||
       item.name.toLowerCase().includes(categorySearch.toLowerCase()) ||
