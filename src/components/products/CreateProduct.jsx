@@ -376,6 +376,8 @@ export default function CreateProduct({ mode = "seller" }) {
   };
 
   const variantRows = useMemo(() => variants, [variants]);
+  const hasCategoryOptions = categoryOptions.length > 0;
+  const hasTypeOptions = typeOptions.length > 0;
 
   return (
     <div className="create-page">
@@ -428,6 +430,15 @@ export default function CreateProduct({ mode = "seller" }) {
                     </option>
                   ))}
                 </select>
+                {!catalogLoading && !hasCategoryOptions ? (
+                  <input
+                    name="category"
+                    value={form.category}
+                    onChange={handleChange}
+                    placeholder="Paste Category UUID"
+                    className="mt-2"
+                  />
+                ) : null}
               </div>
               <div className="field">
                 <label>Product Type</label>
@@ -441,6 +452,15 @@ export default function CreateProduct({ mode = "seller" }) {
                     </option>
                   ))}
                 </select>
+                {!catalogLoading && !hasTypeOptions ? (
+                  <input
+                    name="type"
+                    value={form.type}
+                    onChange={handleChange}
+                    placeholder="Paste Product Type UUID"
+                    className="mt-2"
+                  />
+                ) : null}
               </div>
               <div className="field">
                 <label>Brand</label>
