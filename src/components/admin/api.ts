@@ -1,27 +1,19 @@
 "use client";
 
-import { getAuth } from "@/components/auth/authStorage";
+import { clearAuth, getAuth } from "@/components/auth/authStorage";
 
-export async function adminFetcher<T>(
-  path: string,
-  init?: RequestInit
-): Promise<T> {
-  const auth = getAuth();
-  const token = auth?.access_token;
-  const headers = new Headers(init?.headers);
+function isExpiredTokenMessage(message: string) {
+  const normalized = message.trim().toLowerCase();
+  return (
+    normalized.includes("invalid or expired token") ||
+    normalized.includes("token expired") ||
+    normalized.includes("expired token") ||
+    normalized.includes("jwt expired") ||
+    normalized.includes("invalid token")
+  );
+}
 
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-  if (!headers.has("Accept")) {
-    headers.set("Accept", "application/json");
-  }
-
-  const response = await fetch(`/api/admin${path}`, {
-    ...init,
-    headers,
-  });
-
+async function readResponseData(response: Response) {
   const text = await response.text();
   let data: unknown = null;
   try {
@@ -29,16 +21,68 @@ export async function adminFetcher<T>(
   } catch {
     data = text;
   }
+  return data;
+}
+
+function extractErrorMessage(data: unknown, status: number) {
+  const record = asRecord(data);
+  if (record) {
+    return String(record.error ?? record.message ?? record.details ?? `Request failed (${status}).`);
+  }
+  if (typeof data === "string" && data.trim()) {
+    return data.trim();
+  }
+  return `Request failed (${status}).`;
+}
+
+async function callApi(basePath: string, path: string, init: RequestInit | undefined, token?: string) {
+  const headers = new Headers(init?.headers);
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  } else {
+    headers.delete("Authorization");
+  }
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "application/json");
+  }
+
+  const response = await fetch(`${basePath}${path}`, {
+    ...init,
+    headers,
+  });
+  const data = await readResponseData(response);
+
+  return { response, data };
+}
+
+export async function adminFetcher<T>(
+  path: string,
+  init?: RequestInit
+): Promise<T> {
+  const auth = getAuth();
+  const token = auth?.access_token;
+  let { response, data } = await callApi("/api/admin", path, init, token);
+
+  if (!response.ok && token) {
+    const firstMessage = extractErrorMessage(data, response.status);
+    if (isExpiredTokenMessage(firstMessage)) {
+      clearAuth();
+      const retry = await callApi("/api/admin", path, init, undefined);
+      response = retry.response;
+      data = retry.data;
+      if (!response.ok) {
+        const retryMessage = extractErrorMessage(data, response.status);
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Session expired. Please log in again.");
+        }
+        throw new Error(retryMessage);
+      }
+      return data as T;
+    }
+  }
 
   if (!response.ok) {
-    const record = asRecord(data);
-    const message =
-      record
-        ? record.error ?? record.message ?? record.details ?? `Request failed (${response.status}).`
-        : typeof data === "string" && data.trim()
-          ? data.trim()
-          : `Request failed (${response.status}).`;
-    throw new Error(String(message));
+    throw new Error(extractErrorMessage(data, response.status));
   }
 
   return data as T;
@@ -50,37 +94,28 @@ export async function authAdminFetcher<T>(
 ): Promise<T> {
   const auth = getAuth();
   const token = auth?.access_token;
-  const headers = new Headers(init?.headers);
+  let { response, data } = await callApi("/api/auth/admin", path, init, token);
 
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-  if (!headers.has("Accept")) {
-    headers.set("Accept", "application/json");
-  }
-
-  const response = await fetch(`/api/auth/admin${path}`, {
-    ...init,
-    headers,
-  });
-
-  const text = await response.text();
-  let data: unknown = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
+  if (!response.ok && token) {
+    const firstMessage = extractErrorMessage(data, response.status);
+    if (isExpiredTokenMessage(firstMessage)) {
+      clearAuth();
+      const retry = await callApi("/api/auth/admin", path, init, undefined);
+      response = retry.response;
+      data = retry.data;
+      if (!response.ok) {
+        const retryMessage = extractErrorMessage(data, response.status);
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Session expired. Please log in again.");
+        }
+        throw new Error(retryMessage);
+      }
+      return data as T;
+    }
   }
 
   if (!response.ok) {
-    const record = asRecord(data);
-    const message =
-      record
-        ? record.error ?? record.message ?? record.details ?? `Request failed (${response.status}).`
-        : typeof data === "string" && data.trim()
-          ? data.trim()
-          : `Request failed (${response.status}).`;
-    throw new Error(String(message));
+    throw new Error(extractErrorMessage(data, response.status));
   }
 
   return data as T;

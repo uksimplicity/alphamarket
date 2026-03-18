@@ -50,34 +50,33 @@ function parseCatalogItems(
   const idKeys = config?.idKeys ?? ["id", "uuid"];
   const nameKeys = config?.nameKeys ?? ["name", "title"];
   const hintKeys = config?.hintKeys ?? ["description"];
-  const found: CatalogItem[] = [];
-  const visited = new WeakSet<object>();
+  const listCandidates = [
+    payload,
+    asRecord(payload)?.data,
+    asRecord(payload)?.items,
+    asRecord(payload)?.results,
+    asRecord(payload)?.rows,
+    asRecord(payload)?.productTypes,
+    asRecord(payload)?.product_types,
+    asRecord(payload)?.categories,
+    asRecord(payload)?.attributes,
+  ];
 
-  function walk(value: unknown) {
-    if (Array.isArray(value)) {
-      value.forEach(walk);
-      return;
-    }
-    const record = asRecord(value);
-    if (!record || visited.has(record)) return;
-    visited.add(record);
+  const rows = listCandidates
+    .flatMap((candidate) => (Array.isArray(candidate) ? candidate : []))
+    .flatMap((row) => (Array.isArray(row) ? row : [row]))
+    .map((row) => asRecord(row))
+    .filter((record): record is Record<string, unknown> => Boolean(record));
 
-    const id = pickString(record, idKeys, "").trim();
-    const name = pickString(record, nameKeys, "").trim();
-    if (id && name) {
-      found.push({
-        id,
-        name,
-        hint: pickString(record, hintKeys, ""),
-        categoryId: pickString(record, ["category_id", "categoryId"], ""),
-        categoryName: pickString(record, ["category_name", "categoryName"], ""),
-      });
-    }
-
-    Object.values(record).forEach(walk);
-  }
-
-  walk(payload);
+  const found = rows
+    .map((record) => ({
+      id: pickString(record, idKeys, "").trim(),
+      name: pickString(record, nameKeys, "").trim(),
+      hint: pickString(record, hintKeys, ""),
+      categoryId: pickString(record, ["category_id", "categoryId"], ""),
+      categoryName: pickString(record, ["category_name", "categoryName"], ""),
+    }))
+    .filter((item) => item.id && item.name);
 
   if (found.length > 0) {
     const byId = new Map<string, CatalogItem>();
@@ -157,6 +156,50 @@ async function fetchOptionalAdminCollection(path: string, fallback: unknown = []
   }
 }
 
+async function fetchOptionalCatalogCollection(path: string, fallback: unknown = []): Promise<unknown> {
+  try {
+    const response = await fetch(path, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!response.ok) return fallback;
+    return (await response.json()) as unknown;
+  } catch {
+    return fallback;
+  }
+}
+
+async function createProductTypeEndpoint(name: string, categoryId: string) {
+  const variants: Array<Record<string, unknown>> = categoryId
+    ? [
+        { name, category_id: categoryId },
+        { name, categoryId },
+        { product_type: name, category_id: categoryId },
+        { type_name: name, category_id: categoryId },
+      ]
+    : [{ name }, { product_type: name }, { type_name: name }];
+
+  let lastError: unknown = null;
+  for (const body of variants) {
+    try {
+      return await adminFetcher<unknown>("/product-types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Failed to create product type.");
+}
+
+function isTemporaryProductTypeId(id: string) {
+  const normalized = id.trim().toLowerCase();
+  return normalized.startsWith("tmppt-") || normalized.startsWith("local-");
+}
+
 async function deleteProductTypeEndpoint(id: string): Promise<void> {
   const paths = [
     `/product-types/${id}?hard=true`,
@@ -220,10 +263,30 @@ export default function AdminProductsPage() {
           return readCachedCatalogItems(ADMIN_PRODUCT_TYPES_CACHE_KEY);
         })(),
         (async () => {
-          const categoriesPayload = await fetchOptionalAdminCollection("/categories?limit=200&offset=0", null);
-          if (categoriesPayload) {
+          const adminCandidates = [
+            "/categories/raw?limit=200&offset=0",
+            "/categories?limit=200&offset=0",
+            "/categories?limit=200",
+            "/categories",
+          ];
+
+          for (const path of adminCandidates) {
+            const categoriesPayload = await fetchOptionalAdminCollection(path, null);
+            if (categoriesPayload) {
+              return {
+                payload: categoriesPayload,
+                fromCache: false,
+              };
+            }
+          }
+
+          const sellerCatalogPayload = await fetchOptionalCatalogCollection(
+            "/api/seller/catalog?resource=categories&limit=200&offset=0",
+            null
+          );
+          if (sellerCatalogPayload) {
             return {
-              payload: categoriesPayload,
+              payload: sellerCatalogPayload,
               fromCache: false,
             };
           }
@@ -279,7 +342,15 @@ export default function AdminProductsPage() {
     setCacheHydrated(true);
   }, []);
 
-  const resolvedData = data ?? cachedData;
+  const resolvedData: ProductsData = data
+    ? {
+        products: data.products.length > 0 ? data.products : cachedData.products,
+        attributes: data.attributes.length > 0 ? data.attributes : cachedData.attributes,
+        productTypes: data.productTypes.length > 0 ? data.productTypes : cachedData.productTypes,
+        categories: data.categories.length > 0 ? data.categories : cachedData.categories,
+        categoriesFromCache: data.categoriesFromCache && cachedData.categories.length > 0,
+      }
+    : cachedData;
 
   useEffect(() => {
     if (!data) return;
@@ -386,54 +457,50 @@ export default function AdminProductsPage() {
       return;
     }
     const categoryId = productTypeForm.categoryId.trim();
-    if (!categoryId) {
-      setActionMessage("No category is not supported by the current backend. Please select a category.");
-      return;
-    }
-    if (isPlaceholderId(categoryId)) {
+    if (categoryId && isPlaceholderId(categoryId)) {
       setActionMessage("Please select a saved category from the backend list.");
-      return;
-    }
-    if (resolvedData.categoriesFromCache) {
-      setActionMessage("Live categories could not be loaded from the backend. Refresh categories before creating a product type.");
-      return;
-    }
-    const duplicateExists = resolvedData.productTypes.some(
-      (item) => item.name.trim().toLowerCase() === name.toLowerCase()
-    );
-    if (duplicateExists) {
-      setActionMessage("Product type name already exists. Please use a different name.");
       return;
     }
     try {
       setActionMessage("");
       setPendingKey("create-product-type");
-      const createdPayload = await adminFetcher<unknown>("/product-types", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, category_id: categoryId }),
-      });
-      const createdType = parseCatalogItems(createdPayload, {
+      const createdPayload = await createProductTypeEndpoint(name, categoryId);
+      const parsedCreatedType = parseCatalogItems(createdPayload, {
         idKeys: ["id", "uuid", "product_type_id", "type_id"],
         nameKeys: ["name", "title", "product_type", "type_name"],
         hintKeys: ["category_id", "categoryId", "category_name", "categoryName"],
         fallbackPrefix: "product-type",
       })[0];
+      const selectedCategory = resolvedData.categories.find((item) => item.id === categoryId);
+      const createdType =
+        parsedCreatedType ??
+        ({
+          id: `tmppt-${Date.now().toString(36)}`,
+          name,
+          hint: selectedCategory?.name ?? "",
+          categoryId,
+          categoryName: selectedCategory?.name ?? "",
+        } satisfies CatalogItem);
       setActionMessage("Product type created.");
       setProductTypeForm({ name: "", categoryId: "" });
-      if (createdType) {
-        setCachedData((prev) => {
-          const nextProductTypes = [
-            createdType,
-            ...prev.productTypes.filter((item) => item.id !== createdType.id),
-          ];
-          cacheProductTypes(nextProductTypes);
-          return { ...prev, productTypes: nextProductTypes };
-        });
-      }
+      setCachedData((prev) => {
+        const nextProductTypes = [
+          createdType,
+          ...prev.productTypes.filter((item) => item.id !== createdType.id),
+        ];
+        cacheProductTypes(nextProductTypes);
+        return { ...prev, productTypes: nextProductTypes };
+      });
       await refetch();
     } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : "Failed to create product type.");
+      const message = err instanceof Error ? err.message : "Failed to create product type.";
+      if (message.toLowerCase().includes("fk_product_types_category")) {
+        setActionMessage("Selected category is invalid on backend. Reload categories and pick an existing one.");
+      } else if (!categoryId) {
+        setActionMessage(`${message} If your backend requires category mapping, select a category and try again.`);
+      } else {
+        setActionMessage(message);
+      }
     } finally {
       setPendingKey("");
     }
@@ -476,8 +543,12 @@ export default function AdminProductsPage() {
     try {
       setActionMessage("");
       setPendingKey(`delete-product-type-${id}`);
-      await deleteProductTypeEndpoint(id);
-      setActionMessage("Product type deleted.");
+      if (isTemporaryProductTypeId(id)) {
+        setActionMessage("Product type removed from local cache.");
+      } else {
+        await deleteProductTypeEndpoint(id);
+        setActionMessage("Product type deleted.");
+      }
       setCachedData((prev) => {
         const nextProductTypes = prev.productTypes.filter((item) => item.id !== id);
         cacheProductTypes(nextProductTypes);
@@ -485,7 +556,15 @@ export default function AdminProductsPage() {
       });
       await refetch();
     } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : "Failed to delete product type.");
+      const message = err instanceof Error ? err.message : "Failed to delete product type.";
+      if (
+        message.toLowerCase().includes("violates foreign key constraint") ||
+        message.toLowerCase().includes("constraint")
+      ) {
+        setActionMessage("This product type is linked to existing products and cannot be deleted yet.");
+      } else {
+        setActionMessage(message);
+      }
     } finally {
       setPendingKey("");
     }
