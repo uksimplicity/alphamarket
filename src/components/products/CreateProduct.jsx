@@ -102,6 +102,20 @@ const ADMIN_CATEGORIES_CACHE_KEY = "alpha.admin.categories";
 const ADMIN_PRODUCT_TYPES_CACHE_KEY = "alpha.admin.product-types";
 const MAX_PRODUCT_PRICE = 1000000000;
 const MAX_PRODUCT_STOCK = 1000000;
+const MAX_DISCOUNT_PRICE = 1000000000;
+
+function parsePositivePrice(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return numeric;
+}
+
+function parseNonNegativeInteger(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  if (!Number.isInteger(numeric)) return null;
+  return numeric;
+}
 
 function persistCreatedProduct(product) {
   if (typeof window === "undefined" || !product) return;
@@ -357,19 +371,30 @@ export default function CreateProduct({ mode = "seller" }) {
       setError("Please select a product type.");
       return;
     }
-    if (!form.basePrice.trim() || Number(form.basePrice) <= 0) {
+    const basePriceNumber = parsePositivePrice(form.basePrice);
+    if (!form.basePrice.trim() || basePriceNumber === null || basePriceNumber <= 0) {
       setError("Base price must be greater than 0.");
       return;
     }
-    if (Number(form.basePrice) > MAX_PRODUCT_PRICE) {
+    if (basePriceNumber > MAX_PRODUCT_PRICE) {
       setError(`Base price is too large. Maximum allowed is ${MAX_PRODUCT_PRICE.toLocaleString()}.`);
       return;
     }
-    if (form.stock !== "" && Number(form.stock) > MAX_PRODUCT_STOCK) {
+
+    let stockNumber = null;
+    if (form.stock !== "") {
+      stockNumber = parseNonNegativeInteger(form.stock);
+      if (stockNumber === null) {
+        setError("Stock must be a whole number.");
+        return;
+      }
+    }
+
+    if (stockNumber !== null && stockNumber > MAX_PRODUCT_STOCK) {
       setError(`Stock is too large. Maximum allowed is ${MAX_PRODUCT_STOCK.toLocaleString()}.`);
       return;
     }
-    if (form.stock !== "" && Number(form.stock) < 0) {
+    if (stockNumber !== null && stockNumber < 0) {
       setError("Stock cannot be negative.");
       return;
     }
@@ -400,8 +425,13 @@ export default function CreateProduct({ mode = "seller" }) {
         setError("Discount start and end dates are required.");
         return;
       }
-      if (!form.discountPrice.trim() || Number(form.discountPrice) <= 0) {
+      const discountPriceNumber = parsePositivePrice(form.discountPrice);
+      if (!form.discountPrice.trim() || discountPriceNumber === null || discountPriceNumber <= 0) {
         setError("Discount price must be greater than 0.");
+        return;
+      }
+      if (discountPriceNumber > MAX_DISCOUNT_PRICE) {
+        setError(`Discount price is too large. Maximum allowed is ${MAX_DISCOUNT_PRICE.toLocaleString()}.`);
         return;
       }
     }
@@ -431,7 +461,7 @@ export default function CreateProduct({ mode = "seller" }) {
       .filter(Boolean);
 
     const payload = {
-      basePrice: Number(form.basePrice) || 0,
+      basePrice: basePriceNumber,
       categoryId: form.category.trim(),
       name: form.name.trim(),
       productTypeId: form.type.trim(),
@@ -450,7 +480,7 @@ export default function CreateProduct({ mode = "seller" }) {
     if (form.location.trim()) payload.location = form.location.trim();
     if (form.shortDescription.trim()) payload.shortDescription = form.shortDescription.trim();
     if (form.brand.trim()) payload.brandId = form.brand.trim();
-    if (form.stock !== "") payload.stock = Number(form.stock) || 0;
+    if (stockNumber !== null) payload.stock = stockNumber;
     if (tagList.length > 0) payload.tags = tagList;
 
     if (form.latitude.trim()) payload.latitude = Number(form.latitude);
@@ -469,7 +499,7 @@ export default function CreateProduct({ mode = "seller" }) {
         {
           active: true,
           title: form.discountTitle.trim(),
-          price: Number(form.discountPrice) || 0,
+          price: Number(form.discountPrice),
           startDate: form.discountStartDate,
           endDate: form.discountEndDate,
         },

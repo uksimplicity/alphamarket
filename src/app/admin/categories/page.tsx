@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   adminFetcher,
+  authAdminFetcher,
   asArray,
   asRecord,
   pickString,
@@ -104,7 +105,19 @@ export default function AdminCategoriesPage() {
   }
 
   async function callCategoryEndpoint<T>(path: string, init?: RequestInit): Promise<T> {
-    return adminFetcher<T>(path, init);
+    const candidates = [
+      () => adminFetcher<T>(path, init),
+      () => authAdminFetcher<T>(path, init),
+    ];
+    let lastError: unknown = null;
+    for (const candidate of candidates) {
+      try {
+        return await candidate();
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("Category endpoint request failed.");
   }
 
   async function hardDeleteCategory(target: CategoryDeleteTarget): Promise<void> {
@@ -165,9 +178,9 @@ export default function AdminCategoriesPage() {
 
     const attempts = [
       probeCategoryRoute,
-      () => adminFetcher<unknown>("/categories?limit=100&offset=0"),
-      () => adminFetcher<unknown>("/categories"),
-      () => adminFetcher<unknown>("/categories?limit=100"),
+      () => callCategoryEndpoint<unknown>("/categories?limit=100&offset=0"),
+      () => callCategoryEndpoint<unknown>("/categories"),
+      () => callCategoryEndpoint<unknown>("/categories?limit=100"),
       sellerCatalogFallback,
     ];
 
@@ -198,7 +211,7 @@ export default function AdminCategoriesPage() {
     const results: unknown[] = [];
     for (const query of queries) {
       try {
-        results.push(await adminFetcher<unknown>(query));
+        results.push(await callCategoryEndpoint<unknown>(query));
       } catch {
         // best-effort probing for soft-deleted rows
       }
@@ -297,7 +310,7 @@ export default function AdminCategoriesPage() {
 
         try {
           const productsPayload = await (async () => {
-            return adminFetcher<unknown>("/products?limit=300&offset=0");
+            return callCategoryEndpoint<unknown>("/products?limit=300&offset=0");
           })();
           const productsMapped = mapPayloadToCategories(productsPayload);
           if (productsMapped.length > 0) return productsMapped;

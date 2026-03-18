@@ -3,6 +3,62 @@ import { createMockProduct, listMockProducts } from "./mockStore";
 const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
 const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v1`;
+const MAX_PRODUCT_PRICE = 1000000000;
+const MAX_PRODUCT_STOCK = 1000000;
+
+function readString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function readNumber(value: unknown) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function validateCreatePayload(payload: Record<string, unknown>) {
+  const name = readString(payload.name ?? payload.title);
+  if (!name) {
+    return "Product title is required.";
+  }
+
+  const description = readString(payload.shortDescription ?? payload.description);
+  if (!description) {
+    return "Product description is required.";
+  }
+
+  const categoryId = readString(payload.categoryId ?? payload.category_id ?? payload.category);
+  if (!categoryId) {
+    return "Category is required.";
+  }
+
+  const basePrice = readNumber(payload.basePrice ?? payload.base_price ?? payload.price);
+  if (basePrice === null || basePrice <= 0) {
+    return "Base price must be greater than 0.";
+  }
+  if (basePrice > MAX_PRODUCT_PRICE) {
+    return `Base price is too large. Maximum allowed is ${MAX_PRODUCT_PRICE.toLocaleString()}.`;
+  }
+
+  const stockRaw = payload.stock ?? payload.quantity ?? payload.availableQuantity;
+  if (stockRaw !== undefined && stockRaw !== null && String(stockRaw).trim() !== "") {
+    const stock = readNumber(stockRaw);
+    if (stock === null || !Number.isInteger(stock)) {
+      return "Stock must be a whole number.";
+    }
+    if (stock < 0) {
+      return "Stock cannot be negative.";
+    }
+    if (stock > MAX_PRODUCT_STOCK) {
+      return `Stock is too large. Maximum allowed is ${MAX_PRODUCT_STOCK.toLocaleString()}.`;
+    }
+  }
+
+  return null;
+}
 
 async function proxySellerCollection(req: Request, method: "GET" | "POST") {
   const url = new URL(req.url);
@@ -50,6 +106,24 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
   };
 
   const body = method === "GET" ? "" : await req.text();
+
+  if (method === "POST") {
+    let payload: Record<string, unknown> = {};
+    try {
+      payload = body ? (JSON.parse(body) as Record<string, unknown>) : {};
+    } catch {
+      payload = {};
+    }
+
+    const validationError = validateCreatePayload(payload);
+    if (validationError) {
+      return new Response(JSON.stringify({ error: validationError }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  }
+
   if (method !== "GET") {
     headers["Content-Type"] = "application/json";
   }
