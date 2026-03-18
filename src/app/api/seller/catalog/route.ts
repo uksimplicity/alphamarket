@@ -37,6 +37,22 @@ function normalizeAuthHeader(value: string) {
   return trimmed.replace(/^Bearer\s+Bearer\s+/i, "Bearer ");
 }
 
+function getValueCaseInsensitive(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(record, key)) {
+      return record[key];
+    }
+  }
+  const lowered = new Map(
+    Object.entries(record).map(([key, value]) => [key.toLowerCase(), value])
+  );
+  for (const key of keys) {
+    const value = lowered.get(key.toLowerCase());
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
 function hasCatalogRecords(payload: unknown): boolean {
   const visited = new WeakSet<object>();
 
@@ -52,29 +68,33 @@ function hasCatalogRecords(payload: unknown): boolean {
     if (visited.has(record)) return false;
     visited.add(record);
 
-    const hasId =
-      typeof record.id === "string" ||
-      typeof record.id === "number" ||
-      typeof record.uuid === "string" ||
-      typeof record.category_id === "string" ||
-      typeof record.category_id === "number" ||
-      typeof record.categoryId === "string" ||
-      typeof record.categoryId === "number" ||
-      typeof record.product_type_id === "string" ||
-      typeof record.type_id === "string";
-    const hasName =
-      typeof record.name === "string" ||
-      typeof record.title === "string" ||
-      typeof record.category === "string" ||
-      typeof record.type === "string" ||
-      typeof record.productType === "string" ||
-      typeof record.product_type_name === "string" ||
-      typeof record.productTypeName === "string" ||
-      typeof record.category_name === "string" ||
-      typeof record.categoryName === "string" ||
-      typeof record.type_name === "string" ||
-      typeof record.product_type === "string" ||
-      typeof record.label === "string";
+    const idCandidate = getValueCaseInsensitive(record, [
+      "id",
+      "uuid",
+      "category_id",
+      "categoryId",
+      "categoryID",
+      "product_type_id",
+      "productTypeId",
+      "type_id",
+      "typeId",
+    ]);
+    const nameCandidate = getValueCaseInsensitive(record, [
+      "name",
+      "title",
+      "category",
+      "type",
+      "productType",
+      "product_type_name",
+      "productTypeName",
+      "category_name",
+      "categoryName",
+      "type_name",
+      "product_type",
+      "label",
+    ]);
+    const hasId = typeof idCandidate === "string" || typeof idCandidate === "number";
+    const hasName = typeof nameCandidate === "string" || typeof nameCandidate === "number";
     if (hasId && hasName) return true;
 
     return Object.values(record).some((nested) => walk(nested));

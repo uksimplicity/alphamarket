@@ -46,6 +46,29 @@ function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
+function getValueCaseInsensitive(record, keys) {
+  if (!record) return undefined;
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(record, key)) {
+      return record[key];
+    }
+  }
+  const lowered = new Map(
+    Object.entries(record).map(([key, value]) => [key.toLowerCase(), value])
+  );
+  for (const key of keys) {
+    const value = lowered.get(String(key).toLowerCase());
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+function toText(value) {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number") return String(value);
+  return "";
+}
+
 function walkRecords(payload, target = []) {
   if (Array.isArray(payload)) {
     payload.forEach((item) => walkRecords(item, target));
@@ -54,32 +77,32 @@ function walkRecords(payload, target = []) {
   const record = asRecord(payload);
   if (!record) return target;
 
-  const hasId =
-    typeof record.id === "string" ||
-    typeof record.id === "number" ||
-    typeof record.uuid === "string" ||
-    typeof record.uuid === "number" ||
-    typeof record.category_id === "string" ||
-    typeof record.category_id === "number" ||
-    typeof record.categoryId === "string" ||
-    typeof record.categoryId === "number" ||
-    typeof record.product_type_id === "string" ||
-    typeof record.product_type_id === "number" ||
-    typeof record.type_id === "string" ||
-    typeof record.type_id === "number";
-  const hasName =
-    typeof record.name === "string" ||
-    typeof record.title === "string" ||
-    typeof record.category === "string" ||
-    typeof record.type === "string" ||
-    typeof record.productType === "string" ||
-    typeof record.product_type_name === "string" ||
-    typeof record.productTypeName === "string" ||
-    typeof record.category_name === "string" ||
-    typeof record.categoryName === "string" ||
-    typeof record.type_name === "string" ||
-    typeof record.product_type === "string" ||
-    typeof record.label === "string";
+  const idCandidate = getValueCaseInsensitive(record, [
+    "id",
+    "uuid",
+    "category_id",
+    "categoryId",
+    "product_type_id",
+    "type_id",
+    "productTypeId",
+    "typeId",
+  ]);
+  const nameCandidate = getValueCaseInsensitive(record, [
+    "name",
+    "title",
+    "category",
+    "type",
+    "productType",
+    "product_type_name",
+    "productTypeName",
+    "category_name",
+    "categoryName",
+    "type_name",
+    "product_type",
+    "label",
+  ]);
+  const hasId = typeof idCandidate === "string" || typeof idCandidate === "number";
+  const hasName = typeof nameCandidate === "string" || typeof nameCandidate === "number";
   if (hasId && hasName) target.push(record);
 
   Object.values(record).forEach((value) => walkRecords(value, target));
@@ -88,26 +111,41 @@ function walkRecords(payload, target = []) {
 
 function parseOptions(payload) {
   return walkRecords(payload, [])
-    .map((row) => ({
-      id: String(row.id ?? row.uuid ?? row.category_id ?? row.categoryId ?? row.product_type_id ?? row.type_id ?? "").trim(),
-      name: String(
-        row.name ??
-          row.title ??
-          row.category ??
-          row.type ??
-          row.productType ??
-          row.product_type_name ??
-          row.productTypeName ??
-          row.category_name ??
-          row.categoryName ??
-          row.type_name ??
-          row.product_type ??
-          row.label ??
-          ""
-      ).trim(),
-      categoryId: String(row.category_id ?? row.categoryId ?? "").trim(),
-      categoryName: String(row.category_name ?? row.categoryName ?? "").trim(),
-    }))
+    .map((row) => {
+      const id = toText(
+        getValueCaseInsensitive(row, [
+          "id",
+          "uuid",
+          "category_id",
+          "categoryId",
+          "product_type_id",
+          "type_id",
+          "productTypeId",
+          "typeId",
+        ])
+      );
+      const name = toText(
+        getValueCaseInsensitive(row, [
+          "name",
+          "title",
+          "category",
+          "type",
+          "productType",
+          "product_type_name",
+          "productTypeName",
+          "category_name",
+          "categoryName",
+          "type_name",
+          "product_type",
+          "label",
+        ])
+      );
+      const categoryId = toText(getValueCaseInsensitive(row, ["category_id", "categoryId", "categoryID"]));
+      const categoryName = toText(
+        getValueCaseInsensitive(row, ["category_name", "categoryName", "category"])
+      );
+      return { id, name, categoryId, categoryName };
+    })
     .filter((row) => row.id && row.name);
 }
 
