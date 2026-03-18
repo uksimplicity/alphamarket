@@ -211,6 +211,10 @@ export default function ProfilePage() {
       setPhoneVerifyMessage("Enter the OTP sent to your phone.");
       return;
     }
+    if (!data?.phone || !data?.email) {
+      setPhoneVerifyMessage("Profile data is still loading. Please try again.");
+      return;
+    }
     setPhoneVerifyLoading(true);
     setPhoneVerifyMessage("");
     try {
@@ -235,6 +239,10 @@ export default function ProfilePage() {
   };
 
   const resendPhoneOtp = async () => {
+    if (!data?.phone || !data?.email) {
+      setPhoneVerifyMessage("Profile data is still loading. Please try again.");
+      return;
+    }
     setPhoneResendLoading(true);
     setPhoneVerifyMessage("");
     try {
@@ -250,6 +258,10 @@ export default function ProfilePage() {
   const sendNewPhoneOtp = async () => {
     if (!newPhone.trim()) {
       setChangePhoneMessage("Enter the new phone number first.");
+      return;
+    }
+    if (!data?.email) {
+      setChangePhoneMessage("Profile data is still loading. Please try again.");
       return;
     }
     setChangePhoneResendLoading(true);
@@ -271,6 +283,10 @@ export default function ProfilePage() {
     }
     if (!newPhoneOtp.trim()) {
       setChangePhoneMessage("Enter OTP to verify this number.");
+      return;
+    }
+    if (!data?.email) {
+      setChangePhoneMessage("Profile data is still loading. Please try again.");
       return;
     }
 

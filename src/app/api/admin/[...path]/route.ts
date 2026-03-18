@@ -43,6 +43,8 @@ async function forwardRequest(
 
   let res: Response | null = null;
   let upstreamErrorRes: Response | null = null;
+  let upstreamErrorText = "";
+  const attempts: Array<{ url: string; status: number }> = [];
 
   for (const url of candidateUrls) {
     const attempt = await fetch(url, {
@@ -51,9 +53,11 @@ async function forwardRequest(
       body: body || undefined,
       cache: "no-store",
     });
+    attempts.push({ url, status: attempt.status });
     if (attempt.status === 404) continue;
     if (attempt.status >= 500) {
       upstreamErrorRes = attempt;
+      upstreamErrorText = await attempt.text();
       continue;
     }
     res = attempt;
@@ -84,12 +88,26 @@ async function forwardRequest(
 
   if (!res) {
     return new Response(
-      JSON.stringify({ error: "Admin endpoint unavailable." }),
+      JSON.stringify({
+        error: "Admin endpoint unavailable.",
+        tried: attempts,
+        details: upstreamErrorText.slice(0, 1000),
+      }),
       { status: 502, headers: { "Content-Type": "application/json" } }
     );
   }
 
   const text = await res.text();
+  if (res.status >= 500) {
+    return new Response(
+      JSON.stringify({
+        error: `Admin request failed (${res.status}).`,
+        tried: attempts,
+        details: text.slice(0, 1000),
+      }),
+      { status: res.status, headers: { "Content-Type": "application/json" } }
+    );
+  }
   return new Response(text, {
     status: res.status,
     headers: {
