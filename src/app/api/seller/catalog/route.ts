@@ -130,6 +130,9 @@ export async function GET(req: Request) {
 
   try {
     let upstreamErrorRes: Response | null = null;
+    let lastClientErrorStatus = 0;
+    let lastClientErrorText = "";
+    let lastClientErrorUrl = "";
 
     for (const candidate of urls) {
       const res = await fetch(candidate, {
@@ -163,10 +166,25 @@ export async function GET(req: Request) {
           }
         );
       }
+      const text = await res.text();
+      lastClientErrorStatus = res.status;
+      lastClientErrorText = text.slice(0, 1000);
+      lastClientErrorUrl = candidate;
       continue;
     }
 
     if (!upstreamErrorRes) {
+      if (lastClientErrorStatus > 0) {
+        return new Response(
+          JSON.stringify({
+            error: `Catalog request failed (${lastClientErrorStatus}).`,
+            resource,
+            upstream: lastClientErrorUrl,
+            details: lastClientErrorText,
+          }),
+          { status: lastClientErrorStatus, headers: { "Content-Type": "application/json" } }
+        );
+      }
       return emptyCatalog(resource);
     }
 
