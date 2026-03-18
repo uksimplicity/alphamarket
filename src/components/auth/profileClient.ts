@@ -119,11 +119,11 @@ function writeCachedAddress(userKey: string, input: UpdateProfileInput) {
   try {
     const payload: CachedAddressEntry = {
       userKey,
-      address: input.address,
-      city: input.city,
-      state: input.state,
-      country: input.country,
-      postalCode: input.postalCode,
+      address: toText(input.address),
+      city: toText(input.city),
+      state: toText(input.state),
+      country: toText(input.country),
+      postalCode: toText(input.postalCode),
     };
     window.localStorage.setItem(PROFILE_ADDRESS_CACHE_KEY, JSON.stringify(payload));
   } catch {
