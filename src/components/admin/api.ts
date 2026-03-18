@@ -31,9 +31,10 @@ export async function adminFetcher<T>(
   }
 
   if (!response.ok) {
+    const record = asRecord(data);
     const message =
-      data && typeof data === "object"
-        ? data.error ?? data.message ?? data.details ?? `Request failed (${response.status}).`
+      record
+        ? record.error ?? record.message ?? record.details ?? `Request failed (${response.status}).`
         : typeof data === "string" && data.trim()
           ? data.trim()
           : `Request failed (${response.status}).`;
@@ -72,9 +73,10 @@ export async function authAdminFetcher<T>(
   }
 
   if (!response.ok) {
+    const record = asRecord(data);
     const message =
-      data && typeof data === "object"
-        ? data.error ?? data.message ?? data.details ?? `Request failed (${response.status}).`
+      record
+        ? record.error ?? record.message ?? record.details ?? `Request failed (${response.status}).`
         : typeof data === "string" && data.trim()
           ? data.trim()
           : `Request failed (${response.status}).`;
