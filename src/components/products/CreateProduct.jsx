@@ -54,8 +54,20 @@ function walkRecords(payload, target = []) {
   const record = asRecord(payload);
   if (!record) return target;
 
-  const hasId = typeof record.id === "string" || typeof record.uuid === "string";
-  const hasName = typeof record.name === "string" || typeof record.title === "string";
+  const hasId =
+    typeof record.id === "string" ||
+    typeof record.uuid === "string" ||
+    typeof record.category_id === "string" ||
+    typeof record.categoryId === "string" ||
+    typeof record.product_type_id === "string" ||
+    typeof record.type_id === "string";
+  const hasName =
+    typeof record.name === "string" ||
+    typeof record.title === "string" ||
+    typeof record.category_name === "string" ||
+    typeof record.categoryName === "string" ||
+    typeof record.type_name === "string" ||
+    typeof record.product_type === "string";
   if (hasId && hasName) target.push(record);
 
   Object.values(record).forEach((value) => walkRecords(value, target));
