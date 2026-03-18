@@ -331,7 +331,7 @@ export default function ProfilePage() {
   };
 
   const openNewsletterEditor = () => {
-    setNewsletterEmail(data.email || "");
+    setNewsletterEmail(data?.email || "");
     setNewsletterMessage("");
     setNewsletterOpen(true);
   };
