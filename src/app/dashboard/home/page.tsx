@@ -1,26 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import HomeScreen from "@/components/dashboard/HomeScreen";
-import { fetcher } from "@/components/dashboard/api";
-import { getAuth, getDisplayName } from "@/components/auth/authStorage";
-
-type UserProfile = {
-  name: string;
-};
+import { fetchCurrentUserProfile } from "@/components/auth/profileClient";
+import { getDisplayName } from "@/components/auth/authStorage";
+import { useAuthUser } from "@/components/auth/useAuthUser";
 
 export default function DashboardHomePage() {
   const { data } = useQuery({
     queryKey: ["dashboard-profile"],
-    queryFn: () => fetcher<UserProfile>("/dashboard/profile"),
+    queryFn: fetchCurrentUserProfile,
   });
-  const [storedName, setStoredName] = useState("");
-
-  useEffect(() => {
-    const auth = getAuth();
-    setStoredName(getDisplayName(auth?.user));
-  }, []);
+  const authUser = useAuthUser();
+  const storedName = getDisplayName(authUser);
 
   const userName = data?.name || storedName || "My Account";
 

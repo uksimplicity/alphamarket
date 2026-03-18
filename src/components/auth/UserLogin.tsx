@@ -73,48 +73,54 @@ export default function UserLogin() {
               return;
             }
 
-            let role: string | undefined;
-            if (
-              payload &&
-              typeof payload === "object" &&
-              "data" in payload &&
-              payload.data &&
-              typeof payload.data === "object"
-            ) {
-              const data = payload.data as {
-                user?: unknown;
-                role?: unknown;
-                access_token?: string;
-                accessToken?: string;
-                token?: string;
-                refresh_token?: string;
-                token_type?: string;
-                expires_in?: number;
-              };
-              if (data.user && typeof data.user === "object") {
-                const userObj = data.user as {
-                  role?: unknown;
-                  userRole?: unknown;
-                  account_role?: unknown;
-                };
-                role = String(
-                  userObj.role ?? userObj.userRole ?? userObj.account_role ?? ""
-                );
-              }
-              const accessToken =
-                data.access_token ?? data.accessToken ?? data.token ?? "";
-              if (data.user && accessToken) {
-                setAuth({
-                  user: data.user as Record<string, unknown>,
-                  access_token: accessToken,
-                  refresh_token: data.refresh_token,
-                  token_type: data.token_type,
-                  expires_in: data.expires_in,
-                });
-              }
-              if (!role && data.role) {
-                role = String(data.role);
-              }
+            const root =
+              payload && typeof payload === "object"
+                ? (payload as Record<string, unknown>)
+                : null;
+            const data =
+              root && root.data && typeof root.data === "object"
+                ? (root.data as Record<string, unknown>)
+                : null;
+            const userCandidate =
+              (data?.user && typeof data.user === "object"
+                ? (data.user as Record<string, unknown>)
+                : null) ??
+              (root?.user && typeof root.user === "object"
+                ? (root.user as Record<string, unknown>)
+                : null);
+            const accessToken = String(
+              data?.access_token ??
+                data?.accessToken ??
+                data?.token ??
+                root?.access_token ??
+                root?.accessToken ??
+                root?.token ??
+                ""
+            ).trim();
+            const refreshToken = String(data?.refresh_token ?? root?.refresh_token ?? "");
+            const tokenType = String(data?.token_type ?? root?.token_type ?? "");
+            const expiresIn = Number(data?.expires_in ?? root?.expires_in ?? 0);
+
+            let role = String(
+              userCandidate?.role ??
+                userCandidate?.userRole ??
+                userCandidate?.account_role ??
+                data?.role ??
+                root?.role ??
+                ""
+            );
+
+            if (userCandidate && accessToken) {
+              setAuth({
+                user: userCandidate,
+                access_token: accessToken,
+                refresh_token: refreshToken || undefined,
+                token_type: tokenType || undefined,
+                expires_in: Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : undefined,
+              });
+            } else {
+              setError("Login succeeded but no access token was returned. Please contact support.");
+              return;
             }
             const adminRoles = new Set([
               "admin",

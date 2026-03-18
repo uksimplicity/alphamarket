@@ -1,15 +1,13 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
-  type CurrentUserProfile,
+  type UpdateProfileInput,
   fetchCurrentUserProfile,
   resendPhoneVerification,
-  uploadProfilePicture,
   updateCurrentUserProfile,
+  uploadProfilePicture,
   verifyPhoneOtp,
-  type UpdateProfileInput,
 } from "@/components/auth/profileClient";
 import { Button, ErrorState, Skeleton } from "@/components/dashboard/ui";
 
@@ -21,8 +19,6 @@ type ProfileData = {
   profilePicture: string;
   addressForm: UpdateProfileInput;
   addresses: Array<{ id: string; label: string; detail: string }>;
-  preferences: Array<{ id: string; label: string; enabled: boolean }>;
-  payments: Array<{ id: string; date: string; amount: string; method: string }>;
 };
 
 const ALLOWED_PROFILE_IMAGE_EXTENSIONS = new Set([
@@ -37,9 +33,7 @@ function isAllowedProfileImage(file: File) {
   const name = file.name.toLowerCase();
   const ext = name.includes(".") ? name.split(".").pop() ?? "" : "";
   const mime = file.type.toLowerCase();
-  const mimeAllowed = mime.startsWith("image/");
-  const extAllowed = ALLOWED_PROFILE_IMAGE_EXTENSIONS.has(ext);
-  return mimeAllowed && extAllowed;
+  return mime.startsWith("image/") && ALLOWED_PROFILE_IMAGE_EXTENSIONS.has(ext);
 }
 
 function formatAddressDetail(input: UpdateProfileInput) {
@@ -48,8 +42,10 @@ function formatAddressDetail(input: UpdateProfileInput) {
     .join(", ");
 }
 
-export default function ProfilePage() {
-  const queryClient = useQueryClient();
+export default function VendorProfile() {
+  const [data, setData] = useState<ProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [addressModalOpen, setAddressModalOpen] = useState(false);
   const [addressForm, setAddressForm] = useState<UpdateProfileInput>({
     address: "",
@@ -84,9 +80,10 @@ export default function ProfilePage() {
   const [newsletterMessage, setNewsletterMessage] = useState("");
   const [failedProfilePictureSrc, setFailedProfilePictureSrc] = useState("");
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["dashboard-profile-page"],
-    queryFn: async () => {
+  const loadProfile = async () => {
+    setLoading(true);
+    setError("");
+    try {
       const profile = await fetchCurrentUserProfile();
       const addressDetail = formatAddressDetail({
         address: profile.address,
@@ -95,8 +92,7 @@ export default function ProfilePage() {
         country: profile.country,
         postalCode: profile.postalCode,
       });
-
-      return {
+      setData({
         name: profile.name,
         email: profile.email,
         phone: profile.phone,
@@ -116,13 +112,22 @@ export default function ProfilePage() {
             detail: addressDetail || "Add an address to continue.",
           },
         ],
-        preferences: [],
-        payments: [],
-      } satisfies ProfileData;
-    },
-  });
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load profile.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const addresses = Array.isArray(data?.addresses) ? data.addresses : [];
+  useEffect(() => {
+    void loadProfile();
+  }, []);
+
+  const addresses = useMemo(
+    () => (Array.isArray(data?.addresses) ? data.addresses : []),
+    [data?.addresses]
+  );
   const displayedPrimaryAddress =
     latestSavedAddress || addresses[0]?.detail || "Add an address to continue.";
   const profilePicture = data?.profilePicture ?? "";
@@ -135,205 +140,6 @@ export default function ProfilePage() {
     setAddressError("");
     setAddressSuccess("");
     setAddressModalOpen(true);
-  };
-
-  const saveProfilePicture = async () => {
-    if (!profilePictureFile) {
-      setPictureMessage("Please choose an image file first.");
-      return;
-    }
-    if (!isAllowedProfileImage(profilePictureFile)) {
-      setPictureMessage("Only .jpg, .jpeg, .png, .webp, and .gif images are allowed.");
-      return;
-    }
-
-    setPictureSaving(true);
-    setPictureMessage("");
-    try {
-      const uploadedUrl = await uploadProfilePicture(profilePictureFile);
-      await updateCurrentUserProfile({
-        profilePicture: uploadedUrl,
-      });
-      queryClient.setQueryData<ProfileData>(["dashboard-profile-page"], (prev) =>
-        prev
-          ? {
-              ...prev,
-              profilePicture: uploadedUrl,
-            }
-          : prev
-      );
-      queryClient.setQueryData<CurrentUserProfile | undefined>(
-        ["dashboard-profile"],
-        (prev) =>
-          prev
-            ? { ...prev, profilePicture: uploadedUrl }
-            : {
-                id: "",
-                name: data.name,
-                email: data.email,
-                phone: data.phone,
-                phoneVerified: data.phoneVerified,
-                role: "",
-                address: "",
-                city: "",
-                state: "",
-                country: "",
-                postalCode: "",
-                profilePicture: uploadedUrl,
-              }
-      );
-      setPictureMessage("Profile picture updated.");
-      setProfilePictureFile(null);
-      await refetch();
-    } catch (err) {
-      setPictureMessage(err instanceof Error ? err.message : "Failed to update profile picture.");
-    } finally {
-      setPictureSaving(false);
-    }
-  };
-
-  const openPhoneVerification = () => {
-    setPhoneOtp("");
-    setPhoneVerifyMessage("");
-    setPhoneVerifyOpen(true);
-  };
-
-  const openChangePhone = () => {
-    setNewPhone("");
-    setNewPhoneOtp("");
-    setChangePhoneMessage("");
-    setChangePhoneOpen(true);
-  };
-
-  const submitPhoneVerification = async () => {
-    if (!phoneOtp.trim()) {
-      setPhoneVerifyMessage("Enter the OTP sent to your phone.");
-      return;
-    }
-    setPhoneVerifyLoading(true);
-    setPhoneVerifyMessage("");
-    try {
-      await verifyPhoneOtp(data.phone, phoneOtp.trim(), data.email);
-      queryClient.setQueryData<ProfileData>(["dashboard-profile-page"], (prev) =>
-        prev ? { ...prev, phoneVerified: true } : prev
-      );
-      queryClient.setQueryData<CurrentUserProfile | undefined>(
-        ["dashboard-profile"],
-        (prev) => (prev ? { ...prev, phoneVerified: true } : prev)
-      );
-      setPhoneVerifyMessage("Phone number verified successfully.");
-      setPhoneVerifyOpen(false);
-      await refetch();
-    } catch (err) {
-      setPhoneVerifyMessage(
-        err instanceof Error ? err.message : "Failed to verify phone number."
-      );
-    } finally {
-      setPhoneVerifyLoading(false);
-    }
-  };
-
-  const resendPhoneOtp = async () => {
-    setPhoneResendLoading(true);
-    setPhoneVerifyMessage("");
-    try {
-      await resendPhoneVerification(data.phone, data.email);
-      setPhoneVerifyMessage("OTP resent successfully.");
-    } catch (err) {
-      setPhoneVerifyMessage(err instanceof Error ? err.message : "Failed to resend OTP.");
-    } finally {
-      setPhoneResendLoading(false);
-    }
-  };
-
-  const sendNewPhoneOtp = async () => {
-    if (!newPhone.trim()) {
-      setChangePhoneMessage("Enter the new phone number first.");
-      return;
-    }
-    setChangePhoneResendLoading(true);
-    setChangePhoneMessage("");
-    try {
-      await resendPhoneVerification(newPhone.trim(), data.email);
-      setChangePhoneMessage("OTP sent to the new phone number.");
-    } catch (err) {
-      setChangePhoneMessage(err instanceof Error ? err.message : "Failed to send OTP.");
-    } finally {
-      setChangePhoneResendLoading(false);
-    }
-  };
-
-  const verifyAndSaveNewPhone = async () => {
-    if (!newPhone.trim()) {
-      setChangePhoneMessage("Enter a new phone number.");
-      return;
-    }
-    if (!newPhoneOtp.trim()) {
-      setChangePhoneMessage("Enter OTP to verify this number.");
-      return;
-    }
-
-    setChangePhoneLoading(true);
-    setChangePhoneMessage("");
-    try {
-      await verifyPhoneOtp(newPhone.trim(), newPhoneOtp.trim(), data.email);
-      await updateCurrentUserProfile({ phone: newPhone.trim() });
-
-      queryClient.setQueryData<ProfileData>(["dashboard-profile-page"], (prev) =>
-        prev
-          ? {
-              ...prev,
-              phone: newPhone.trim(),
-              phoneVerified: true,
-            }
-          : prev
-      );
-
-      queryClient.setQueryData<CurrentUserProfile | undefined>(
-        ["dashboard-profile"],
-        (prev) =>
-          prev
-            ? {
-                ...prev,
-                phone: newPhone.trim(),
-                phoneVerified: true,
-              }
-            : prev
-      );
-
-      setChangePhoneMessage("Phone number changed and verified.");
-      setChangePhoneOpen(false);
-      await refetch();
-    } catch (err) {
-      setChangePhoneMessage(
-        err instanceof Error ? err.message : "Failed to change phone number."
-      );
-    } finally {
-      setChangePhoneLoading(false);
-    }
-  };
-
-  const openNewsletterEditor = () => {
-    setNewsletterEmail(data.email || "");
-    setNewsletterMessage("");
-    setNewsletterOpen(true);
-  };
-
-  const saveNewsletterEmail = async () => {
-    const email = newsletterEmail.trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setNewsletterMessage("Enter a valid email address.");
-      return;
-    }
-    setNewsletterSaving(true);
-    setNewsletterMessage("");
-    try {
-      // UI-level newsletter preference capture.
-      setNewsletterMessage("Newsletter email saved successfully.");
-      setNewsletterOpen(false);
-    } finally {
-      setNewsletterSaving(false);
-    }
   };
 
   const openAddAddress = () => {
@@ -357,25 +163,25 @@ export default function ProfilePage() {
     setAddressSuccess("");
     try {
       await updateCurrentUserProfile(addressForm);
-      const nextDetail = formatAddressDetail(addressForm);
-      const safeDetail = nextDetail || "Add an address to continue.";
-      setLatestSavedAddress(safeDetail);
+      const nextDetail = formatAddressDetail(addressForm) || "Add an address to continue.";
+      setLatestSavedAddress(nextDetail);
       setLatestSavedForm({ ...addressForm });
-      queryClient.setQueryData<ProfileData>(["dashboard-profile-page"], (prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          addressForm: { ...addressForm },
-          addresses: [
-            {
-              id: prev.addresses[0]?.id ?? "default",
-              label: prev.addresses[0]?.label ?? "Primary Address",
-              detail: safeDetail,
-            },
-          ],
-        };
-      });
-      await refetch();
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              addressForm: { ...addressForm },
+              addresses: [
+                {
+                  id: prev.addresses[0]?.id ?? "default",
+                  label: prev.addresses[0]?.label ?? "Primary Address",
+                  detail: nextDetail,
+                },
+              ],
+            }
+          : prev
+      );
+      await loadProfile();
       setAddressSuccess("Address updated successfully.");
       setAddressModalOpen(false);
     } catch (err) {
@@ -385,7 +191,157 @@ export default function ProfilePage() {
     }
   };
 
-  if (isLoading) {
+  const saveProfilePicture = async () => {
+    if (!profilePictureFile) {
+      setPictureMessage("Please choose an image file first.");
+      return;
+    }
+    if (!isAllowedProfileImage(profilePictureFile)) {
+      setPictureMessage("Only .jpg, .jpeg, .png, .webp, and .gif images are allowed.");
+      return;
+    }
+    setPictureSaving(true);
+    setPictureMessage("");
+    try {
+      const uploadedUrl = await uploadProfilePicture(profilePictureFile);
+      await updateCurrentUserProfile({ profilePicture: uploadedUrl });
+      setData((prev) => (prev ? { ...prev, profilePicture: uploadedUrl } : prev));
+      setPictureMessage("Profile picture updated.");
+      setProfilePictureFile(null);
+      await loadProfile();
+    } catch (err) {
+      setPictureMessage(err instanceof Error ? err.message : "Failed to update profile picture.");
+    } finally {
+      setPictureSaving(false);
+    }
+  };
+
+  const openPhoneVerification = () => {
+    setPhoneOtp("");
+    setPhoneVerifyMessage("");
+    setPhoneVerifyOpen(true);
+  };
+
+  const submitPhoneVerification = async () => {
+    if (!data) return;
+    if (!phoneOtp.trim()) {
+      setPhoneVerifyMessage("Enter the OTP sent to your phone.");
+      return;
+    }
+    setPhoneVerifyLoading(true);
+    setPhoneVerifyMessage("");
+    try {
+      await verifyPhoneOtp(data.phone, phoneOtp.trim(), data.email);
+      setData((prev) => (prev ? { ...prev, phoneVerified: true } : prev));
+      setPhoneVerifyMessage("Phone number verified successfully.");
+      setPhoneVerifyOpen(false);
+      await loadProfile();
+    } catch (err) {
+      setPhoneVerifyMessage(
+        err instanceof Error ? err.message : "Failed to verify phone number."
+      );
+    } finally {
+      setPhoneVerifyLoading(false);
+    }
+  };
+
+  const resendPhoneOtp = async () => {
+    if (!data) return;
+    setPhoneResendLoading(true);
+    setPhoneVerifyMessage("");
+    try {
+      await resendPhoneVerification(data.phone, data.email);
+      setPhoneVerifyMessage("OTP resent successfully.");
+    } catch (err) {
+      setPhoneVerifyMessage(err instanceof Error ? err.message : "Failed to resend OTP.");
+    } finally {
+      setPhoneResendLoading(false);
+    }
+  };
+
+  const openChangePhone = () => {
+    setNewPhone("");
+    setNewPhoneOtp("");
+    setChangePhoneMessage("");
+    setChangePhoneOpen(true);
+  };
+
+  const sendNewPhoneOtp = async () => {
+    if (!data) return;
+    if (!newPhone.trim()) {
+      setChangePhoneMessage("Enter the new phone number first.");
+      return;
+    }
+    setChangePhoneResendLoading(true);
+    setChangePhoneMessage("");
+    try {
+      await resendPhoneVerification(newPhone.trim(), data.email);
+      setChangePhoneMessage("OTP sent to the new phone number.");
+    } catch (err) {
+      setChangePhoneMessage(err instanceof Error ? err.message : "Failed to send OTP.");
+    } finally {
+      setChangePhoneResendLoading(false);
+    }
+  };
+
+  const verifyAndSaveNewPhone = async () => {
+    if (!data) return;
+    if (!newPhone.trim()) {
+      setChangePhoneMessage("Enter a new phone number.");
+      return;
+    }
+    if (!newPhoneOtp.trim()) {
+      setChangePhoneMessage("Enter OTP to verify this number.");
+      return;
+    }
+
+    setChangePhoneLoading(true);
+    setChangePhoneMessage("");
+    try {
+      await verifyPhoneOtp(newPhone.trim(), newPhoneOtp.trim(), data.email);
+      await updateCurrentUserProfile({ phone: newPhone.trim() });
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              phone: newPhone.trim(),
+              phoneVerified: true,
+            }
+          : prev
+      );
+      setChangePhoneMessage("Phone number changed and verified.");
+      setChangePhoneOpen(false);
+      await loadProfile();
+    } catch (err) {
+      setChangePhoneMessage(err instanceof Error ? err.message : "Failed to change phone number.");
+    } finally {
+      setChangePhoneLoading(false);
+    }
+  };
+
+  const openNewsletterEditor = () => {
+    setNewsletterEmail(data?.email ?? "");
+    setNewsletterMessage("");
+    setNewsletterOpen(true);
+  };
+
+  const saveNewsletterEmail = async () => {
+    const email = newsletterEmail.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setNewsletterMessage("Enter a valid email address.");
+      return;
+    }
+    setNewsletterSaving(true);
+    setNewsletterMessage("");
+    try {
+      setNewsletterMessage("Newsletter email saved successfully.");
+      setNewsletterOpen(false);
+    } finally {
+      setNewsletterSaving(false);
+    }
+  };
+
+  if (loading) {
     return (
       <div className="grid gap-6">
         <Skeleton className="h-10" />
@@ -395,12 +351,7 @@ export default function ProfilePage() {
   }
 
   if (error || !data) {
-    return (
-      <ErrorState
-        message={error instanceof Error ? error.message : "Failed to load profile."}
-        onRetry={refetch}
-      />
-    );
+    return <ErrorState message={error || "Failed to load profile."} onRetry={loadProfile} />;
   }
 
   return (
@@ -436,9 +387,7 @@ export default function ProfilePage() {
                     type="file"
                     accept=".jpg,.jpeg,.png,.webp,.gif,image/jpeg,image/png,image/webp,image/gif"
                     className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-700 hover:file:bg-slate-200"
-                    onChange={(event) =>
-                      setProfilePictureFile(event.target.files?.[0] ?? null)
-                    }
+                    onChange={(event) => setProfilePictureFile(event.target.files?.[0] ?? null)}
                   />
                   {profilePictureFile ? (
                     <div className="mt-1 text-[11px] text-slate-500">
@@ -537,7 +486,7 @@ export default function ProfilePage() {
               </span>
               <div>
                 <div className="font-semibold text-slate-900">Alpha store credit balance (verified):</div>
-                <div>₦ 0</div>
+                <div>N 0</div>
               </div>
             </div>
           </div>
@@ -550,11 +499,7 @@ export default function ProfilePage() {
               <div>
                 Manage your email communications to stay updated with the latest news and offers.
               </div>
-              <Button
-                className="h-8 px-3 text-xs"
-                variant="ghost"
-                onClick={openNewsletterEditor}
-              >
+              <Button className="h-8 px-3 text-xs" variant="ghost" onClick={openNewsletterEditor}>
                 Edit newsletter preferences
               </Button>
               {newsletterMessage ? (
@@ -564,6 +509,7 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
       {addressModalOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/45 px-4">
           <form
@@ -640,13 +586,12 @@ export default function ProfilePage() {
           </form>
         </div>
       ) : null}
+
       {phoneVerifyOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/45 px-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
             <div className="mb-2 text-lg font-semibold text-slate-900">Verify Phone Number</div>
-            <p className="mb-4 text-sm text-slate-600">
-              Enter the OTP sent to {data.phone}.
-            </p>
+            <p className="mb-4 text-sm text-slate-600">Enter the OTP sent to {data.phone}.</p>
             <input
               className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-brand"
               placeholder="Enter OTP"
@@ -687,6 +632,7 @@ export default function ProfilePage() {
           </div>
         </div>
       ) : null}
+
       {changePhoneOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/45 px-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
@@ -742,12 +688,11 @@ export default function ProfilePage() {
           </div>
         </div>
       ) : null}
+
       {newsletterOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/45 px-4">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
-            <div className="mb-2 text-lg font-semibold text-slate-900">
-              Newsletter Email
-            </div>
+            <div className="mb-2 text-lg font-semibold text-slate-900">Newsletter Email</div>
             <p className="mb-4 text-sm text-slate-600">
               Enter the email you want to use for newsletter updates.
             </p>
@@ -784,6 +729,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
-
-

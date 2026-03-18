@@ -3,6 +3,8 @@ import { Link, useLocation } from "react-router-dom";
 
 const items = [
   { label: "All Products", href: "/vendor/products" },
+  { label: "Create Product", href: "/vendor/products/create" },
+  { label: "Product Type", href: "/vendor/products/types" },
   { label: "Draft Products", href: "/vendor/products/draft" },
   { label: "Stock Products", href: "/vendor/products/stock" },
   { label: "Product Review", href: "/vendor/products/review" },

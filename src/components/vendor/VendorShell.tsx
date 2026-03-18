@@ -21,13 +21,13 @@ type VendorProfile = {
 
 const sellerSections: Array<{ title: string; items: NavItem[] }> = [
   {
-    title: "Products",
-    items: [
-      { label: "All Products", href: "/vendor/products" },
-      { label: "Create Product", href: "/vendor/products/create" },
-      { label: "Draft Products", href: "/vendor/products/draft" },
-      { label: "Stock Products", href: "/vendor/products/stock" },
-      { label: "Add Stock", href: "/vendor/products/stock/add" },
+      title: "Products",
+      items: [
+        { label: "All Products", href: "/vendor/products" },
+        { label: "Create Product", href: "/vendor/products/create" },
+        { label: "Draft Products", href: "/vendor/products/draft" },
+        { label: "Stock Products", href: "/vendor/products/stock" },
+        { label: "Add Stock", href: "/vendor/products/stock/add" },
       { label: "Review Queue", href: "/vendor/products/review" },
       { label: "Boost Product", href: "#" },
     ],
@@ -265,13 +265,12 @@ export default function VendorShell() {
 
         <div className={styles.navGroup}>
           <div className={styles.navLabel}>Account</div>
-          <button
-            type="button"
-            className={styles.settingsBtn}
-            onClick={() => setShowSettings(true)}
-          >
+          <Link to="/vendor/store" className={styles.settingsBtn}>
+            My Store
+          </Link>
+          <Link to="/vendor/profile" className={styles.settingsBtn}>
             Profile
-          </button>
+          </Link>
           <button
             type="button"
             className={styles.settingsBtn}
@@ -312,16 +311,15 @@ export default function VendorShell() {
               </div>
               <span className={styles.caret}>v</span>
               <div className={styles.profileDropdown}>
-                <button
-                  type="button"
+                <Link
                   className={styles.profileItem}
+                  to="/vendor/profile"
                   onClick={() => {
                     setProfileOpen(false);
-                    setShowSettings(true);
                   }}
                 >
                   Profile
-                </button>
+                </Link>
                 <Link className={styles.profileItem} to="/login">
                   Logout
                 </Link>
@@ -393,7 +391,7 @@ export default function VendorShell() {
           </span>
           Inbox
         </button>
-        <button className={styles.mobileNavItem} type="button">
+        <Link className={styles.mobileNavItem} to="/vendor/profile">
           <span className={styles.mobileNavIcon}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <circle
@@ -414,7 +412,7 @@ export default function VendorShell() {
             </svg>
           </span>
           Account
-        </button>
+        </Link>
       </nav>
       {showSettings ? (
         <div className={styles.settingsModal}>

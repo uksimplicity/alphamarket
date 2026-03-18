@@ -1,12 +1,17 @@
 import type { NextRequest } from "next/server";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
+const API_ROOT_BASE = API_BASE.endsWith("/api/v1") ? API_BASE.slice(0, -"/api/v1".length) : API_BASE;
+const API_BASE_CANDIDATES = Array.from(new Set([API_BASE, `${API_ROOT_BASE}/api/v1`, API_ROOT_BASE]));
 
 function buildHeaders(req: NextRequest, hasBody: boolean) {
   const authHeader = req.headers.get("authorization") ?? "";
+  const cookieHeader = req.headers.get("cookie") ?? "";
   const headers: Record<string, string> = {
     Accept: "application/json",
     ...(authHeader ? { Authorization: authHeader } : {}),
+    ...(cookieHeader ? { Cookie: cookieHeader } : {}),
   };
   if (hasBody) {
     headers["Content-Type"] = "application/json";
@@ -32,22 +37,56 @@ async function forwardRequest(
   const headers = buildHeaders(req, hasBody);
   const joinedPath = pathParts.join("/");
 
-  const primaryUrl = `${API_BASE}/admin/${joinedPath}${search}`;
-  let res = await fetch(primaryUrl, {
-    method,
-    headers,
-    body: body || undefined,
-    cache: "no-store",
-  });
+  const candidateUrls = API_BASE_CANDIDATES.map(
+    (base) => `${base}/admin/${joinedPath}${search}`
+  );
 
-  if (res.status === 404 && joinedPath === "dashboard") {
-    const fallbackUrl = `${API_BASE}/admin/dashboard/stats${search}`;
-    res = await fetch(fallbackUrl, {
+  let res: Response | null = null;
+  let upstreamErrorRes: Response | null = null;
+
+  for (const url of candidateUrls) {
+    const attempt = await fetch(url, {
       method,
       headers,
       body: body || undefined,
       cache: "no-store",
     });
+    if (attempt.status === 404) continue;
+    if (attempt.status >= 500) {
+      upstreamErrorRes = attempt;
+      continue;
+    }
+    res = attempt;
+    break;
+  }
+
+  if (!res) {
+    res = upstreamErrorRes;
+  }
+
+  if ((!res || res.status === 404) && joinedPath === "dashboard") {
+    const fallbackUrls = API_BASE_CANDIDATES.map(
+      (base) => `${base}/admin/dashboard/stats${search}`
+    );
+    for (const fallbackUrl of fallbackUrls) {
+      const attempt = await fetch(fallbackUrl, {
+        method,
+        headers,
+        body: body || undefined,
+        cache: "no-store",
+      });
+      if (attempt.status !== 404) {
+        res = attempt;
+        break;
+      }
+    }
+  }
+
+  if (!res) {
+    return new Response(
+      JSON.stringify({ error: "Admin endpoint unavailable." }),
+      { status: 502, headers: { "Content-Type": "application/json" } }
+    );
   }
 
   const text = await res.text();

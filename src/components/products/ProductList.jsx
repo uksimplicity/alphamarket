@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
 
+const LOCAL_CREATED_PRODUCTS_KEY = "alpha.createdProducts";
+const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
+
 export default function ProductList({
   onView = (id) => {},
   onEdit = (id) => {},
@@ -145,6 +148,20 @@ export default function ProductList({
         throw new Error(String(message));
       }
       setRows((prev) => prev.filter((item) => item.id !== id));
+      try {
+        const raw = localStorage.getItem(LOCAL_CREATED_PRODUCTS_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        const list = Array.isArray(parsed) ? parsed : [];
+        const next = list.filter((item) => String(item?.id) !== String(id));
+        localStorage.setItem(LOCAL_CREATED_PRODUCTS_KEY, JSON.stringify(next));
+        window.dispatchEvent(
+          new CustomEvent(LOCAL_PRODUCTS_UPDATED_EVENT, {
+            detail: { deletedId: id },
+          })
+        );
+      } catch {
+        // ignore local storage cleanup issues
+      }
       onDelete(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed.");

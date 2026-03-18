@@ -65,8 +65,12 @@ function walkRecords(payload, target = []) {
 function parseOptions(payload) {
   return walkRecords(payload, [])
     .map((row) => ({
-      id: String(row.id ?? row.uuid ?? "").trim(),
-      name: String(row.name ?? row.title ?? "").trim(),
+      id: String(row.id ?? row.uuid ?? row.category_id ?? row.categoryId ?? row.product_type_id ?? row.type_id ?? "").trim(),
+      name: String(
+        row.name ?? row.title ?? row.category_name ?? row.categoryName ?? row.type_name ?? row.product_type ?? ""
+      ).trim(),
+      categoryId: String(row.category_id ?? row.categoryId ?? "").trim(),
+      categoryName: String(row.category_name ?? row.categoryName ?? "").trim(),
     }))
     .filter((row) => row.id && row.name);
 }
@@ -81,6 +85,11 @@ function validateFileSize(file, label, maxMb = 3) {
 }
 
 const LOCAL_CREATED_PRODUCTS_KEY = "alpha.createdProducts";
+const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
+const ADMIN_CATEGORIES_CACHE_KEY = "alpha.admin.categories";
+const ADMIN_PRODUCT_TYPES_CACHE_KEY = "alpha.admin.product-types";
+const MAX_PRODUCT_PRICE = 1000000000;
+const MAX_PRODUCT_STOCK = 1000000;
 
 function persistCreatedProduct(product) {
   if (typeof window === "undefined" || !product) return;
@@ -97,8 +106,49 @@ function persistCreatedProduct(product) {
       ...list.filter((item) => String(item?.id) !== String(normalized.id)),
     ].slice(0, 200);
     localStorage.setItem(LOCAL_CREATED_PRODUCTS_KEY, JSON.stringify(merged));
+    window.dispatchEvent(new Event(LOCAL_PRODUCTS_UPDATED_EVENT));
   } catch {
     // ignore local storage errors
+  }
+}
+
+function readCachedAdminCategories() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(ADMIN_CATEGORIES_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        const id = String(item?.id ?? "").trim();
+        const name = String(item?.name ?? "").trim();
+        return { id, name };
+      })
+      .filter((item) => item.id && item.name);
+  } catch {
+    return [];
+  }
+}
+
+function readCachedAdminProductTypes() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(ADMIN_PRODUCT_TYPES_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        const id = String(item?.id ?? "").trim();
+        const name = String(item?.name ?? "").trim();
+        const categoryId = String(item?.categoryId ?? "").trim();
+        const categoryName = String(item?.categoryName ?? "").trim();
+        return { id, name, categoryId, categoryName };
+      })
+      .filter((item) => item.id && item.name);
+  } catch {
+    return [];
   }
 }
 
@@ -152,12 +202,18 @@ export default function CreateProduct({ mode = "seller" }) {
         ]);
         if (!isMounted) return;
 
-        setCategoryOptions(parseOptions(categories));
-        setTypeOptions(parseOptions(productTypes));
+        const apiCategories = parseOptions(categories);
+        const cachedCategories = readCachedAdminCategories();
+        setCategoryOptions(apiCategories.length > 0 ? apiCategories : cachedCategories);
+        const apiProductTypes = parseOptions(productTypes);
+        const cachedProductTypes = readCachedAdminProductTypes();
+        setTypeOptions(apiProductTypes.length > 0 ? apiProductTypes : cachedProductTypes);
         setBrandOptions(parseOptions(brands));
         setTagOptions(parseOptions(tags));
       } catch (loadError) {
         if (!isMounted) return;
+        setCategoryOptions(readCachedAdminCategories());
+        setTypeOptions(readCachedAdminProductTypes());
         setCatalogError(
           loadError instanceof Error ? loadError.message : "Failed to load seller catalog options."
         );
@@ -281,16 +337,32 @@ export default function CreateProduct({ mode = "seller" }) {
       setError("Product name is required.");
       return;
     }
-    if (!form.category.trim() || !isUuid(form.category.trim())) {
-      setError("Category must be selected with a valid UUID.");
+    if (!form.category.trim()) {
+      setError("Please select a category.");
       return;
     }
-    if (!form.type.trim() || !isUuid(form.type.trim())) {
-      setError("Product type must be selected with a valid UUID.");
+    if (!form.type.trim()) {
+      setError("Please select a product type.");
       return;
     }
     if (!form.basePrice.trim() || Number(form.basePrice) <= 0) {
       setError("Base price must be greater than 0.");
+      return;
+    }
+    if (Number(form.basePrice) > MAX_PRODUCT_PRICE) {
+      setError(`Base price is too large. Maximum allowed is ${MAX_PRODUCT_PRICE.toLocaleString()}.`);
+      return;
+    }
+    if (form.stock !== "" && Number(form.stock) > MAX_PRODUCT_STOCK) {
+      setError(`Stock is too large. Maximum allowed is ${MAX_PRODUCT_STOCK.toLocaleString()}.`);
+      return;
+    }
+    if (form.stock !== "" && Number(form.stock) < 0) {
+      setError("Stock cannot be negative.");
+      return;
+    }
+    if (!form.shortDescription.trim()) {
+      setError("Product description is required.");
       return;
     }
     if (form.brand.trim() && !isUuid(form.brand.trim())) {
@@ -406,7 +478,7 @@ export default function CreateProduct({ mode = "seller" }) {
       payload.media.video = videoUrl;
 
       const createEndpoint =
-        mode === "admin" ? "/api/auth/admin/products" : "/api/seller/products";
+        mode === "admin" ? "/api/admin/products" : "/api/seller/products";
 
       const response = await fetch(createEndpoint, {
         method: "POST",
@@ -523,13 +595,9 @@ export default function CreateProduct({ mode = "seller" }) {
                   ))}
                 </select>
                 {!catalogLoading && !hasCategoryOptions ? (
-                  <input
-                    name="category"
-                    value={form.category}
-                    onChange={handleChange}
-                    placeholder="Paste Category UUID"
-                    className="mt-2"
-                  />
+                  <div className="mt-2 text-xs text-slate-500">
+                    No categories available yet. Ask admin to create categories first.
+                  </div>
                 ) : null}
               </div>
               <div className="field">
@@ -545,13 +613,9 @@ export default function CreateProduct({ mode = "seller" }) {
                   ))}
                 </select>
                 {!catalogLoading && !hasTypeOptions ? (
-                  <input
-                    name="type"
-                    value={form.type}
-                    onChange={handleChange}
-                    placeholder="Paste Product Type UUID"
-                    className="mt-2"
-                  />
+                  <div className="mt-2 text-xs text-slate-500">
+                    No product types available yet. Ask admin to create product types first.
+                  </div>
                 ) : null}
               </div>
               <div className="field">

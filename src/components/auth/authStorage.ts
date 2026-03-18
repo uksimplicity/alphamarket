@@ -56,3 +56,16 @@ export function getDisplayName(user?: AuthUser | null) {
   return full || user.email || "Account";
 }
 
+export function isSellerRole(role?: string | null) {
+  if (!role) return false;
+  const normalized = role.trim().toLowerCase();
+  return normalized === "seller" || normalized === "vendor";
+}
+
+export function getProfilePath(user?: AuthUser | null) {
+  return isSellerRole(user?.role) ? "/vendor/profile" : "/dashboard/profile";
+}
+
+export function getDashboardPath(user?: AuthUser | null) {
+  return isSellerRole(user?.role) ? "/vendor" : "/dashboard/home";
+}

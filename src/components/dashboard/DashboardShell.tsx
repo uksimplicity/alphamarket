@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { fetcher } from "@/components/dashboard/api";
-import { clearAuth, getAuth, getDisplayName } from "@/components/auth/authStorage";
+import { fetchCurrentUserProfile } from "@/components/auth/profileClient";
+import { clearAuth, getDisplayName } from "@/components/auth/authStorage";
+import { useAuthUser } from "@/components/auth/useAuthUser";
 import { useCartCount } from "@/components/commerce/store";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import styles from "@/app/page.module.css";
 
@@ -21,6 +22,29 @@ const topNavItems = [
 ];
 
 const accountNavItems = [
+  {
+    label: "Profile",
+    href: "/dashboard/profile",
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+        <circle
+          cx="12"
+          cy="8"
+          r="4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+        />
+        <path
+          d="M4 20c1.8-4 13.2-4 16 0"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+      </svg>
+    ),
+  },
   {
     label: "Orders",
     href: "/dashboard/orders",
@@ -141,37 +165,19 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { data: profile } = useQuery({
     queryKey: ["dashboard-profile"],
-    queryFn: () => fetcher<{ name: string }>("/dashboard/profile"),
+    queryFn: fetchCurrentUserProfile,
   });
-  const [userName, setUserName] = useState("");
-  const [userDetails, setUserDetails] = useState<{
-    email?: string;
-    phone?: string;
-    role?: string;
-    first_name?: string;
-    last_name?: string;
-  } | null>(null);
+  const authUser = useAuthUser();
+  const userDetails = authUser;
+  const userName = getDisplayName(authUser);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [failedAvatarSrc, setFailedAvatarSrc] = useState("");
   const cartCount = useCartCount();
-
-  useEffect(() => {
-    const auth = getAuth();
-    setUserName(getDisplayName(auth?.user));
-    setUserDetails(auth?.user ?? null);
-
-    function onStorage(e: StorageEvent) {
-      if (e.key === "alpha.auth") {
-        const nextAuth = getAuth();
-        setUserName(getDisplayName(nextAuth?.user));
-        setUserDetails(nextAuth?.user ?? null);
-      }
-    }
-
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  const avatarUrl = profile?.profilePicture?.trim() ?? "";
+  const showAvatarImage = Boolean(avatarUrl) && failedAvatarSrc !== avatarUrl;
+  const fullName = profile?.name?.trim() || userName || "My Account";
 
   if (pathname === "/dashboard/home") {
     return (
@@ -226,18 +232,27 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
             href="/"
             className="mt-4 flex items-center gap-3 bg-slate-200/80 px-5 py-4 text-sm font-semibold text-slate-800"
           >
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white">
-              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
-                <path
-                  d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm-7 9a7 7 0 0 1 14 0"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </span>
-            {userName || profile?.name || "My Alpha Account"}
+            {showAvatarImage ? (
+              <img
+                src={avatarUrl}
+                alt="Profile avatar"
+                className="h-8 w-8 shrink-0 rounded-full border border-slate-300 object-cover object-center"
+                onError={() => setFailedAvatarSrc(avatarUrl)}
+              />
+            ) : (
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white">
+                <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+                  <path
+                    d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm-7 9a7 7 0 0 1 14 0"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+            )}
+            {fullName}
           </Link>
           <nav className="flex flex-col">
             {accountNavItems.map((item) => {
@@ -378,26 +393,35 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
                     onClick={() => setUserMenuOpen((prev) => !prev)}
                     aria-expanded={userMenuOpen}
                   >
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700">
-                      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
-                        <circle
-                          cx="12"
-                          cy="8"
-                          r="4"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                        />
-                        <path
-                          d="M4 20c1.8-4 13.2-4 16 0"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                        />
-                      </svg>
-                    </span>
+                    {showAvatarImage ? (
+                      <img
+                        src={avatarUrl}
+                        alt="Profile avatar"
+                        className="h-10 w-10 shrink-0 rounded-full border border-slate-200 object-cover object-center"
+                        onError={() => setFailedAvatarSrc(avatarUrl)}
+                      />
+                    ) : (
+                      <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+                          <circle
+                            cx="12"
+                            cy="8"
+                            r="4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                          />
+                          <path
+                            d="M4 20c1.8-4 13.2-4 16 0"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                          />
+                        </svg>
+                      </span>
+                    )}
                     <span className="text-sm text-slate-700">
-                      {userName || profile?.name || "My Account"}
+                      {fullName}
                     </span>
                     <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-[10px] text-slate-500">
                       ▾
@@ -561,7 +585,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
               <div className="flex items-center justify-between gap-4">
                 <span className="text-slate-500">Name</span>
                 <span>
-                  {userName || "My Account"}
+                  {fullName}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">

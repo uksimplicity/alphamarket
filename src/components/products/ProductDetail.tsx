@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { addToCart, formatCurrency, parsePrice, useCartCount } from "@/components/commerce/store";
 import { Button, Card, SectionTitle } from "@/components/dashboard/ui";
 import { extendedCatalog, type Product } from "@/components/products/catalog";
+import { getStoreProfileBySlug, subscribeStoreProfiles } from "@/components/store/storeProfileClient";
 import styles from "@/app/page.module.css";
 import CartAddedModal from "@/components/commerce/CartAddedModal";
 
@@ -22,6 +23,15 @@ export default function ProductDetail({
   const [offerAmount, setOfferAmount] = useState("");
   const [cartModalOpen, setCartModalOpen] = useState(false);
   const [cartModalName, setCartModalName] = useState("");
+  const productLocation =
+    typeof (product as Product & { location?: string }).location === "string"
+      ? String((product as Product & { location?: string }).location)
+      : "";
+  const [storeName, setStoreName] = useState(product.seller.name);
+  const [storeLogo, setStoreLogo] = useState("");
+  const [storeLocation, setStoreLocation] = useState(
+    productLocation
+  );
   const cartCount = useCartCount();
   const relatedProducts = extendedCatalog
     .filter((entry) => entry.id !== product.id)
@@ -31,6 +41,18 @@ export default function ProductDetail({
     setCartModalName(product.title);
     setCartModalOpen(true);
   };
+
+  useEffect(() => {
+    const refreshStoreMeta = () => {
+      const profile = getStoreProfileBySlug(product.seller.slug);
+      setStoreName(profile?.name || product.seller.name);
+      setStoreLogo(profile?.logoFallbackDataUrl || profile?.logoUrl || "");
+      setStoreLocation(profile?.location || "");
+    };
+
+    refreshStoreMeta();
+    return subscribeStoreProfiles(refreshStoreMeta);
+  }, [product.seller.name, product.seller.slug]);
 
   return (
     <div className={`space-y-10 ${styles.detailPage}`}>
@@ -99,6 +121,11 @@ export default function ProductDetail({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h1 className={styles.detailTitle}>{product.title}</h1>
+                  {product.badge ? (
+                    <div className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
+                      {product.badge}
+                    </div>
+                  ) : null}
                   <div className="mt-2 text-sm text-slate-500">
                     Rated {product.rating} - {product.reviews} reviews
                   </div>
@@ -168,9 +195,13 @@ export default function ProductDetail({
             <Card>
               <div className="text-xs font-semibold uppercase text-slate-400">Seller</div>
               <div className="mt-3 flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-slate-200" />
+                <div className="h-12 w-12 overflow-hidden rounded-full bg-slate-200">
+                  {storeLogo ? (
+                    <img src={storeLogo} alt={`${storeName} logo`} className="h-full w-full object-cover" />
+                  ) : null}
+                </div>
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">{product.seller.name}</div>
+                  <div className="text-sm font-semibold text-slate-900">{storeName}</div>
                   <div className="text-xs text-slate-400">*****</div>
                 </div>
               </div>
@@ -199,6 +230,10 @@ export default function ProductDetail({
                   {showPhone ? "Hide" : "Show"}
                 </button>
               </div>
+              <div className="mt-3 rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-600">
+                <span className="font-semibold text-slate-800">Location: </span>
+                {productLocation || storeLocation || "Lagos"}
+              </div>
               <div className="mt-3 text-center text-xs text-slate-400">OR SEND THE SELLER A MESSAGE</div>
               <Button
                 variant="primary"
@@ -213,7 +248,7 @@ export default function ProductDetail({
           <div className={styles.detailCard}>
             <Card>
               <div className="text-sm font-semibold text-slate-900">
-                Boost your Product's Reach!
+                Boost your Product&apos;s Reach!
               </div>
               <p className="mt-2 text-sm text-slate-600">
                 Get your product in front of more buyers and maximize sales with
@@ -228,7 +263,7 @@ export default function ProductDetail({
           <div className={styles.detailCard}>
             <Card>
               <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50 p-4 text-sm text-amber-700">
-                Safety tips: Meet face to face, never send payment for items you haven't
+                Safety tips: Meet face to face, never send payment for items you haven&apos;t
                 seen.
               </div>
             </Card>
@@ -283,7 +318,7 @@ export default function ProductDetail({
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
               <div>
                 <div className="text-sm font-semibold text-slate-900">Chat with seller</div>
-                <div className="text-xs text-slate-500">{product.seller.name}</div>
+                <div className="text-xs text-slate-500">{storeName}</div>
               </div>
               <button
                 type="button"

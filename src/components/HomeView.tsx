@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages, react/no-unescaped-entities */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -62,8 +63,50 @@ type ProductCardProps = {
 };
 
 type LiveProductRecord = Record<string, unknown>;
+type DiscoverableProduct = Product & {
+  category?: string;
+  location?: string;
+  createdAt?: number;
+  popularity?: number;
+};
 
-function normalizeLiveProduct(input: LiveProductRecord, index: number): Product {
+const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
+const PAGE_SIZE = 12;
+const FALLBACK_BASE_CREATED_AT = 1735689600000;
+
+function inferLocation(seed: string) {
+  const options = ["Lagos", "Abuja", "Port Harcourt", "Kano", "Enugu", "Ibadan"];
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash + seed.charCodeAt(i) * (i + 1)) % 100000;
+  }
+  return options[hash % options.length];
+}
+
+function toTimestamp(value: unknown, fallback: number) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function inferCategory(title: string) {
+  const text = title.toLowerCase();
+  if (text.includes("shoe") || text.includes("fashion") || text.includes("sneaker")) {
+    return "Fashion";
+  }
+  if (text.includes("serum") || text.includes("beauty")) {
+    return "Beauty";
+  }
+  if (text.includes("watch") || text.includes("headphone") || text.includes("tech")) {
+    return "Electronics";
+  }
+  return "General";
+}
+
+function normalizeLiveProduct(input: LiveProductRecord, index: number): DiscoverableProduct {
   const id = String(input.id ?? input.product_id ?? input.uuid ?? `live-${index}`);
   const title = String(input.name ?? input.title ?? "New Product");
   const numericPrice = Number(input.basePrice ?? input.base_price ?? input.price ?? 0);
@@ -96,6 +139,13 @@ function normalizeLiveProduct(input: LiveProductRecord, index: number): Product 
     rating: "4.5",
     reviews: "0",
     description: String(input.shortDescription ?? input.description ?? "No description available."),
+    category: String(input.category ?? input.categoryName ?? inferCategory(title)),
+    location: String(input.location ?? input.address ?? inferLocation(id)),
+    createdAt: toTimestamp(
+      input.createdAt ?? input.created_at ?? input.updatedAt ?? input.updated_at,
+      FALLBACK_BASE_CREATED_AT + index * 60000
+    ),
+    popularity: Number(input.views ?? input.popularity ?? input.orders ?? 0),
     seller: {
       name: "Marketplace Seller",
       slug: "marketplace-seller",
@@ -104,18 +154,14 @@ function normalizeLiveProduct(input: LiveProductRecord, index: number): Product 
 }
 
 type HeaderProps = {
-  onOpenSearch: () => void;
   cartCount: number;
 };
 
-function Header({ onOpenSearch, cartCount }: HeaderProps) {
-  const [userName, setUserName] = useState("");
+function Header({ cartCount }: HeaderProps) {
+  const [userName, setUserName] = useState(() => getDisplayName(getAuth()?.user));
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   useEffect(() => {
-    const auth = getAuth();
-    setUserName(getDisplayName(auth?.user));
-
     function onStorage(e: StorageEvent) {
       if (e.key === "alpha.auth") {
         const nextAuth = getAuth();
@@ -309,12 +355,9 @@ type BottomNavProps = {
 
 function BottomNav({ onOpenSearch }: BottomNavProps) {
   const [accountOpen, setAccountOpen] = useState(false);
-  const [userName, setUserName] = useState("");
+  const [userName, setUserName] = useState(() => getDisplayName(getAuth()?.user));
 
   useEffect(() => {
-    const auth = getAuth();
-    setUserName(getDisplayName(auth?.user));
-
     function onStorage(e: StorageEvent) {
       if (e.key === "alpha.auth") {
         const nextAuth = getAuth();
@@ -509,8 +552,15 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [cartModalOpen, setCartModalOpen] = useState(false);
   const [cartModalName, setCartModalName] = useState("");
-  const [liveProducts, setLiveProducts] = useState<Product[]>([]);
-  const [localProducts, setLocalProducts] = useState<Product[]>([]);
+  const [liveProducts, setLiveProducts] = useState<DiscoverableProduct[]>([]);
+  const [localProducts, setLocalProducts] = useState<DiscoverableProduct[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [locationFilter, setLocationFilter] = useState("all");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [sortBy, setSortBy] = useState("popularity");
+  const [page, setPage] = useState(1);
   const cartCount = useCartCount();
   const isBackground = mode === "background";
 
@@ -550,18 +600,45 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
   }, []);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("alpha.createdProducts");
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return;
-      const mapped = parsed
-        .filter((row) => row && typeof row === "object")
-        .map((row, index) => normalizeLiveProduct(row as LiveProductRecord, index));
-      setLocalProducts(mapped);
-    } catch {
-      // ignore local parse issues
+    function loadLocalProducts() {
+      try {
+        const raw = localStorage.getItem("alpha.createdProducts");
+        if (!raw) {
+          setLocalProducts([]);
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+          setLocalProducts([]);
+          return;
+        }
+        const mapped = parsed
+          .filter((row) => row && typeof row === "object")
+          .map((row, index) => normalizeLiveProduct(row as LiveProductRecord, index));
+        setLocalProducts(mapped);
+      } catch {
+        setLocalProducts([]);
+      }
     }
+
+    function onProductsUpdated(event: Event) {
+      const deletedId = String(
+        ((event as CustomEvent<{ deletedId?: string }>)?.detail?.deletedId ?? "")
+      );
+      if (deletedId) {
+        setLocalProducts((prev) => prev.filter((item) => item.id !== deletedId));
+        setLiveProducts((prev) => prev.filter((item) => item.id !== deletedId));
+      }
+      loadLocalProducts();
+    }
+
+    loadLocalProducts();
+    window.addEventListener(LOCAL_PRODUCTS_UPDATED_EVENT, onProductsUpdated);
+    window.addEventListener("storage", loadLocalProducts);
+    return () => {
+      window.removeEventListener(LOCAL_PRODUCTS_UPDATED_EVENT, onProductsUpdated);
+      window.removeEventListener("storage", loadLocalProducts);
+    };
   }, []);
 
   const mergedPopularProducts = [...localProducts, ...liveProducts, ...popularProducts].filter(
@@ -570,6 +647,61 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
   const mergedNewArrivals = [...localProducts, ...liveProducts, ...newArrivalProducts].filter(
     (product, index, arr) => arr.findIndex((item) => item.id === product.id) === index
   );
+  const mergedAllListings = [...mergedPopularProducts, ...mergedNewArrivals].filter(
+    (product, index, arr) => arr.findIndex((item) => item.id === product.id) === index
+  );
+  const discoverableProducts: DiscoverableProduct[] = mergedAllListings.map(
+    (product, index) => ({
+      ...product,
+      category: (product as DiscoverableProduct).category ?? inferCategory(product.title),
+      location:
+        (product as DiscoverableProduct).location ?? inferLocation(product.id || product.title),
+      createdAt:
+        (product as DiscoverableProduct).createdAt ?? FALLBACK_BASE_CREATED_AT + index * 60000,
+      popularity:
+        (product as DiscoverableProduct).popularity ??
+        (Number(product.reviews) || 0),
+    })
+  );
+  const categoryOptions = Array.from(
+    new Set(discoverableProducts.map((item) => item.category || "General"))
+  );
+  const locationOptions = Array.from(
+    new Set(discoverableProducts.map((item) => item.location || "Lagos"))
+  );
+  const filteredProducts = discoverableProducts
+    .filter((item) => {
+      const query = searchTerm.trim().toLowerCase();
+      if (!query) return true;
+      return (
+        item.title.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query)
+      );
+    })
+    .filter((item) =>
+      categoryFilter === "all" ? true : (item.category || "").toLowerCase() === categoryFilter
+    )
+    .filter((item) =>
+      locationFilter === "all" ? true : (item.location || "").toLowerCase() === locationFilter
+    )
+    .filter((item) => {
+      const price = parsePrice(item.price);
+      const min = minPrice ? Number(minPrice) : null;
+      const max = maxPrice ? Number(maxPrice) : null;
+      if (min !== null && Number.isFinite(min) && price < min) return false;
+      if (max !== null && Number.isFinite(max) && price > max) return false;
+      return true;
+    });
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    if (sortBy === "price-asc") return parsePrice(a.price) - parsePrice(b.price);
+    if (sortBy === "price-desc") return parsePrice(b.price) - parsePrice(a.price);
+    if (sortBy === "newest") return (b.createdAt || 0) - (a.createdAt || 0);
+    if (sortBy === "popularity") return (b.popularity || 0) - (a.popularity || 0);
+    return 0;
+  });
+  const totalPages = Math.max(1, Math.ceil(sortedProducts.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pagedProducts = sortedProducts.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const handleAddToCart = (product: Product) => {
     setCartModalName(product.title);
@@ -579,7 +711,7 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
   return (
     <div className={styles.page}>
       <div className={styles.container}>
-        <Header onOpenSearch={() => setMobileSearchOpen(true)} cartCount={cartCount} />
+        <Header cartCount={cartCount} />
 
         <section
           className={styles.hero}
@@ -619,17 +751,103 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
 
         <section>
           <div className={styles.sectionHeader}>
-            <h2>The Populars</h2>
-            <a href="#">View All</a>
+            <h2>Browse All Listings</h2>
+            <a href="#">All Products</a>
+          </div>
+          <div className="mb-4 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-6">
+            <input
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-brand md:col-span-2"
+              placeholder="Search by keyword"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+            <select
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-brand"
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+            >
+              <option value="all">All Categories</option>
+              {categoryOptions.map((option) => (
+                <option key={option} value={option.toLowerCase()}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <select
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-brand"
+              value={locationFilter}
+              onChange={(event) => setLocationFilter(event.target.value)}
+            >
+              <option value="all">All Locations</option>
+              {locationOptions.map((option) => (
+                <option key={option} value={option.toLowerCase()}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <input
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-brand"
+              placeholder="Min price"
+              type="number"
+              min="0"
+              value={minPrice}
+              onChange={(event) => setMinPrice(event.target.value)}
+            />
+            <input
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-brand"
+              placeholder="Max price"
+              type="number"
+              min="0"
+              value={maxPrice}
+              onChange={(event) => setMaxPrice(event.target.value)}
+            />
+            <select
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-brand"
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value)}
+            >
+              <option value="popularity">Sort: Popularity</option>
+              <option value="newest">Sort: Newest</option>
+              <option value="price-asc">Sort: Price Low-High</option>
+              <option value="price-desc">Sort: Price High-Low</option>
+            </select>
           </div>
           <div className={styles.productsGrid}>
-            {mergedPopularProducts.map((product) => (
+            {pagedProducts.map((product) => (
               <ProductCard
                 key={product.id}
                 product={product}
                 onAddToCart={handleAddToCart}
               />
             ))}
+          </div>
+          {pagedProducts.length === 0 ? (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+              No products found for your current search/filter.
+            </div>
+          ) : null}
+          <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+            <span>
+              Page {safePage} of {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-slate-200 px-3 py-1 disabled:opacity-50"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={safePage <= 1}
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-slate-200 px-3 py-1 disabled:opacity-50"
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={safePage >= totalPages}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </section>
 

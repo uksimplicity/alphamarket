@@ -11,6 +11,7 @@ const navSections = [
     items: [
       { href: "/admin/products", label: "All Products" },
       { href: "/admin/products/create", label: "Create Product" },
+      { href: "/admin/products#product-types", label: "Product Type" },
     ],
   },
   {

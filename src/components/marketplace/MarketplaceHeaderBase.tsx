@@ -2,13 +2,15 @@
 
 import type { ReactElement, ReactNode } from "react";
 import styles from "@/app/page.module.css";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useCartCount } from "@/components/commerce/store";
 import {
   clearAuth,
-  getAuth,
+  getDashboardPath,
   getDisplayName,
+  getProfilePath,
 } from "@/components/auth/authStorage";
+import { useAuthUser } from "@/components/auth/useAuthUser";
 
 type LinkComponentProps = {
   href: string;
@@ -25,25 +27,11 @@ export default function MarketplaceHeaderBase({
   LinkComponent: LinkComponent;
 }) {
   const cartCount = useCartCount();
-  const [mounted, setMounted] = useState(false);
-  const [userName, setUserName] = useState("");
+  const authUser = useAuthUser();
+  const [signedOutOverride, setSignedOutOverride] = useState(false);
+  const user = signedOutOverride ? null : authUser;
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    const auth = getAuth();
-    setUserName(getDisplayName(auth?.user));
-
-    function onStorage(e: StorageEvent) {
-      if (e.key === "alpha.auth") {
-        const nextAuth = getAuth();
-        setUserName(getDisplayName(nextAuth?.user));
-      }
-    }
-
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  const userName = getDisplayName(user);
 
   return (
     <header className={styles.header}>
@@ -111,7 +99,7 @@ export default function MarketplaceHeaderBase({
                 <circle cx="9" cy="20" r="1.5" />
                 <circle cx="17" cy="20" r="1.5" />
               </svg>
-              {mounted && cartCount > 0 ? (
+              {cartCount > 0 ? (
                 <span className={styles.cartBadge}>{cartCount}</span>
               ) : null}
             </LinkComponent>
@@ -133,11 +121,11 @@ export default function MarketplaceHeaderBase({
                   userMenuOpen ? styles.userDropdownOpen : ""
                 }`}
               >
-                <LinkComponent href="/dashboard/home">
+                <LinkComponent href={getDashboardPath(user)}>
                   <span className={styles.dropdownIcon}>•</span>
                   Dashboard
                 </LinkComponent>
-                <LinkComponent href="/dashboard/profile">
+                <LinkComponent href={getProfilePath(user)}>
                   <span className={styles.dropdownIcon}>•</span>
                   Profile
                 </LinkComponent>
@@ -146,7 +134,7 @@ export default function MarketplaceHeaderBase({
                   className={styles.accountItem}
                   onClick={() => {
                     clearAuth();
-                    setUserName("");
+                    setSignedOutOverride(true);
                     setUserMenuOpen(false);
                   }}
                 >
@@ -198,7 +186,7 @@ export default function MarketplaceHeaderBase({
             <circle cx="9" cy="20" r="1.5" />
             <circle cx="17" cy="20" r="1.5" />
           </svg>
-          {mounted && cartCount > 0 ? (
+          {cartCount > 0 ? (
             <span className={styles.cartBadge}>{cartCount}</span>
           ) : null}
         </LinkComponent>

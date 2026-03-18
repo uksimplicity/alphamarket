@@ -1,6 +1,7 @@
 const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
-const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v1`;
+const API_ROOT_BASE = API_BASE.endsWith("/api/v1") ? API_BASE.slice(0, -"/api/v1".length) : API_BASE;
+const API_BASE_CANDIDATES = Array.from(new Set([API_BASE, `${API_ROOT_BASE}/api/v1`, API_ROOT_BASE]));
 
 const ALLOWED_RESOURCES = new Set([
   "categories",
@@ -20,6 +21,46 @@ function emptyCatalog(resource: string) {
     }),
     { status: 200, headers: { "Content-Type": "application/json" } }
   );
+}
+
+function hasCatalogRecords(payload: unknown): boolean {
+  const visited = new WeakSet<object>();
+
+  function walk(value: unknown): boolean {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (walk(item)) return true;
+      }
+      return false;
+    }
+    if (!value || typeof value !== "object") return false;
+    const record = value as Record<string, unknown>;
+    if (visited.has(record)) return false;
+    visited.add(record);
+
+    const hasId =
+      typeof record.id === "string" ||
+      typeof record.id === "number" ||
+      typeof record.uuid === "string" ||
+      typeof record.category_id === "string" ||
+      typeof record.category_id === "number" ||
+      typeof record.categoryId === "string" ||
+      typeof record.categoryId === "number" ||
+      typeof record.product_type_id === "string" ||
+      typeof record.type_id === "string";
+    const hasName =
+      typeof record.name === "string" ||
+      typeof record.title === "string" ||
+      typeof record.category_name === "string" ||
+      typeof record.categoryName === "string" ||
+      typeof record.type_name === "string" ||
+      typeof record.product_type === "string";
+    if (hasId && hasName) return true;
+
+    return Object.values(record).some((nested) => walk(nested));
+  }
+
+  return walk(payload);
 }
 
 export async function GET(req: Request) {
@@ -42,18 +83,23 @@ export async function GET(req: Request) {
   }
 
   const authHeader = req.headers.get("authorization") ?? "";
+  const cookieHeader = req.headers.get("cookie") ?? "";
   const headers: Record<string, string> = {
     Accept: "application/json",
     ...(authHeader ? { Authorization: authHeader } : {}),
+    ...(cookieHeader ? { Cookie: cookieHeader } : {}),
   };
 
   const search = new URLSearchParams({ limit, offset }).toString();
   const urls = Array.from(
-    new Set([
-      `${API_V1_BASE}/seller/${resource}?${search}`,
-      `${API_BASE}/seller/${resource}?${search}`,
-      `${API_BASE}/auth/seller/${resource}?${search}`,
-    ])
+    new Set(
+      API_BASE_CANDIDATES.flatMap((base) => [
+        `${base}/seller/${resource}?${search}`,
+        `${base}/auth/seller/${resource}?${search}`,
+        `${base}/admin/${resource}?${search}`,
+        `${base}/auth/admin/${resource}?${search}`,
+      ])
+    )
   );
 
   try {
@@ -70,6 +116,27 @@ export async function GET(req: Request) {
       if (res.status >= 500) {
         upstreamErrorRes = res;
         continue;
+      }
+      if (res.ok) {
+        const text = await res.text();
+        let payload: unknown = text;
+        try {
+          payload = text ? JSON.parse(text) : null;
+        } catch {
+          payload = text;
+        }
+        if (!hasCatalogRecords(payload)) {
+          continue;
+        }
+        return new Response(
+          typeof payload === "string" ? payload : JSON.stringify(payload),
+          {
+            status: res.status,
+            headers: {
+              "Content-Type": res.headers.get("content-type") ?? "application/json",
+            },
+          }
+        );
       }
       break;
     }

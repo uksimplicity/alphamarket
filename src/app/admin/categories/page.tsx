@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   adminFetcher,
-  authAdminFetcher,
   asArray,
   asRecord,
   pickString,
 } from "@/components/admin/api";
+import { getAuth } from "@/components/auth/authStorage";
 import { Card, ErrorState, Skeleton } from "@/components/dashboard/ui";
 
 type Category = {
@@ -18,35 +18,44 @@ type Category = {
   date: string;
 };
 
+type CategoryDeleteTarget = {
+  id: string;
+  slug?: string;
+};
+
+function toSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function buildDynamicSlug(name: string) {
+  const base = toSlug(name) || "category";
+  const time = Date.now().toString(36);
+  const random =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID().replace(/-/g, "").slice(0, 6)
+      : Math.random().toString(36).slice(2, 8);
+  return `${base}-${time}-${random}`;
+}
+
 export default function AdminCategoriesPage() {
+  const ADMIN_CATEGORIES_CACHE_KEY = "alpha.admin.categories";
   const [pendingKey, setPendingKey] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [cacheHydrated, setCacheHydrated] = useState(false);
+  const [cachedCategories, setCachedCategories] = useState<Category[]>([]);
   const [categorySearch, setCategorySearch] = useState("");
   const [createdByFilter, setCreatedByFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
   const [categoryForm, setCategoryForm] = useState({
     name: "",
     description: "",
-    parentCategoryName: "",
+    parentCategoryId: "",
   });
-
-  function isNotFoundError(error: unknown) {
-    const message = error instanceof Error ? error.message : "";
-    return message.includes("(404)") || message.includes("404");
-  }
-
-  function shouldTryNextCategoryEndpoint(error: unknown) {
-    const message = error instanceof Error ? error.message : "";
-    return (
-      message.includes("(404)") ||
-      message.includes("404") ||
-      message.includes("(405)") ||
-      message.includes("405") ||
-      message.includes("(500)") ||
-      message.includes("500")
-    );
-  }
 
   function extractCategoryRecords(payload: unknown): Record<string, unknown>[] {
     const found: Record<string, unknown>[] = [];
@@ -63,11 +72,23 @@ export default function AdminCategoriesPage() {
       if (visited.has(record)) return;
       visited.add(record);
 
-      const hasName = typeof record.name === "string" || typeof record.title === "string";
+      const nameValue =
+        typeof record.name === "string"
+          ? record.name
+          : typeof record.title === "string"
+            ? record.title
+            : typeof record.category_name === "string"
+              ? record.category_name
+              : typeof record.categoryName === "string"
+                ? record.categoryName
+            : "";
+      const hasName = nameValue.trim().length > 0;
       const hasId =
         typeof record.id === "string" ||
         typeof record.id === "number" ||
-        typeof record.uuid === "string";
+        typeof record.uuid === "string" ||
+        typeof record.category_id === "string" ||
+        typeof record.categoryId === "string";
 
       if (hasName && hasId) {
         found.push(record);
@@ -83,37 +104,71 @@ export default function AdminCategoriesPage() {
   }
 
   async function callCategoryEndpoint<T>(path: string, init?: RequestInit): Promise<T> {
-    const method = (init?.method ?? "GET").toUpperCase();
-    const candidates = [
-      ...(method === "GET"
-        ? [() => authAdminFetcher<T>(path, init), () => adminFetcher<T>(path, init)]
-        : [() => adminFetcher<T>(path, init), () => authAdminFetcher<T>(path, init)]),
-      () => adminFetcher<T>(path.replace("/categories", "/category"), init),
-      () => authAdminFetcher<T>(path.replace("/categories", "/category"), init),
+    return adminFetcher<T>(path, init);
+  }
+
+  async function hardDeleteCategory(target: CategoryDeleteTarget): Promise<void> {
+    const slug = (target.slug ?? "").trim();
+    const id = target.id.trim();
+    const paths = [
+      `/categories/${id}?hard=true`,
+      `/categories/${id}?force=true`,
+      `/categories/${id}`,
+      ...(slug ? [`/categories/slug/${encodeURIComponent(slug)}`] : []),
     ];
 
     let lastError: unknown = null;
-    for (const candidate of candidates) {
+    for (const path of paths) {
       try {
-        return await candidate();
+        await callCategoryEndpoint(path, { method: "DELETE" });
+        return;
       } catch (error) {
         lastError = error;
-        if (!shouldTryNextCategoryEndpoint(error)) {
-          throw error;
-        }
       }
     }
-
-    throw lastError instanceof Error ? lastError : new Error("Category endpoint unavailable.");
+    throw lastError instanceof Error ? lastError : new Error("Failed to delete category.");
   }
 
   async function fetchCategoriesPayload(): Promise<unknown> {
+    const probeCategoryRoute = async () => {
+      const auth = getAuth();
+      const token = auth?.access_token;
+      const response = await fetch("/api/admin/categories/raw", {
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(`Category probe failed (${response.status}).`);
+      }
+      const data = await response.json();
+      return data?.categories ?? data?.payload ?? data;
+    };
+
+    const sellerCatalogFallback = async () => {
+      const auth = getAuth();
+      const token = auth?.access_token;
+      const response = await fetch("/api/seller/catalog?resource=categories&limit=200&offset=0", {
+        headers: {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(`Seller catalog categories failed (${response.status}).`);
+      }
+      return response.json();
+    };
+
     const attempts = [
-      () => authAdminFetcher<unknown>("/categories?limit=100&offset=0"),
-      () => authAdminFetcher<unknown>("/categories"),
-      () => authAdminFetcher<unknown>("/categories?limit=100"),
+      probeCategoryRoute,
       () => adminFetcher<unknown>("/categories?limit=100&offset=0"),
       () => adminFetcher<unknown>("/categories"),
+      () => adminFetcher<unknown>("/categories?limit=100"),
+      sellerCatalogFallback,
     ];
 
     let lastError: unknown = null;
@@ -127,41 +182,176 @@ export default function AdminCategoriesPage() {
     throw lastError instanceof Error ? lastError : new Error("Unable to fetch categories.");
   }
 
+  async function fetchCategoriesPayloadForSlugConflict(name: string): Promise<unknown[]> {
+    const slug = toSlug(name);
+    const encodedName = encodeURIComponent(name);
+    const encodedSlug = encodeURIComponent(slug);
+    const queries = [
+      `/categories?include_deleted=true&limit=200&offset=0`,
+      `/categories?deleted=true&limit=200&offset=0`,
+      `/categories?with_deleted=true&limit=200&offset=0`,
+      `/categories?search=${encodedName}&include_deleted=true&limit=200&offset=0`,
+      `/categories?name=${encodedName}&include_deleted=true&limit=200&offset=0`,
+      `/categories?slug=${encodedSlug}&include_deleted=true&limit=200&offset=0`,
+    ];
+
+    const results: unknown[] = [];
+    for (const query of queries) {
+      try {
+        results.push(await adminFetcher<unknown>(query));
+      } catch {
+        // best-effort probing for soft-deleted rows
+      }
+    }
+    return results;
+  }
+
+  async function purgeConflictingCategoriesByName(name: string): Promise<number> {
+    const slug = toSlug(name);
+    const payloads = await fetchCategoriesPayloadForSlugConflict(name);
+    const targetsById = new Map<string, CategoryDeleteTarget>();
+
+    for (const payload of payloads) {
+      const records = extractCategoryRecords(payload);
+      const fallbackRows = asArray(payload).flatMap((row) =>
+        Array.isArray(row) ? row : [row]
+      );
+      const allRecords = records.length
+        ? records
+        : (fallbackRows
+            .map((row) => asRecord(row))
+            .filter(Boolean) as Record<string, unknown>[]);
+
+      for (const record of allRecords) {
+        const id = pickString(record, ["id", "uuid", "category_id", "categoryId"], "").trim();
+        if (!id) continue;
+        const recordName = pickString(
+          record,
+          ["name", "title", "category_name", "categoryName"],
+          ""
+        )
+          .trim()
+          .toLowerCase();
+        const recordSlug = pickString(record, ["slug"], "").trim().toLowerCase();
+        if (recordName === name.trim().toLowerCase() || recordSlug === slug) {
+          targetsById.set(id, { id, slug: recordSlug || undefined });
+        }
+      }
+    }
+
+    let deletedCount = 0;
+    for (const target of targetsById.values()) {
+      try {
+        await hardDeleteCategory(target);
+        deletedCount += 1;
+      } catch {
+        // ignore individual failures
+      }
+    }
+    return deletedCount;
+  }
+
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-categories"],
     queryFn: async () => {
       try {
-        const categoriesPayload = await fetchCategoriesPayload();
-        const discovered = extractCategoryRecords(categoriesPayload);
-        const fallbackRows = asArray(categoriesPayload).flatMap((row) =>
-          Array.isArray(row) ? row : [row]
-        );
-        const records = discovered.length
-          ? discovered
-          : fallbackRows.map((row) => asRecord(row)).filter(Boolean) as Record<string, unknown>[];
+        const mapPayloadToCategories = (payload: unknown) => {
+          const discovered = extractCategoryRecords(payload);
+          const fallbackRows = asArray(payload).flatMap((row) =>
+            Array.isArray(row) ? row : [row]
+          );
+          const records = discovered.length
+            ? discovered
+            : fallbackRows.map((row) => asRecord(row)).filter(Boolean) as Record<string, unknown>[];
 
-        const mapped = records.map((record, index) => {
-          return {
-            id: pickString(record, ["id", "uuid"], `category-${index}`),
-            name: pickString(record, ["name", "title"], "Unnamed category"),
-            createdBy: pickString(record, ["created_by", "createdBy"], "Admin"),
-            date: pickString(record, ["created_at", "date"], ""),
-          } satisfies Category;
-        });
-        const seen = new Set<string>();
-        return mapped.filter((item) => {
-          const key = `${item.id}:${item.name.toLowerCase()}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
+          const mapped = records.map((record, index) => {
+            const rawName = pickString(
+              record,
+              ["name", "title", "category_name", "categoryName"],
+              ""
+            ).trim();
+            if (!rawName) {
+              return null;
+            }
+            return {
+              id: pickString(record, ["id", "uuid", "category_id", "categoryId"], `category-${index}`),
+              name: rawName,
+              createdBy: pickString(record, ["created_by", "createdBy"], "Admin"),
+              date: pickString(record, ["created_at", "date"], ""),
+            } satisfies Category;
+          });
+          const seen = new Set<string>();
+          return mapped.filter((item): item is Category => {
+            if (!item) return false;
+            const key = `${item.id}:${item.name.toLowerCase()}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        };
+        const primaryPayload = await fetchCategoriesPayload();
+        const primaryMapped = mapPayloadToCategories(primaryPayload);
+        if (primaryMapped.length > 0) {
+          return primaryMapped;
+        }
+
+        try {
+          const productsPayload = await (async () => {
+            return adminFetcher<unknown>("/products?limit=300&offset=0");
+          })();
+          const productsMapped = mapPayloadToCategories(productsPayload);
+          if (productsMapped.length > 0) return productsMapped;
+          return [] as Category[];
+        } catch {
+          return [] as Category[];
+        }
       } catch {
         return [] as Category[];
       }
     },
   });
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ADMIN_CATEGORIES_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) {
+          const normalized = parsed
+            .map((item) => asRecord(item))
+            .filter(Boolean)
+            .map((record) => ({
+              id: pickString(record, ["id", "uuid", "category_id", "categoryId"], ""),
+              name: pickString(record, ["name", "title", "category_name", "categoryName"], ""),
+              createdBy: pickString(record, ["createdBy", "created_by"], "Admin"),
+              date: pickString(record, ["date", "created_at"], ""),
+            }))
+            .filter((item) => item.id && item.name);
+          setCachedCategories(normalized);
+        }
+      }
+    } catch {
+      // ignore local cache parse errors
+    } finally {
+      setCacheHydrated(true);
+    }
+  }, []);
 
-  if (isLoading) {
+  const categories = useMemo(
+    () => ((data && data.length > 0 ? data : cachedCategories) ?? []),
+    [data, cachedCategories]
+  );
+  useEffect(() => {
+    if (!cacheHydrated) return;
+    if (categories.length === 0) return;
+    try {
+      localStorage.setItem(ADMIN_CATEGORIES_CACHE_KEY, JSON.stringify(categories));
+      setCachedCategories(categories);
+    } catch {
+      // ignore storage write errors
+    }
+  }, [cacheHydrated, categories]);
+
+  if (isLoading && cachedCategories.length === 0) {
     return (
       <div className="grid gap-6">
         <Skeleton className="h-10" />
@@ -170,7 +360,7 @@ export default function AdminCategoriesPage() {
     );
   }
 
-  if (error || !data) {
+  if (error && categories.length === 0) {
     return (
       <ErrorState
         message={error instanceof Error ? error.message : "Failed to load categories."}
@@ -178,8 +368,6 @@ export default function AdminCategoriesPage() {
       />
     );
   }
-
-  const categories = data ?? [];
 
   async function createCategory() {
     const name = categoryForm.name.trim();
@@ -196,42 +384,99 @@ export default function AdminCategoriesPage() {
     try {
       setActionMessage("");
       setPendingKey("create-categories");
-      const parentCategoryName = categoryForm.parentCategoryName.trim();
-      const resolvedParentCategoryId =
-        categories.find((item) => item.name.toLowerCase() === parentCategoryName.toLowerCase())
-          ?.id ?? "";
+      const parentCategoryId = categoryForm.parentCategoryId.trim();
+      const selectedParent = categories.find((item) => item.id === parentCategoryId) ?? null;
+      const basePayload = {
+        description: categoryForm.description.trim(),
+        name,
+        slug: buildDynamicSlug(name),
+        parent_category:
+          selectedParent?.id
+            ? [
+                {
+                  id: selectedParent.id,
+                  name: selectedParent.name,
+                },
+              ]
+            : null,
+      };
 
-      await callCategoryEndpoint("/categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          description: categoryForm.description.trim(),
-          name,
-          parent_category:
-            resolvedParentCategoryId || parentCategoryName
-              ? [
-                  {
-                    id: resolvedParentCategoryId,
-                    name: parentCategoryName,
-                  },
-                ]
-          : [],
-        }),
-      });
+      let createdPayload: unknown = null;
+      try {
+        createdPayload = await callCategoryEndpoint("/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(basePayload),
+        });
+      } catch (firstError) {
+        const firstMessage =
+          firstError instanceof Error ? firstError.message : String(firstError);
+        if (
+          firstMessage.includes("idx_categories_slug") ||
+          firstMessage.includes("SQLSTATE 23505") ||
+          firstMessage.toLowerCase().includes("duplicate slug")
+        ) {
+          await purgeConflictingCategoriesByName(name);
+          try {
+            createdPayload = await callCategoryEndpoint("/categories", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(basePayload),
+            });
+          } catch (retryError) {
+            const retryMessage =
+              retryError instanceof Error ? retryError.message : String(retryError);
+            if (
+              retryMessage.includes("idx_categories_slug") ||
+              retryMessage.includes("SQLSTATE 23505") ||
+              retryMessage.toLowerCase().includes("duplicate slug")
+            ) {
+              const uniqueSlug = buildDynamicSlug(name);
+              createdPayload = await callCategoryEndpoint("/categories", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  ...basePayload,
+                  slug: uniqueSlug,
+                }),
+              });
+            } else {
+              throw retryError;
+            }
+          }
+        } else {
+          throw firstError;
+        }
+      }
+
       setActionMessage("Category created successfully.");
+      setCachedCategories((prev) => {
+        const createdRecord = extractCategoryRecords(createdPayload)[0] ?? asRecord(createdPayload);
+        const optimistic: Category = {
+          id:
+            pickString(createdRecord, ["id", "uuid", "category_id", "categoryId"], "").trim() ||
+            `local-${Date.now().toString(36)}`,
+          name,
+          createdBy: "Admin",
+          date: new Date().toISOString(),
+        };
+        const next = [optimistic, ...prev.filter((item) => item.name !== optimistic.name)];
+        try {
+          localStorage.setItem(ADMIN_CATEGORIES_CACHE_KEY, JSON.stringify(next));
+        } catch {
+          // ignore cache write errors
+        }
+        return next;
+      });
       setCategoryForm({
         name: "",
         description: "",
-        parentCategoryName: "",
+        parentCategoryId: "",
       });
       await refetch();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create category.";
-      if (message.includes("idx_categories_slug") || message.includes("SQLSTATE 23505")) {
-        setActionMessage("Category already exists (duplicate slug). Please use a different name.");
-      } else {
-        setActionMessage(message);
-      }
+      setActionMessage(message);
     } finally {
       setPendingKey("");
     }
@@ -264,11 +509,80 @@ export default function AdminCategoriesPage() {
     try {
       setActionMessage("");
       setPendingKey(`delete-categories-${id}`);
-      await callCategoryEndpoint(`/categories/${id}`, { method: "DELETE" });
+      await hardDeleteCategory({ id });
       setActionMessage("Category deleted successfully.");
+      setCachedCategories((prev) => {
+        const next = prev.filter((item) => item.id !== id);
+        try {
+          localStorage.setItem(ADMIN_CATEGORIES_CACHE_KEY, JSON.stringify(next));
+        } catch {
+          // ignore cache write errors
+        }
+        return next;
+      });
       await refetch();
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : "Failed to delete category.");
+    } finally {
+      setPendingKey("");
+    }
+  }
+
+  async function clearAllCategories() {
+    try {
+      setActionMessage("");
+      setPendingKey("clear-all-categories");
+
+      const payload = await fetchCategoriesPayload();
+      const records = extractCategoryRecords(payload);
+      const fallbackRows = asArray(payload).flatMap((row) =>
+        Array.isArray(row) ? row : [row]
+      );
+      const allRecords = records.length
+        ? records
+        : (fallbackRows
+            .map((row) => asRecord(row))
+            .filter(Boolean) as Record<string, unknown>[]);
+      const targets: CategoryDeleteTarget[] = Array.from(
+        new Map(
+          allRecords
+            .map((record) => ({
+              id: pickString(record, ["id", "uuid", "category_id", "categoryId"], "").trim(),
+              slug: pickString(record, ["slug"], "").trim(),
+            }))
+            .filter((item) => item.id)
+            .map((item) => [item.id, item])
+        ).values()
+      );
+
+      if (targets.length === 0) {
+        setActionMessage("No categories to delete.");
+        return;
+      }
+
+      if (
+        !window.confirm(
+          `Delete all ${targets.length} categories? This action cannot be undone.`
+        )
+      ) {
+        return;
+      }
+
+      for (const target of targets) {
+        await hardDeleteCategory(target);
+      }
+      setActionMessage("All categories deleted successfully.");
+      setCachedCategories([]);
+      try {
+        localStorage.setItem(ADMIN_CATEGORIES_CACHE_KEY, JSON.stringify([]));
+      } catch {
+        // ignore cache write errors
+      }
+      await refetch();
+    } catch (err) {
+      setActionMessage(
+        err instanceof Error ? err.message : "Failed to clear all categories."
+      );
     } finally {
       setPendingKey("");
     }
@@ -299,17 +613,32 @@ export default function AdminCategoriesPage() {
 
   return (
     <Card>
+      {error ? (
+        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {error instanceof Error ? error.message : "Some category data could not be refreshed."}
+        </div>
+      ) : null}
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-[34px] font-semibold leading-none text-slate-900">
           Categories List
         </h2>
-        <button
-          type="button"
-          onClick={() => setShowCategoryForm((prev) => !prev)}
-          className="rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#2952cc]"
-        >
-          {showCategoryForm ? "Close" : "Create Categories"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={clearAllCategories}
+            disabled={pendingKey === "clear-all-categories"}
+            className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 disabled:opacity-60"
+          >
+            {pendingKey === "clear-all-categories" ? "Clearing..." : "Clear All"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCategoryForm((prev) => !prev)}
+            className="rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#2952cc]"
+          >
+            {showCategoryForm ? "Close" : "Create Categories"}
+          </button>
+        </div>
       </div>
 
       {actionMessage ? (
@@ -337,14 +666,20 @@ export default function AdminCategoriesPage() {
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
               placeholder="Description"
             />
-            <input
-              value={categoryForm.parentCategoryName}
+            <select
+              value={categoryForm.parentCategoryId}
               onChange={(event) =>
-                setCategoryForm((prev) => ({ ...prev, parentCategoryName: event.target.value }))
+                setCategoryForm((prev) => ({ ...prev, parentCategoryId: event.target.value }))
               }
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
-              placeholder="Parent Category Name"
-            />
+            >
+              <option value="">No parent category</option>
+              {categories.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
               disabled={pendingKey === "create-categories"}
@@ -476,6 +811,13 @@ export default function AdminCategoriesPage() {
                   </td>
                 </tr>
               ))}
+              {filteredCategories.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-slate-500" colSpan={7}>
+                    No categories returned from backend yet.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
         </table>
       </div>

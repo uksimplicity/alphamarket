@@ -8,7 +8,7 @@ import "@/components/products/CreateProduct.css";
 export default function VendorProductEdit() {
   const { productId } = useParams();
   const navigate = useNavigate();
-  const [product, setProduct] = useState<any | null>(null);
+  const [product, setProduct] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -31,6 +31,10 @@ export default function VendorProductEdit() {
   }));
   const [variants, setVariants] = useState([{ variant: "", value: "" }]);
   const [discountEnabled, setDiscountEnabled] = useState(false);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const MAX_PRODUCT_PRICE = 1000000000;
+  const MAX_PRODUCT_STOCK = 1000000;
 
   const loadProduct = async () => {
     if (!productId) return;
@@ -102,10 +106,14 @@ export default function VendorProductEdit() {
       const attrs = Array.isArray(payload?.attributes) ? payload.attributes : [];
       if (attrs.length > 0) {
         setVariants(
-          attrs.map((row: any) => ({
-            variant: row?.attribute_id || row?.variant || "",
-            value: row?.attribute_value_id || row?.value || "",
-          }))
+          attrs.map((row) => {
+            const record =
+              row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+            return {
+              variant: String(record.attribute_id ?? record.variant ?? ""),
+              value: String(record.attribute_value_id ?? record.value ?? ""),
+            };
+          })
         );
       } else {
         setVariants([{ variant: "", value: "" }]);
@@ -154,6 +162,58 @@ export default function VendorProductEdit() {
       if (!token) {
         throw new Error("You must be logged in to update a product.");
       }
+      if (!form.name.trim()) {
+        throw new Error("Product name is required.");
+      }
+      if (!form.shortDescription.trim()) {
+        throw new Error("Product description is required.");
+      }
+
+      const numericPrice = Number(form.basePrice);
+      if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
+        throw new Error("Base price must be greater than 0.");
+      }
+      if (numericPrice > MAX_PRODUCT_PRICE) {
+        throw new Error(`Base price is too large. Maximum is ${MAX_PRODUCT_PRICE.toLocaleString()}.`);
+      }
+
+      const numericStock = Number(form.stock || 0);
+      if (numericStock < 0) {
+        throw new Error("Stock cannot be negative.");
+      }
+      if (numericStock > MAX_PRODUCT_STOCK) {
+        throw new Error(`Stock is too large. Maximum is ${MAX_PRODUCT_STOCK.toLocaleString()}.`);
+      }
+
+      async function uploadImage(file: File): Promise<string> {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("folder", "products");
+        const uploadResponse = await fetch("/api/upload/file", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        const uploadText = await uploadResponse.text();
+        let uploadData: Record<string, unknown> = {};
+        try {
+          uploadData = uploadText
+            ? (JSON.parse(uploadText) as Record<string, unknown>)
+            : {};
+        } catch {
+          uploadData = {};
+        }
+        if (!uploadResponse.ok) {
+          throw new Error("Failed to upload one or more product images.");
+        }
+        return String(
+          uploadData.url ??
+            uploadData.file_url ??
+            uploadData.path ??
+            (uploadData.data as Record<string, unknown> | undefined)?.url ??
+            ""
+        );
+      }
 
       const payload = {
         name: form.name,
@@ -188,7 +248,18 @@ export default function VendorProductEdit() {
               },
             ]
           : [],
-      };
+      } as Record<string, unknown>;
+
+      if (coverFile || imageFiles.length > 0) {
+        const coverUrl = coverFile ? await uploadImage(coverFile) : "";
+        const imageUrls = imageFiles.length
+          ? (await Promise.all(imageFiles.map((file) => uploadImage(file)))).filter(Boolean)
+          : [];
+        payload.media = {
+          cover: coverUrl,
+          images: imageUrls,
+        };
+      }
 
       setSaving(true);
       const response = await fetch(
@@ -227,15 +298,21 @@ export default function VendorProductEdit() {
   const variantTableRows = useMemo(() => {
     const candidates = product?.variants || product?.variantRows || [];
     if (!Array.isArray(candidates)) return [];
-    return candidates.map((row: any, index: number) => ({
-      skuId: row?.skuId || row?.sku_id || row?.sku || `SKU-${index + 1}`,
-      variantId: row?.variantId || row?.variant_id || row?.id || `VAR-${index + 1}`,
-      color: row?.color || row?.colour || row?.attribute_value || row?.value || "-",
-      size: row?.size || row?.size_name || "-",
-      visible: row?.visible || row?.quantity || row?.stock || "-",
-      status: row?.status || (row?.active ? "Active" : "Inactive"),
-      image: row?.image || row?.imageUrl || row?.media || "",
-    }));
+    return candidates.map((row, index: number) => {
+      const record =
+        row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+      return {
+        skuId: String(record.skuId ?? record.sku_id ?? record.sku ?? `SKU-${index + 1}`),
+        variantId: String(
+          record.variantId ?? record.variant_id ?? record.id ?? `VAR-${index + 1}`
+        ),
+        color: String(record.color ?? record.colour ?? record.attribute_value ?? record.value ?? "-"),
+        size: String(record.size ?? record.size_name ?? "-"),
+        visible: String(record.visible ?? record.quantity ?? record.stock ?? "-"),
+        status: String(record.status ?? (record.active ? "Active" : "Inactive")),
+        image: String(record.image ?? record.imageUrl ?? record.media ?? ""),
+      };
+    });
   }, [product]);
 
   if (loading) {
@@ -361,18 +438,35 @@ export default function VendorProductEdit() {
           <section className="form-section">
             <div className="section-title">Media</div>
             <div className="media-grid">
-              <button type="button" className="upload-card">
+              <label className="upload-card">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => setCoverFile(event.target.files?.[0] ?? null)}
+                />
                 <span className="upload-icon">â†‘</span>
                 <div className="upload-title">Upload Cover photo</div>
-                <div className="upload-note">Allowed *.jpeg, *.jpg, *.png</div>
+                <div className="upload-note">Allowed image types</div>
                 <div className="upload-note">Max size 3 MB</div>
-              </button>
-              <button type="button" className="upload-card">
+                {coverFile ? <div className="upload-note">{coverFile.name}</div> : null}
+              </label>
+              <label className="upload-card">
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(event) =>
+                    setImageFiles(event.target.files ? Array.from(event.target.files) : [])
+                  }
+                />
                 <span className="upload-icon">â†‘</span>
                 <div className="upload-title">Upload Product photo</div>
-                <div className="upload-note">Allowed *.jpeg, *.jpg, *.png</div>
+                <div className="upload-note">Allowed image types</div>
                 <div className="upload-note">Max size 3 MB</div>
-              </button>
+                {imageFiles.length ? (
+                  <div className="upload-note">{imageFiles.length} image(s) selected</div>
+                ) : null}
+              </label>
               <button type="button" className="upload-card">
                 <span className="upload-icon">â†‘</span>
                 <div className="upload-title">Upload Video</div>

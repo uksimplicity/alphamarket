@@ -15,21 +15,19 @@ import VendorProductsDraft from "./vendor/pages/VendorProductsDraft";
 import VendorProductsStock from "./vendor/pages/VendorProductsStock";
 import VendorProductsReview from "./vendor/pages/VendorProductsReview";
 import VendorProductsCreate from "./vendor/pages/VendorProductsCreate";
+import VendorProductTypes from "./vendor/pages/VendorProductTypes";
 import VendorProductsAddStock from "./vendor/pages/VendorProductsAddStock";
 import VendorProductDetail from "./vendor/pages/VendorProductDetail";
 import VendorProductEdit from "./vendor/pages/VendorProductEdit";
 import VendorOrders from "./vendor/pages/VendorOrders";
 import VendorOrderDetail from "./vendor/pages/VendorOrderDetail";
+import VendorProfile from "./vendor/pages/VendorProfile";
+import VendorStore from "./vendor/pages/VendorStore";
 import ProductDetailRoute from "./products/ProductDetailRoute";
 import SellerStoreRoute from "./store/SellerStoreRoute";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 export default function AppRouter() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const { BrowserRouter, Navigate, Route, Routes } = require("react-router-dom");
-
   return (
     <BrowserRouter>
       <Routes>
@@ -49,6 +47,7 @@ export default function AppRouter() {
           <Route index element={<VendorDashboard />} />
           <Route path="products" element={<VendorProductsAll />} />
           <Route path="products/create" element={<VendorProductsCreate />} />
+          <Route path="products/types" element={<VendorProductTypes />} />
           <Route path="products/draft" element={<VendorProductsDraft />} />
           <Route path="products/stock" element={<VendorProductsStock />} />
           <Route path="products/stock/add" element={<VendorProductsAddStock />} />
@@ -57,6 +56,8 @@ export default function AppRouter() {
           <Route path="products/:productId/edit" element={<VendorProductEdit />} />
           <Route path="orders" element={<VendorOrders />} />
           <Route path="orders/:orderId" element={<VendorOrderDetail />} />
+          <Route path="store" element={<VendorStore />} />
+          <Route path="profile" element={<VendorProfile />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

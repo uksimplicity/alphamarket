@@ -23,7 +23,7 @@ export async function adminFetcher<T>(
   });
 
   const text = await response.text();
-  let data: any = null;
+  let data: unknown = null;
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
@@ -32,9 +32,11 @@ export async function adminFetcher<T>(
 
   if (!response.ok) {
     const message =
-      data && typeof data === "object" && "error" in data
-        ? data.error
-        : `Request failed (${response.status}).`;
+      data && typeof data === "object"
+        ? data.error ?? data.message ?? data.details ?? `Request failed (${response.status}).`
+        : typeof data === "string" && data.trim()
+          ? data.trim()
+          : `Request failed (${response.status}).`;
     throw new Error(String(message));
   }
 
@@ -62,7 +64,7 @@ export async function authAdminFetcher<T>(
   });
 
   const text = await response.text();
-  let data: any = null;
+  let data: unknown = null;
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
@@ -71,9 +73,11 @@ export async function authAdminFetcher<T>(
 
   if (!response.ok) {
     const message =
-      data && typeof data === "object" && "error" in data
-        ? data.error
-        : `Request failed (${response.status}).`;
+      data && typeof data === "object"
+        ? data.error ?? data.message ?? data.details ?? `Request failed (${response.status}).`
+        : typeof data === "string" && data.trim()
+          ? data.trim()
+          : `Request failed (${response.status}).`;
     throw new Error(String(message));
   }
 
