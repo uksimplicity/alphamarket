@@ -245,11 +245,11 @@ export async function fetchCurrentUserProfile(): Promise<CurrentUserProfile> {
       Boolean(auth?.user?.phone_verified)
     ),
     role: toText(record.role, auth?.user?.role ?? ""),
-    address: finalAddress.address,
-    city: finalAddress.city,
-    state: finalAddress.state,
-    country: finalAddress.country,
-    postalCode: finalAddress.postalCode,
+    address: toText(finalAddress.address),
+    city: toText(finalAddress.city),
+    state: toText(finalAddress.state),
+    country: toText(finalAddress.country),
+    postalCode: toText(finalAddress.postalCode),
     profilePicture: finalProfilePicture,
   };
 }
