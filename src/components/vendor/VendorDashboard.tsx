@@ -14,6 +14,12 @@ type SellerProduct = {
   status: string;
 };
 
+type SellerOrder = {
+  id: string;
+  amount: number;
+  status: string;
+};
+
 function normalizeList(payload: unknown): unknown[] {
   if (Array.isArray(payload)) return payload;
   if (payload && typeof payload === "object") {
@@ -35,6 +41,47 @@ function toNumber(value: unknown, fallback = 0) {
   return fallback;
 }
 
+function toText(value: unknown) {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number") return String(value);
+  return "";
+}
+
+function buildAuthorizationHeader(token?: string) {
+  const raw = String(token ?? "").trim();
+  if (!raw) return "";
+  return /^bearer\s+/i.test(raw) ? raw : `Bearer ${raw}`;
+}
+
+function getOwnerKeys(record: Record<string, unknown>) {
+  return [
+    record.seller_id,
+    record.sellerId,
+    record.vendor_id,
+    record.vendorId,
+    record.owner_id,
+    record.ownerId,
+    record.user_id,
+    record.userId,
+  ]
+    .map((value) => toText(value))
+    .filter(Boolean);
+}
+
+function matchesCurrentSeller(
+  record: Record<string, unknown>,
+  currentUserId: string,
+  currentUserEmail: string
+) {
+  const keys = getOwnerKeys(record);
+  if (keys.length === 0) return true;
+  return keys.some(
+    (value) =>
+      value === currentUserId ||
+      (currentUserEmail && value.toLowerCase() === currentUserEmail.toLowerCase())
+  );
+}
+
 const nairaFormatter = new Intl.NumberFormat("en-NG", {
   style: "currency",
   currency: "NGN",
@@ -47,6 +94,7 @@ function formatNaira(value: number) {
 
 export default function VendorDashboard() {
   const [products, setProducts] = useState<SellerProduct[]>([]);
+  const [orders, setOrders] = useState<SellerOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -58,27 +106,49 @@ export default function VendorDashboard() {
     setError("");
     try {
       const auth = getAuth();
-      const token = auth?.access_token;
-      const response = await fetch("/api/seller/products", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const text = await response.text();
-      let payload: unknown = null;
+      const token = buildAuthorizationHeader(auth?.access_token);
+      const currentUserId = toText(auth?.user?.id);
+      const currentUserEmail = toText(auth?.user?.email);
+      const commonHeaders = token ? { Authorization: token } : {};
+
+      const [productsResponse, ordersResponse] = await Promise.all([
+        fetch("/api/seller/products", { headers: commonHeaders }),
+        fetch("/api/seller/orders?limit=200&offset=0", { headers: commonHeaders }),
+      ]);
+
+      const [productsText, ordersText] = await Promise.all([
+        productsResponse.text(),
+        ordersResponse.text(),
+      ]);
+
+      let productsPayload: unknown = null;
+      let ordersPayload: unknown = null;
       try {
-        payload = text ? JSON.parse(text) : null;
+        productsPayload = productsText ? JSON.parse(productsText) : null;
       } catch {
-        payload = text;
+        productsPayload = productsText;
       }
-      if (!response.ok) {
+      try {
+        ordersPayload = ordersText ? JSON.parse(ordersText) : null;
+      } catch {
+        ordersPayload = ordersText;
+      }
+
+      if (!productsResponse.ok) {
         const message =
-          payload && typeof payload === "object" && "error" in payload
-            ? String((payload as { error: unknown }).error)
-            : `Failed to load seller products (${response.status}).`;
+          productsPayload && typeof productsPayload === "object" && "error" in productsPayload
+            ? String((productsPayload as { error: unknown }).error)
+            : `Failed to load seller products (${productsResponse.status}).`;
         throw new Error(message);
       }
 
-      const rows = normalizeList(payload);
-      const normalized = rows.map((row, index) => {
+      if (productsPayload && typeof productsPayload === "object" && "fallback" in productsPayload) {
+        throw new Error("Seller products endpoint is in fallback mode. Please retry when backend is available.");
+      }
+
+      const rows = normalizeList(productsPayload);
+      const normalized = rows
+        .map((row, index) => {
         const record =
           row && typeof row === "object" ? (row as Record<string, unknown>) : {};
         return {
@@ -99,8 +169,31 @@ export default function VendorDashboard() {
               : null,
           status: String(record.status ?? "unknown"),
         } satisfies SellerProduct;
-      });
+      })
+        .filter((row, index) => {
+          const source =
+            rows[index] && typeof rows[index] === "object"
+              ? (rows[index] as Record<string, unknown>)
+              : null;
+          if (!source) return true;
+          return matchesCurrentSeller(source, currentUserId, currentUserEmail);
+        });
+
+      const orderRows = normalizeList(ordersPayload);
+      const normalizedOrders = orderRows
+        .map((row, index) => {
+          const record =
+            row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+          return {
+            id: toText(record.id ?? record.order_id ?? record.uuid ?? `order-${index}`),
+            amount: toNumber(record.amount ?? record.total_amount ?? record.total ?? 0, 0),
+            status: toText(record.status ?? "unknown") || "unknown",
+          } satisfies SellerOrder;
+        })
+        .filter((order) => order.id);
+
       setProducts(normalized);
+      setOrders(normalizedOrders);
       setLastUpdatedAt(new Date());
     } catch (err) {
       setError(
@@ -125,6 +218,11 @@ export default function VendorDashboard() {
       if (product.price === null) return sum;
       return sum + product.price * Math.max(product.stock, 0);
     }, 0);
+    const totalOrders = orders.length;
+    const fulfilledOrders = orders.filter((order) =>
+      order.status.toLowerCase().includes("deliver") || order.status.toLowerCase().includes("complete")
+    ).length;
+    const orderRevenue = orders.reduce((sum, order) => sum + Math.max(order.amount, 0), 0);
 
     return {
       totalProducts,
@@ -133,8 +231,11 @@ export default function VendorDashboard() {
       lowStock,
       outOfStock,
       inventoryValue,
+      totalOrders,
+      fulfilledOrders,
+      orderRevenue,
     };
-  }, [products]);
+  }, [orders, products]);
 
   const statusOptions = useMemo(() => {
     const entries = new Set<string>();
@@ -224,6 +325,21 @@ export default function VendorDashboard() {
           <div className={styles.statLabel}>Inventory Value</div>
           <div className={styles.statValue}>{formatNaira(metrics.inventoryValue)}</div>
           <div className={styles.statDelta}>Estimated stock value</div>
+        </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Total Orders</div>
+          <div className={styles.statValue}>{metrics.totalOrders}</div>
+          <div className={styles.statDelta}>Buyer activity</div>
+        </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Delivered Orders</div>
+          <div className={styles.statValue}>{metrics.fulfilledOrders}</div>
+          <div className={styles.statDelta}>Completed deliveries</div>
+        </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Order Revenue</div>
+          <div className={styles.statValue}>{formatNaira(metrics.orderRevenue)}</div>
+          <div className={styles.statDelta}>From seller orders</div>
         </div>
       </section>
 

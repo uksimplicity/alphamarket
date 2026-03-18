@@ -180,21 +180,17 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
 
     const text = await finalRes.text();
     if (method === "GET" && finalRes.status >= 500) {
-      const items = listMockProducts(
-        Number(params.get("limit") ?? 20),
-        Number(params.get("offset") ?? 0)
-      );
       return new Response(
         JSON.stringify({
-          data: items,
-          fallback: true,
-          warning: "Upstream seller products temporarily unavailable.",
+          error: `Seller products upstream unavailable (${finalRes.status}).`,
+          tried: urls,
+          attempts,
+          details: text.slice(0, 1000),
         }),
         {
-          status: 200,
+          status: 502,
           headers: {
             "Content-Type": "application/json",
-            "X-Proxy-Fallback": "seller-products-empty",
           },
         }
       );
