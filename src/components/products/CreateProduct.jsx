@@ -7,7 +7,6 @@ import { getAuth } from "@/components/auth/authStorage";
 
 const initialForm = {
   name: "",
-  slug: "",
   sellerId: "",
   category: "",
   type: "",
@@ -15,10 +14,7 @@ const initialForm = {
   shortDescription: "",
   basePrice: "",
   stock: "",
-  address: "",
   location: "",
-  latitude: "",
-  longitude: "",
   tags: "",
   discountTitle: "",
   discountPrice: "",
@@ -185,6 +181,17 @@ function parseNonNegativeInteger(value) {
   return numeric;
 }
 
+function readFirstFiniteNumber(...values) {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim()) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) return numeric;
+    }
+  }
+  return null;
+}
+
 function persistCreatedProduct(product) {
   if (typeof window === "undefined" || !product) return;
   try {
@@ -254,7 +261,6 @@ export default function CreateProduct({ mode = "seller" }) {
   const [tagOptions, setTagOptions] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
-  const [variants, setVariants] = useState([{ attributeId: "", attributeValueId: "" }]);
   const [discountEnabled, setDiscountEnabled] = useState(false);
   const [submitIntent, setSubmitIntent] = useState("publish");
   const [loading, setLoading] = useState(false);
@@ -364,30 +370,9 @@ export default function CreateProduct({ mode = "seller" }) {
     };
   }, []);
 
-  useEffect(() => {
-    setForm((prev) => {
-      if (prev.slug.trim()) return prev;
-      return { ...prev, slug: toSlug(prev.name) };
-    });
-  }, [form.name]);
-
   const handleChange = (event) => {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleVariantChange = (index, field, value) => {
-    setVariants((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
-    );
-  };
-
-  const addVariant = () => {
-    setVariants((prev) => [...prev, { attributeId: "", attributeValueId: "" }]);
-  };
-
-  const removeVariant = (index) => {
-    setVariants((prev) => (prev.length === 1 ? prev : prev.filter((_, i) => i !== index)));
   };
 
   const removeDiscount = () => {
@@ -518,15 +503,6 @@ async function uploadFile(file, folder, token) {
       return;
     }
 
-    for (const [index, row] of variants.entries()) {
-      const hasAny = row.attributeId.trim() || row.attributeValueId.trim();
-      if (!hasAny) continue;
-      if (!isUuid(row.attributeId.trim()) || !isUuid(row.attributeValueId.trim())) {
-        setError(`Variant row ${index + 1} must contain valid UUIDs.`);
-        return;
-      }
-    }
-
     if (discountEnabled) {
       if (!form.discountTitle.trim()) {
         setError("Discount title is required when discount is enabled.");
@@ -565,7 +541,7 @@ async function uploadFile(file, folder, token) {
       return;
     }
 
-    const normalizedSlug = form.slug.trim() || toSlug(form.name);
+    const normalizedSlug = toSlug(form.name);
     const tagList = form.tags
       .split(",")
       .map((item) => item.trim())
@@ -587,23 +563,25 @@ async function uploadFile(file, folder, token) {
       },
     };
 
-    if (form.address.trim()) payload.address = form.address.trim();
     if (form.location.trim()) payload.location = form.location.trim();
     if (form.shortDescription.trim()) payload.shortDescription = form.shortDescription.trim();
     if (form.brand.trim()) payload.brandId = form.brand.trim();
     if (stockNumber !== null) payload.stock = stockNumber;
     if (tagList.length > 0) payload.tags = tagList;
-
-    if (form.latitude.trim()) payload.latitude = Number(form.latitude);
-    if (form.longitude.trim()) payload.longitude = Number(form.longitude);
-
-    const attributeRows = variants
-      .filter((row) => isUuid(row.attributeId.trim()) && isUuid(row.attributeValueId.trim()))
-      .map((row) => ({
-        attribute_id: row.attributeId.trim(),
-        attribute_value_id: row.attributeValueId.trim(),
-      }));
-    if (attributeRows.length > 0) payload.attributes = attributeRows;
+    const latitude = readFirstFiniteNumber(
+      auth?.user?.latitude,
+      auth?.user?.lat,
+      auth?.user?.profile?.latitude,
+      auth?.user?.profile?.lat
+    );
+    const longitude = readFirstFiniteNumber(
+      auth?.user?.longitude,
+      auth?.user?.lng,
+      auth?.user?.profile?.longitude,
+      auth?.user?.profile?.lng
+    );
+    if (latitude !== null) payload.latitude = latitude;
+    if (longitude !== null) payload.longitude = longitude;
 
     if (discountEnabled) {
       payload.discounts = [
@@ -715,15 +693,6 @@ async function uploadFile(file, folder, token) {
                   placeholder="e.g. Wireless Keyboard"
                 />
               </div>
-              <div className="field">
-                <label>Slug</label>
-                <input
-                  name="slug"
-                  value={form.slug}
-                  onChange={handleChange}
-                  placeholder="auto-generated from product name"
-                />
-              </div>
               {mode === "admin" ? (
                 <div className="field">
                   <label>Seller ID</label>
@@ -784,13 +753,7 @@ async function uploadFile(file, folder, token) {
                   ))}
                 </select>
                 {!catalogLoading && !hasBrandOptions ? (
-                  <input
-                    name="brand"
-                    value={form.brand}
-                    onChange={handleChange}
-                    placeholder="Paste Brand UUID (optional)"
-                    className="mt-2"
-                  />
+                  <div className="mt-2 text-xs text-slate-500">No brands available yet.</div>
                 ) : null}
               </div>
               <div className="field">
@@ -830,22 +793,8 @@ async function uploadFile(file, folder, token) {
             </div>
             <div className="form-grid">
               <div className="field">
-                <label>Address</label>
-                <input name="address" value={form.address} onChange={handleChange} />
-              </div>
-              <div className="field">
                 <label>Location</label>
                 <input name="location" value={form.location} onChange={handleChange} />
-              </div>
-            </div>
-            <div className="form-grid">
-              <div className="field">
-                <label>Latitude (optional)</label>
-                <input name="latitude" value={form.latitude} onChange={handleChange} />
-              </div>
-              <div className="field">
-                <label>Longitude (optional)</label>
-                <input name="longitude" value={form.longitude} onChange={handleChange} />
               </div>
             </div>
           </section>
@@ -894,38 +843,6 @@ async function uploadFile(file, folder, token) {
                 <div className="upload-note">Max size 3 MB</div>
                 {videoFile ? <div className="upload-filename">{videoFile.name}</div> : null}
               </label>
-            </div>
-          </section>
-
-          <section className="form-section">
-            <div className="section-row">
-              <div className="section-title">Variants (optional)</div>
-              <button type="button" className="btn-outline" onClick={addVariant}>
-                Add Variant Row
-              </button>
-            </div>
-            <div className="variant-grid">
-              {variants.map((row, index) => (
-                <div className="variant-row" key={`variant-${index}`}>
-                  <input
-                    value={row.attributeId}
-                    onChange={(event) =>
-                      handleVariantChange(index, "attributeId", event.target.value)
-                    }
-                    placeholder="Attribute ID (UUID)"
-                  />
-                  <input
-                    value={row.attributeValueId}
-                    onChange={(event) =>
-                      handleVariantChange(index, "attributeValueId", event.target.value)
-                    }
-                    placeholder="Attribute Value ID (UUID)"
-                  />
-                  <button type="button" className="btn-outline" onClick={() => removeVariant(index)}>
-                    Remove
-                  </button>
-                </div>
-              ))}
             </div>
           </section>
 

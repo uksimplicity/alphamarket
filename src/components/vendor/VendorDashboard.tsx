@@ -109,7 +109,8 @@ export default function VendorDashboard() {
       const token = buildAuthorizationHeader(auth?.access_token);
       const currentUserId = toText(auth?.user?.id);
       const currentUserEmail = toText(auth?.user?.email);
-      const commonHeaders = token ? { Authorization: token } : {};
+      const commonHeaders: Record<string, string> = {};
+      if (token) commonHeaders.Authorization = token;
 
       const [productsResponse, ordersResponse] = await Promise.all([
         fetch("/api/seller/products", { headers: commonHeaders }),
