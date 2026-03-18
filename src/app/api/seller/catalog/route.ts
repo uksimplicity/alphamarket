@@ -65,10 +65,16 @@ function hasCatalogRecords(payload: unknown): boolean {
     const hasName =
       typeof record.name === "string" ||
       typeof record.title === "string" ||
+      typeof record.category === "string" ||
+      typeof record.type === "string" ||
+      typeof record.productType === "string" ||
+      typeof record.product_type_name === "string" ||
+      typeof record.productTypeName === "string" ||
       typeof record.category_name === "string" ||
       typeof record.categoryName === "string" ||
       typeof record.type_name === "string" ||
-      typeof record.product_type === "string";
+      typeof record.product_type === "string" ||
+      typeof record.label === "string";
     if (hasId && hasName) return true;
 
     return Object.values(record).some((nested) => walk(nested));

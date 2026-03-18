@@ -70,10 +70,16 @@ function walkRecords(payload, target = []) {
   const hasName =
     typeof record.name === "string" ||
     typeof record.title === "string" ||
+    typeof record.category === "string" ||
+    typeof record.type === "string" ||
+    typeof record.productType === "string" ||
+    typeof record.product_type_name === "string" ||
+    typeof record.productTypeName === "string" ||
     typeof record.category_name === "string" ||
     typeof record.categoryName === "string" ||
     typeof record.type_name === "string" ||
-    typeof record.product_type === "string";
+    typeof record.product_type === "string" ||
+    typeof record.label === "string";
   if (hasId && hasName) target.push(record);
 
   Object.values(record).forEach((value) => walkRecords(value, target));
@@ -85,7 +91,19 @@ function parseOptions(payload) {
     .map((row) => ({
       id: String(row.id ?? row.uuid ?? row.category_id ?? row.categoryId ?? row.product_type_id ?? row.type_id ?? "").trim(),
       name: String(
-        row.name ?? row.title ?? row.category_name ?? row.categoryName ?? row.type_name ?? row.product_type ?? ""
+        row.name ??
+          row.title ??
+          row.category ??
+          row.type ??
+          row.productType ??
+          row.product_type_name ??
+          row.productTypeName ??
+          row.category_name ??
+          row.categoryName ??
+          row.type_name ??
+          row.product_type ??
+          row.label ??
+          ""
       ).trim(),
       categoryId: String(row.category_id ?? row.categoryId ?? "").trim(),
       categoryName: String(row.category_name ?? row.categoryName ?? "").trim(),
@@ -249,6 +267,17 @@ export default function CreateProduct({ mode = "seller" }) {
         setTypeOptions(apiProductTypes.length > 0 ? apiProductTypes : cachedProductTypes);
         setBrandOptions(parseOptions(brands));
         setTagOptions(parseOptions(tags));
+        const categoriesWarning =
+          categories && typeof categories === "object" && "warning" in categories
+            ? String(categories.warning ?? "")
+            : "";
+        const typesWarning =
+          productTypes && typeof productTypes === "object" && "warning" in productTypes
+            ? String(productTypes.warning ?? "")
+            : "";
+        if (!apiCategories.length && !apiProductTypes.length && (categoriesWarning || typesWarning)) {
+          setCatalogError([categoriesWarning, typesWarning].filter(Boolean).join(" "));
+        }
       } catch (loadError) {
         if (!isMounted) return;
         setCategoryOptions(readCachedAdminCategories());
