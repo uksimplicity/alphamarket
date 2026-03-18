@@ -856,7 +856,7 @@ async function uploadFile(file, folder, token) {
               <label className="upload-card">
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.avif,.tif,.tiff,.heic,.heif"
                   onChange={(event) => setCoverFile(event.target.files?.[0] ?? null)}
                 />
                 <span className="upload-icon">&#8593;</span>
@@ -868,7 +868,7 @@ async function uploadFile(file, folder, token) {
               <label className="upload-card">
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.avif,.tif,.tiff,.heic,.heif"
                   multiple
                   onChange={(event) =>
                     setImageFiles(event.target.files ? Array.from(event.target.files) : [])

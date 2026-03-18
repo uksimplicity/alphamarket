@@ -19,10 +19,34 @@ function resolveMediaUrl(value: unknown) {
   if (!raw) return "";
   if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
   if (raw.startsWith("//")) return `https:${raw}`;
-  const normalized = raw.replace(/\\/g, "/");
+  const normalized = encodeURI(raw.replace(/\\/g, "/"));
   if (!API_ROOT_BASE) return normalized;
   if (normalized.startsWith("/")) return `${API_ROOT_BASE}${normalized}`;
   return `${API_ROOT_BASE}/${normalized}`;
+}
+
+function pickMediaValue(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value).trim();
+  }
+  if (!value || typeof value !== "object") return "";
+  const record = value as Record<string, unknown>;
+  const candidates = [
+    record.url,
+    record.file_url,
+    record.fileUrl,
+    record.path,
+    record.src,
+    record.location,
+    record.value,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" || typeof candidate === "number") {
+      const text = String(candidate).trim();
+      if (text) return text;
+    }
+  }
+  return "";
 }
 
 function mapLiveProduct(record: Record<string, unknown>, fallbackId: string): Product {
@@ -30,15 +54,15 @@ function mapLiveProduct(record: Record<string, unknown>, fallbackId: string): Pr
     record.media && typeof record.media === "object"
       ? (record.media as Record<string, unknown>)
       : null;
-  const images = Array.isArray(media?.images) ? media?.images : [];
-  const imageRaw = String(
-    media?.cover ??
-      media?.coverUrl ??
-      images[0] ??
-      record.cover ??
-      record.image ??
-      "https://images.unsplash.com/photo-1557821552-17105176677c?auto=format&fit=crop&w=900&q=80"
-  );
+  const images = Array.isArray(media?.images) ? media.images : [];
+  const firstImage = images.find((item) => pickMediaValue(item));
+  const imageRaw =
+    pickMediaValue(media?.cover) ||
+    pickMediaValue(media?.coverUrl) ||
+    pickMediaValue(firstImage) ||
+    pickMediaValue(record.cover) ||
+    pickMediaValue(record.image) ||
+    "https://images.unsplash.com/photo-1557821552-17105176677c?auto=format&fit=crop&w=900&q=80";
   const image =
     resolveMediaUrl(imageRaw) ||
     "https://images.unsplash.com/photo-1557821552-17105176677c?auto=format&fit=crop&w=900&q=80";
