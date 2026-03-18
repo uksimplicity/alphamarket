@@ -27,6 +27,7 @@ type ProductsData = {
   attributes: CatalogItem[];
   productTypes: CatalogItem[];
   categories: CatalogItem[];
+  categoriesFromCache: boolean;
 };
 
 const ADMIN_PRODUCT_TYPES_CACHE_KEY = "alpha.admin.product-types";
@@ -144,6 +145,7 @@ function readCachedProductsData(): ProductsData {
     attributes: [],
     productTypes: readCachedCatalogItems(ADMIN_PRODUCT_TYPES_CACHE_KEY),
     categories: readCachedCatalogItems("alpha.admin.categories"),
+    categoriesFromCache: true,
   };
 }
 
@@ -153,6 +155,26 @@ async function fetchOptionalAdminCollection(path: string, fallback: unknown = []
   } catch {
     return fallback;
   }
+}
+
+async function deleteProductTypeEndpoint(id: string): Promise<void> {
+  const paths = [
+    `/product-types/${id}?hard=true`,
+    `/product-types/${id}?force=true`,
+    `/product-types/${id}`,
+  ];
+
+  let lastError: unknown = null;
+  for (const path of paths) {
+    try {
+      await adminFetcher(path, { method: "DELETE" });
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Failed to delete product type.");
 }
 
 export default function AdminProductsPage() {
@@ -167,6 +189,7 @@ export default function AdminProductsPage() {
     attributes: [],
     productTypes: [],
     categories: [],
+    categoriesFromCache: true,
   });
   const [productTypeForm, setProductTypeForm] = useState({
     name: "",
@@ -189,7 +212,7 @@ export default function AdminProductsPage() {
     queryKey: ["admin-products"],
     queryFn: async () => {
       const productsPayload = await fetchOptionalAdminCollection("/products?limit=100", []);
-      const [attributesPayload, productTypesPayload, categoriesPayload] = await Promise.all([
+      const [attributesPayload, productTypesPayload, categoriesResult] = await Promise.all([
         fetchOptionalAdminCollection("/attributes?limit=100", []),
         (async () => {
           const payload = await fetchOptionalAdminCollection("/product-types?limit=100", null);
@@ -198,8 +221,16 @@ export default function AdminProductsPage() {
         })(),
         (async () => {
           const categoriesPayload = await fetchOptionalAdminCollection("/categories?limit=200&offset=0", null);
-          if (categoriesPayload) return categoriesPayload;
-          return readCachedCatalogItems("alpha.admin.categories");
+          if (categoriesPayload) {
+            return {
+              payload: categoriesPayload,
+              fromCache: false,
+            };
+          }
+          return {
+            payload: readCachedCatalogItems("alpha.admin.categories"),
+            fromCache: true,
+          };
         })(),
       ]);
 
@@ -227,13 +258,19 @@ export default function AdminProductsPage() {
         fallbackPrefix: "product-type",
       });
 
-      const categories = parseCatalogItems(categoriesPayload, {
+      const categories = parseCatalogItems(categoriesResult.payload, {
         idKeys: ["id", "uuid", "category_id", "categoryId"],
         nameKeys: ["name", "title", "category_name", "categoryName"],
         fallbackPrefix: "category",
       });
 
-      return { products, attributes, productTypes, categories } satisfies ProductsData;
+      return {
+        products,
+        attributes,
+        productTypes,
+        categories,
+        categoriesFromCache: categoriesResult.fromCache,
+      } satisfies ProductsData;
     },
   });
 
@@ -252,6 +289,7 @@ export default function AdminProductsPage() {
       attributes: data.attributes.length > 0 ? data.attributes : prev.attributes,
       productTypes: data.productTypes.length > 0 ? data.productTypes : prev.productTypes,
       categories: data.categories.length > 0 ? data.categories : prev.categories,
+      categoriesFromCache: data.categoriesFromCache,
     }));
   }, [data]);
 
@@ -356,6 +394,17 @@ export default function AdminProductsPage() {
       setActionMessage("Please select a saved category from the backend list.");
       return;
     }
+    if (resolvedData.categoriesFromCache) {
+      setActionMessage("Live categories could not be loaded from the backend. Refresh categories before creating a product type.");
+      return;
+    }
+    const duplicateExists = resolvedData.productTypes.some(
+      (item) => item.name.trim().toLowerCase() === name.toLowerCase()
+    );
+    if (duplicateExists) {
+      setActionMessage("Product type name already exists. Please use a different name.");
+      return;
+    }
     try {
       setActionMessage("");
       setPendingKey("create-product-type");
@@ -427,7 +476,7 @@ export default function AdminProductsPage() {
     try {
       setActionMessage("");
       setPendingKey(`delete-product-type-${id}`);
-      await adminFetcher(`/product-types/${id}`, { method: "DELETE" });
+      await deleteProductTypeEndpoint(id);
       setActionMessage("Product type deleted.");
       setCachedData((prev) => {
         const nextProductTypes = prev.productTypes.filter((item) => item.id !== id);
