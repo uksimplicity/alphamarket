@@ -102,6 +102,12 @@ function validateFileSize(file, label, maxMb = 3) {
   return "";
 }
 
+function buildAuthorizationHeader(token) {
+  const trimmed = String(token ?? "").trim();
+  if (!trimmed) return "";
+  return /^bearer\s+/i.test(trimmed) ? trimmed : `Bearer ${trimmed}`;
+}
+
 const LOCAL_CREATED_PRODUCTS_KEY = "alpha.createdProducts";
 const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
 const ADMIN_CATEGORIES_CACHE_KEY = "alpha.admin.categories";
@@ -209,12 +215,13 @@ export default function CreateProduct({ mode = "seller" }) {
     async function requestCatalog(resource) {
       const auth = getAuth();
       const token = auth?.access_token;
+      const authorization = buildAuthorizationHeader(token);
       const response = await fetch(
         `/api/seller/catalog?resource=${encodeURIComponent(resource)}&limit=200&offset=0`,
         {
           headers: {
             Accept: "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(authorization ? { Authorization: authorization } : {}),
           },
         }
       );
@@ -297,7 +304,7 @@ export default function CreateProduct({ mode = "seller" }) {
     setDiscountEnabled(false);
   };
 
-  async function uploadFile(file, folder, token) {
+async function uploadFile(file, folder, token) {
     if (!file) return "";
     const fd = new FormData();
     fd.append("file", file);
@@ -306,7 +313,7 @@ export default function CreateProduct({ mode = "seller" }) {
     const response = await fetch("/api/upload/file", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: token,
       },
       body: fd,
     });
@@ -345,9 +352,10 @@ export default function CreateProduct({ mode = "seller" }) {
 
     const auth = getAuth();
     const token = auth?.access_token;
+    const authorization = buildAuthorizationHeader(token);
     const userStatus = auth?.user?.status;
 
-    if (!token) {
+    if (!authorization) {
       setError("You must be logged in to create a product.");
       return;
     }
@@ -515,11 +523,11 @@ export default function CreateProduct({ mode = "seller" }) {
     try {
       setLoading(true);
 
-      const coverUrl = await uploadFile(coverFile, "products", token);
+      const coverUrl = await uploadFile(coverFile, "products", authorization);
       const imageUrls = imageFiles.length
-        ? await Promise.all(imageFiles.map((file) => uploadFile(file, "products", token)))
+        ? await Promise.all(imageFiles.map((file) => uploadFile(file, "products", authorization)))
         : [];
-      const videoUrl = await uploadFile(videoFile, "products", token);
+      const videoUrl = await uploadFile(videoFile, "products", authorization);
 
       payload.media.cover = coverUrl;
       payload.media.images = imageUrls.filter(Boolean);
@@ -532,7 +540,7 @@ export default function CreateProduct({ mode = "seller" }) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: authorization,
         },
         body: JSON.stringify(payload),
       });

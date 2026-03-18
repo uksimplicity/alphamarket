@@ -31,6 +31,12 @@ function emptyCatalog(resource: string) {
   );
 }
 
+function normalizeAuthHeader(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return trimmed.replace(/^Bearer\s+Bearer\s+/i, "Bearer ");
+}
+
 function hasCatalogRecords(payload: unknown): boolean {
   const visited = new WeakSet<object>();
 
@@ -90,7 +96,7 @@ export async function GET(req: Request) {
     return emptyCatalog(resource);
   }
 
-  const authHeader = req.headers.get("authorization") ?? "";
+  const authHeader = normalizeAuthHeader(req.headers.get("authorization") ?? "");
   const cookieHeader = req.headers.get("cookie") ?? "";
   const headers: Record<string, string> = {
     Accept: "application/json",
