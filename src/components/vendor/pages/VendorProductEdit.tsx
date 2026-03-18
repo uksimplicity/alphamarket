@@ -106,7 +106,7 @@ export default function VendorProductEdit() {
       const attrs = Array.isArray(payload?.attributes) ? payload.attributes : [];
       if (attrs.length > 0) {
         setVariants(
-          attrs.map((row) => {
+          attrs.map((row: unknown) => {
             const record =
               row && typeof row === "object" ? (row as Record<string, unknown>) : {};
             return {
