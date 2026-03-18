@@ -856,19 +856,19 @@ async function uploadFile(file, folder, token) {
               <label className="upload-card">
                 <input
                   type="file"
-                  accept=".jpg,.jpeg,.png"
+                  accept="image/*"
                   onChange={(event) => setCoverFile(event.target.files?.[0] ?? null)}
                 />
                 <span className="upload-icon">&#8593;</span>
                 <div className="upload-title">Upload Cover Photo</div>
-                <div className="upload-note">Allowed *.jpeg, *.jpg, *.png</div>
+                <div className="upload-note">Allowed all image types</div>
                 <div className="upload-note">Max size 3 MB</div>
                 {coverFile ? <div className="upload-filename">{coverFile.name}</div> : null}
               </label>
               <label className="upload-card">
                 <input
                   type="file"
-                  accept=".jpg,.jpeg,.png"
+                  accept="image/*"
                   multiple
                   onChange={(event) =>
                     setImageFiles(event.target.files ? Array.from(event.target.files) : [])
@@ -876,7 +876,7 @@ async function uploadFile(file, folder, token) {
                 />
                 <span className="upload-icon">&#8593;</span>
                 <div className="upload-title">Upload Product Photos</div>
-                <div className="upload-note">Allowed *.jpeg, *.jpg, *.png</div>
+                <div className="upload-note">Allowed all image types</div>
                 <div className="upload-note">Max size 3 MB each</div>
                 {imageFiles.length > 0 ? (
                   <div className="upload-filename">{imageFiles.length} file(s)</div>

@@ -9,13 +9,29 @@ import { getAuth } from "@/components/auth/authStorage";
 import { getProductById, type Product } from "@/components/products/catalog";
 import ProductDetail from "@/components/products/ProductDetail";
 
+const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+const API_ROOT_BASE = RAW_API_BASE
+  ? RAW_API_BASE.replace(/\/+$/, "").replace(/\/api\/v1$/i, "")
+  : "";
+
+function resolveMediaUrl(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+  if (raw.startsWith("//")) return `https:${raw}`;
+  const normalized = raw.replace(/\\/g, "/");
+  if (!API_ROOT_BASE) return normalized;
+  if (normalized.startsWith("/")) return `${API_ROOT_BASE}${normalized}`;
+  return `${API_ROOT_BASE}/${normalized}`;
+}
+
 function mapLiveProduct(record: Record<string, unknown>, fallbackId: string): Product {
   const media =
     record.media && typeof record.media === "object"
       ? (record.media as Record<string, unknown>)
       : null;
   const images = Array.isArray(media?.images) ? media?.images : [];
-  const image = String(
+  const imageRaw = String(
     media?.cover ??
       media?.coverUrl ??
       images[0] ??
@@ -23,6 +39,9 @@ function mapLiveProduct(record: Record<string, unknown>, fallbackId: string): Pr
       record.image ??
       "https://images.unsplash.com/photo-1557821552-17105176677c?auto=format&fit=crop&w=900&q=80"
   );
+  const image =
+    resolveMediaUrl(imageRaw) ||
+    "https://images.unsplash.com/photo-1557821552-17105176677c?auto=format&fit=crop&w=900&q=80";
   const amount = Number(record.basePrice ?? record.base_price ?? record.price ?? 0);
 
   return {
