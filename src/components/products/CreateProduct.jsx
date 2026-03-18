@@ -56,11 +56,17 @@ function walkRecords(payload, target = []) {
 
   const hasId =
     typeof record.id === "string" ||
+    typeof record.id === "number" ||
     typeof record.uuid === "string" ||
+    typeof record.uuid === "number" ||
     typeof record.category_id === "string" ||
+    typeof record.category_id === "number" ||
     typeof record.categoryId === "string" ||
+    typeof record.categoryId === "number" ||
     typeof record.product_type_id === "string" ||
-    typeof record.type_id === "string";
+    typeof record.product_type_id === "number" ||
+    typeof record.type_id === "string" ||
+    typeof record.type_id === "number";
   const hasName =
     typeof record.name === "string" ||
     typeof record.title === "string" ||

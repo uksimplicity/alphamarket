@@ -11,6 +11,14 @@ const ALLOWED_RESOURCES = new Set([
   "attributes",
 ]);
 
+const RESOURCE_ALIASES: Record<string, string[]> = {
+  categories: ["categories", "category"],
+  "product-types": ["product-types", "product_type", "product-types", "producttype", "types"],
+  brands: ["brands", "brand"],
+  tags: ["tags", "tag"],
+  attributes: ["attributes", "attribute"],
+};
+
 function emptyCatalog(resource: string) {
   return new Response(
     JSON.stringify({
@@ -91,23 +99,28 @@ export async function GET(req: Request) {
   };
 
   const search = new URLSearchParams({ limit, offset }).toString();
+  const resourcePaths = RESOURCE_ALIASES[resource] ?? [resource];
+  const pathPrefixes = ["seller", "auth/seller", "admin", "auth/admin", "auth", ""];
   const urls = Array.from(
     new Set(
-      API_BASE_CANDIDATES.flatMap((base) => [
-        `${base}/seller/${resource}?${search}`,
-        `${base}/auth/seller/${resource}?${search}`,
-        `${base}/admin/${resource}?${search}`,
-        `${base}/auth/admin/${resource}?${search}`,
-      ])
+      API_BASE_CANDIDATES.flatMap((base) =>
+        pathPrefixes.flatMap((prefix) =>
+          resourcePaths.map((resourcePath) => {
+            const cleanedPrefix = prefix.trim().replace(/^\/+|\/+$/g, "");
+            const cleanedResource = resourcePath.trim().replace(/^\/+|\/+$/g, "");
+            const path = cleanedPrefix ? `${cleanedPrefix}/${cleanedResource}` : cleanedResource;
+            return `${base}/${path}?${search}`;
+          })
+        )
+      )
     )
   );
 
   try {
-    let res: Response | null = null;
     let upstreamErrorRes: Response | null = null;
 
     for (const candidate of urls) {
-      res = await fetch(candidate, {
+      const res = await fetch(candidate, {
         method: "GET",
         headers,
         cache: "no-store",
@@ -138,29 +151,18 @@ export async function GET(req: Request) {
           }
         );
       }
-      break;
+      continue;
     }
 
-    if ((!res || res.status === 404) && !upstreamErrorRes) {
+    if (!upstreamErrorRes) {
       return emptyCatalog(resource);
     }
 
-    const finalRes = upstreamErrorRes ?? res;
-    if (!finalRes) {
+    if (upstreamErrorRes.status >= 500) {
       return emptyCatalog(resource);
     }
 
-    const text = await finalRes.text();
-    if (finalRes.status >= 500) {
-      return emptyCatalog(resource);
-    }
-
-    return new Response(text, {
-      status: finalRes.status,
-      headers: {
-        "Content-Type": finalRes.headers.get("content-type") ?? "application/json",
-      },
-    });
+    return emptyCatalog(resource);
   } catch {
     return emptyCatalog(resource);
   }
