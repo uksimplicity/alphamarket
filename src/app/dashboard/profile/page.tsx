@@ -149,6 +149,7 @@ export default function ProfilePage() {
 
     setPictureSaving(true);
     setPictureMessage("");
+    const profileSnapshot = data;
     try {
       const uploadedUrl = await uploadProfilePicture(profilePictureFile);
       await updateCurrentUserProfile({
@@ -169,10 +170,10 @@ export default function ProfilePage() {
             ? { ...prev, profilePicture: uploadedUrl }
             : {
                 id: "",
-                name: data.name,
-                email: data.email,
-                phone: data.phone,
-                phoneVerified: data.phoneVerified,
+                name: profileSnapshot?.name ?? "",
+                email: profileSnapshot?.email ?? "",
+                phone: profileSnapshot?.phone ?? "",
+                phoneVerified: profileSnapshot?.phoneVerified ?? false,
                 role: "",
                 address: "",
                 city: "",

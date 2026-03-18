@@ -31,6 +31,17 @@ type ProductsData = {
 
 const ADMIN_PRODUCT_TYPES_CACHE_KEY = "alpha.admin.product-types";
 
+function isPlaceholderId(value: string) {
+  const id = value.trim().toLowerCase();
+  return (
+    !id ||
+    id.startsWith("local-") ||
+    id.startsWith("product-type-") ||
+    id.startsWith("category-") ||
+    id.startsWith("attribute-")
+  );
+}
+
 function parseCatalogItems(
   payload: unknown,
   config?: { idKeys?: string[]; nameKeys?: string[]; hintKeys?: string[]; fallbackPrefix?: string }
@@ -121,12 +132,7 @@ function readCachedCatalogItems(key: string): CatalogItem[] {
         categoryId: String(item?.categoryId ?? "").trim(),
         categoryName: String(item?.categoryName ?? "").trim(),
       }))
-      .filter(
-        (item) =>
-          item.id &&
-          item.name &&
-          !(item.id.startsWith("product-type-") && item.name.toLowerCase().startsWith("unnamed "))
-      );
+      .filter((item) => item.id && item.name && !isPlaceholderId(item.id));
   } catch {
     return [];
   }
@@ -346,6 +352,10 @@ export default function AdminProductsPage() {
       setActionMessage("No category is not supported by the current backend. Please select a category.");
       return;
     }
+    if (isPlaceholderId(categoryId)) {
+      setActionMessage("Please select a saved category from the backend list.");
+      return;
+    }
     try {
       setActionMessage("");
       setPendingKey("create-product-type");
@@ -437,6 +447,7 @@ export default function AdminProductsPage() {
     if (!query) return true;
     return item.name.toLowerCase().includes(query) || item.id.toLowerCase().includes(query);
   });
+  const selectableCategories = resolvedData.categories.filter((item) => !isPlaceholderId(item.id));
   const isProductTypesView = activeHash === "product-types";
 
   async function updateProduct(product: Product) {
@@ -644,7 +655,7 @@ export default function AdminProductsPage() {
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
               >
                 <option value="">No category</option>
-                {resolvedData.categories.map((item) => (
+                {selectableCategories.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>
