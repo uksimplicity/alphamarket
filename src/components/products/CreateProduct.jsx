@@ -289,13 +289,21 @@ export default function CreateProduct({ mode = "seller" }) {
       setCatalogLoading(true);
       setCatalogError("");
       try {
-        const [categories, productTypes, brands, tags] = await Promise.all([
+        const [categoriesResult, productTypesResult, brandsResult, tagsResult] =
+          await Promise.allSettled([
           requestCatalog("categories"),
           requestCatalog("product-types"),
           requestCatalog("brands"),
           requestCatalog("tags"),
         ]);
         if (!isMounted) return;
+
+        const categories =
+          categoriesResult.status === "fulfilled" ? categoriesResult.value : null;
+        const productTypes =
+          productTypesResult.status === "fulfilled" ? productTypesResult.value : null;
+        const brands = brandsResult.status === "fulfilled" ? brandsResult.value : null;
+        const tags = tagsResult.status === "fulfilled" ? tagsResult.value : null;
 
         const apiCategories = parseOptions(categories);
         const cachedCategories = readCachedAdminCategories();
@@ -305,6 +313,20 @@ export default function CreateProduct({ mode = "seller" }) {
         setTypeOptions(apiProductTypes.length > 0 ? apiProductTypes : cachedProductTypes);
         setBrandOptions(parseOptions(brands));
         setTagOptions(parseOptions(tags));
+
+        const failedMessages = [
+          categoriesResult,
+          productTypesResult,
+          brandsResult,
+          tagsResult,
+        ]
+          .filter((item) => item.status === "rejected")
+          .map((item) =>
+            item.reason instanceof Error
+              ? item.reason.message
+              : "Catalog endpoint failed."
+          );
+
         const categoriesWarning =
           categories && typeof categories === "object" && "warning" in categories
             ? String(categories.warning ?? "")
@@ -313,8 +335,16 @@ export default function CreateProduct({ mode = "seller" }) {
           productTypes && typeof productTypes === "object" && "warning" in productTypes
             ? String(productTypes.warning ?? "")
             : "";
-        if (!apiCategories.length && !apiProductTypes.length && (categoriesWarning || typesWarning)) {
-          setCatalogError([categoriesWarning, typesWarning].filter(Boolean).join(" "));
+        if (
+          !apiCategories.length &&
+          !apiProductTypes.length &&
+          (categoriesWarning || typesWarning || failedMessages.length)
+        ) {
+          setCatalogError(
+            [categoriesWarning, typesWarning, ...failedMessages]
+              .filter(Boolean)
+              .join(" ")
+          );
         }
       } catch (loadError) {
         if (!isMounted) return;
