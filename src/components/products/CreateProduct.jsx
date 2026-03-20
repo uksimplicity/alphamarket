@@ -223,6 +223,53 @@ function parseAdminCategoryOptions(payload) {
   });
 }
 
+function parseCategoryOptionsFromProducts(payload) {
+  const root = asRecord(payload);
+  const rows = Array.isArray(payload)
+    ? payload
+    : Array.isArray(root?.data)
+      ? root.data
+      : Array.isArray(root?.products)
+        ? root.products
+        : Array.isArray(root?.items)
+          ? root.items
+          : [];
+  if (!Array.isArray(rows)) return [];
+
+  const mapped = rows
+    .map((item) => asRecord(item))
+    .filter(Boolean)
+    .map((row, index) => {
+      const categoryRecord = asRecord(row.category);
+      const id =
+        toText(
+          getValueCaseInsensitive(categoryRecord, ["id", "uuid", "category_id", "categoryId"])
+        ) ||
+        toText(getValueCaseInsensitive(row, ["category_id", "categoryId", "categoryID"])) ||
+        `derived-category-${index}`;
+      const name =
+        toText(
+          getValueCaseInsensitive(categoryRecord, [
+            "name",
+            "title",
+            "category_name",
+            "categoryName",
+          ])
+        ) ||
+        toText(getValueCaseInsensitive(row, ["category", "category_name", "categoryName"]));
+
+      return { id, name };
+    })
+    .filter((item) => item.id && item.name);
+
+  const deduped = new Map();
+  for (const item of mapped) {
+    const key = item.name.toLowerCase();
+    if (!deduped.has(key)) deduped.set(key, item);
+  }
+  return Array.from(deduped.values());
+}
+
 function validateFileSize(file, label, maxMb = 3) {
   if (!file) return "";
   const maxBytes = maxMb * 1024 * 1024;
@@ -384,21 +431,27 @@ export default function CreateProduct({ mode = "seller" }) {
       return response.json();
     }
 
+    async function requestSellerProducts() {
+      const auth = getAuth();
+      const token = auth?.access_token;
+      const authorization = buildAuthorizationHeader(token);
+      const response = await fetch("/api/seller/products?limit=500&offset=0", {
+        headers: {
+          Accept: "application/json",
+          ...(authorization ? { Authorization: authorization } : {}),
+        },
+      });
+      if (!response.ok) throw new Error(`Could not load products (${response.status}).`);
+      return response.json();
+    }
+
     async function loadCatalog() {
       setCatalogLoading(true);
       setCategoryLoading(true);
       setCatalogError("");
       try {
         const cachedCategories = readCachedAdminCategories();
-        if (cachedCategories.length > 0) {
-          setCategoryOptions(cachedCategories);
-          setCategoryLoading(false);
-        }
-
         const cachedProductTypes = readCachedAdminProductTypes();
-        if (cachedProductTypes.length > 0) {
-          setTypeOptions(cachedProductTypes);
-        }
 
         let categoriesWarning = "";
         let typesWarning = "";
@@ -410,8 +463,20 @@ export default function CreateProduct({ mode = "seller" }) {
           const adminCategoriesPayload = await requestAdminCategories();
           if (!isMounted) return;
           apiCategories = parseAdminCategoryOptions(adminCategoriesPayload);
+          if (apiCategories.length === 0) {
+            const sellerCatalogCategories = await requestCatalog("categories");
+            if (!isMounted) return;
+            apiCategories = parseOptions(sellerCatalogCategories);
+          }
+          if (apiCategories.length === 0) {
+            const productsPayload = await requestSellerProducts();
+            if (!isMounted) return;
+            apiCategories = parseCategoryOptionsFromProducts(productsPayload);
+          }
           if (apiCategories.length > 0) {
             setCategoryOptions(apiCategories);
+          } else if (cachedCategories.length > 0) {
+            setCategoryOptions(cachedCategories);
           }
           categoriesWarning =
             adminCategoriesPayload &&
@@ -442,6 +507,8 @@ export default function CreateProduct({ mode = "seller" }) {
         apiProductTypes = parseProductTypeOptions(productTypes);
         if (apiProductTypes.length > 0) {
           setTypeOptions(apiProductTypes);
+        } else if (cachedProductTypes.length > 0) {
+          setTypeOptions(cachedProductTypes);
         }
         setBrandOptions(parseOptions(brands));
         setTagOptions(parseOptions(tags));
