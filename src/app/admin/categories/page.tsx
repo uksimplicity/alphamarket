@@ -43,6 +43,7 @@ function buildDynamicSlug(name: string) {
 }
 
 export default function AdminCategoriesPage() {
+  const PAGE_SIZE = 20;
   const ADMIN_CATEGORIES_CACHE_KEY = "alpha.admin.categories";
   const [pendingKey, setPendingKey] = useState("");
   const [actionMessage, setActionMessage] = useState("");
@@ -52,6 +53,7 @@ export default function AdminCategoriesPage() {
   const [categorySearch, setCategorySearch] = useState("");
   const [createdByFilter, setCreatedByFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
   const [categoryForm, setCategoryForm] = useState({
     name: "",
     description: "",
@@ -612,6 +614,12 @@ export default function AdminCategoriesPage() {
     const matchesDate = dateFilter === "all" || item.date.includes(dateFilter);
     return matchesSearch && matchesCreator && matchesDate;
   });
+  const totalPages = Math.max(1, Math.ceil(filteredCategories.length / PAGE_SIZE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedCategories = filteredCategories.slice(
+    (safeCurrentPage - 1) * PAGE_SIZE,
+    safeCurrentPage * PAGE_SIZE
+  );
 
   function formatDate(value: string) {
     if (!value) return "01 Jul, 2022";
@@ -719,14 +727,20 @@ export default function AdminCategoriesPage() {
           </svg>
           <input
             value={categorySearch}
-            onChange={(event) => setCategorySearch(event.target.value)}
+            onChange={(event) => {
+              setCategorySearch(event.target.value);
+              setCurrentPage(1);
+            }}
             className="w-full bg-transparent text-sm outline-none"
             placeholder="Search..."
           />
         </div>
         <select
           value={createdByFilter}
-          onChange={(event) => setCreatedByFilter(event.target.value)}
+          onChange={(event) => {
+            setCreatedByFilter(event.target.value);
+            setCurrentPage(1);
+          }}
           className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none"
         >
           <option value="all">Create by</option>
@@ -734,7 +748,10 @@ export default function AdminCategoriesPage() {
         </select>
         <select
           value={dateFilter}
-          onChange={(event) => setDateFilter(event.target.value)}
+          onChange={(event) => {
+            setDateFilter(event.target.value);
+            setCurrentPage(1);
+          }}
           className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none"
         >
           <option value="all">Date</option>
@@ -760,7 +777,7 @@ export default function AdminCategoriesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 text-slate-700">
-              {filteredCategories.map((item) => (
+              {paginatedCategories.map((item) => (
                 <tr key={item.id}>
                   <td className="px-4 py-3">
                     <input type="checkbox" aria-label={`Select category ${item.name}`} />
@@ -836,7 +853,13 @@ export default function AdminCategoriesPage() {
       </div>
 
       <div className="mt-6 flex items-center justify-end gap-5 text-sm text-slate-500">
-        <button type="button" className="hover:text-brand" aria-label="Previous page">
+        <button
+          type="button"
+          className="hover:text-brand disabled:opacity-50"
+          aria-label="Previous page"
+          onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+          disabled={safeCurrentPage <= 1}
+        >
           <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
             <path
               d="M15 6l-6 6 6 6"
@@ -848,20 +871,18 @@ export default function AdminCategoriesPage() {
             />
           </svg>
         </button>
-        <button type="button" className="rounded-md bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">
-          1
-        </button>
-        <button type="button" className="hover:text-brand">
-          2
-        </button>
-        <button type="button" className="hover:text-brand">
-          3
-        </button>
-        <span>...</span>
-        <button type="button" className="hover:text-brand">
-          120
-        </button>
-        <button type="button" className="hover:text-brand" aria-label="Next page">
+        <span className="rounded-md bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">
+          {safeCurrentPage}
+        </span>
+        <span>of</span>
+        <span>{totalPages}</span>
+        <button
+          type="button"
+          className="hover:text-brand disabled:opacity-50"
+          aria-label="Next page"
+          onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+          disabled={safeCurrentPage >= totalPages}
+        >
           <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
             <path
               d="M9 6l6 6-6 6"
