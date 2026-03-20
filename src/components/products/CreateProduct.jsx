@@ -7,7 +7,6 @@ import { getAuth } from "@/components/auth/authStorage";
 
 const initialForm = {
   name: "",
-  sellerId: "",
   category: "",
   type: "",
   brand: "",
@@ -671,7 +670,7 @@ async function uploadFile(file, folder, token) {
       return;
     }
 
-    const sellerId = mode === "admin" ? form.sellerId.trim() : auth?.user?.id;
+    const sellerId = auth?.user?.id;
     if (!sellerId) {
       setError("Seller ID is missing. Please log in again.");
       return;
@@ -920,17 +919,6 @@ async function uploadFile(file, folder, token) {
                   placeholder="e.g. Wireless Keyboard"
                 />
               </div>
-              {mode === "admin" ? (
-                <div className="field">
-                  <label>Seller ID</label>
-                  <input
-                    name="sellerId"
-                    value={form.sellerId}
-                    onChange={handleChange}
-                    placeholder="Seller UUID"
-                  />
-                </div>
-              ) : null}
               <div className="field">
                 <label>Category</label>
                 <select name="category" value={form.category} onChange={handleChange}>
