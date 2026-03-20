@@ -11,6 +11,7 @@ import {
   getProfilePath,
 } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
+import { useAdminCategoryNames } from "@/components/marketplace/useAdminCategoryNames";
 
 type LinkComponentProps = {
   href: string;
@@ -32,6 +33,7 @@ export default function MarketplaceHeaderBase({
   const user = signedOutOverride ? null : authUser;
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userName = getDisplayName(user);
+  const adminCategoryNames = useAdminCategoryNames();
 
   return (
     <header className={styles.header}>
@@ -194,14 +196,11 @@ export default function MarketplaceHeaderBase({
 
       <nav className={styles.categories}>
         <a href="#">All Categories</a>
-        <a href="#">Electronics</a>
-        <a href="#">Fashion</a>
-        <a href="#">Home & Living</a>
-        <a href="#">Beauty</a>
-        <a href="#">Sports</a>
-        <a href="#">Toys</a>
-        <a href="#">Automotive</a>
-        <a href="#">Books</a>
+        {adminCategoryNames.map((name) => (
+          <a key={name} href="#">
+            {name}
+          </a>
+        ))}
       </nav>
 
       <div className={styles.mobileSearchTrigger} aria-hidden="true" />

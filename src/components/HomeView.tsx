@@ -12,6 +12,7 @@ import {
   popularProducts,
   newArrivalProducts,
 } from "@/components/products/catalog";
+import { useAdminCategoryNames } from "@/components/marketplace/useAdminCategoryNames";
 
 const weeklyPromotions = [
   {
@@ -202,6 +203,7 @@ type HeaderProps = {
 function Header({ cartCount }: HeaderProps) {
   const [userName, setUserName] = useState(() => getDisplayName(getAuth()?.user));
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const adminCategoryNames = useAdminCategoryNames();
 
   useEffect(() => {
     function onStorage(e: StorageEvent) {
@@ -376,14 +378,11 @@ function Header({ cartCount }: HeaderProps) {
 
       <nav className={styles.categories}>
         <a href="#">All Categories</a>
-        <a href="#">Electronics</a>
-        <a href="#">Fashion</a>
-        <a href="#">Home & Living</a>
-        <a href="#">Beauty</a>
-        <a href="#">Sports</a>
-        <a href="#">Toys</a>
-        <a href="#">Automotive</a>
-        <a href="#">Books</a>
+        {adminCategoryNames.map((name) => (
+          <a key={name} href="#">
+            {name}
+          </a>
+        ))}
       </nav>
 
       <div className={styles.mobileSearchTrigger} aria-hidden="true" />

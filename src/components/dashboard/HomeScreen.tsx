@@ -11,6 +11,7 @@ import {
   popularProducts,
   newArrivalProducts,
 } from "@/components/products/catalog";
+import { useAdminCategoryNames } from "@/components/marketplace/useAdminCategoryNames";
 
 const weeklyPromotions = [
   {
@@ -151,6 +152,7 @@ export default function HomeScreen({ userName }: { userName: string }) {
   const [cartModalName, setCartModalName] = useState("");
   const [liveProducts, setLiveProducts] = useState<Product[]>([]);
   const [localProducts, setLocalProducts] = useState<Product[]>([]);
+  const adminCategoryNames = useAdminCategoryNames();
   const cartCount = useCartCount();
 
   useEffect(() => {
@@ -369,24 +371,11 @@ export default function HomeScreen({ userName }: { userName: string }) {
 
           <nav className={styles.categories}>
             <a href="#">All Categories</a>
-            <a href="#">Electronics</a>
-            <a href="#">Fashion</a>
-            <a href="#">Home & Living</a>
-            <a href="#">Beauty</a>
-            <a href="#">Sports</a>
-            <a href="#">Toys</a>
-            <a href="#">Automotive</a>
-            <a href="#">Books</a>
-            <a href="#">Phones & Tablets</a>
-            <a href="#">Computing</a>
-            <a href="#">Appliances</a>
-            <a href="#">Groceries</a>
-            <a href="#">Health</a>
-            <a href="#">Gaming</a>
-            <a href="#">Baby Products</a>
-            <a href="#">Office Supplies</a>
-            <a href="#">Jewelry</a>
-            <a href="#">Pets</a>
+            {adminCategoryNames.map((name) => (
+              <a key={name} href="#">
+                {name}
+              </a>
+            ))}
           </nav>
 
           <div className={styles.mobileSearchTrigger} aria-hidden="true" />

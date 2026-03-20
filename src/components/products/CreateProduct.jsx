@@ -145,6 +145,84 @@ function parseOptions(payload) {
     .filter((row) => row.id && row.name);
 }
 
+function parseProductTypeOptions(payload) {
+  return walkRecords(payload, [])
+    .map((row) => {
+      const id = toText(
+        getValueCaseInsensitive(row, [
+          "id",
+          "uuid",
+          "product_type_id",
+          "type_id",
+          "productTypeId",
+          "typeId",
+        ])
+      );
+      const name = toText(
+        getValueCaseInsensitive(row, [
+          "name",
+          "title",
+          "type",
+          "productType",
+          "product_type_name",
+          "productTypeName",
+          "type_name",
+          "product_type",
+          "label",
+        ])
+      );
+      const categoryRecord = asRecord(
+        getValueCaseInsensitive(row, ["category", "parent_category", "parentCategory"])
+      );
+      const categoryId =
+        toText(getValueCaseInsensitive(row, ["category_id", "categoryId", "categoryID"])) ||
+        toText(getValueCaseInsensitive(categoryRecord, ["id", "uuid", "category_id", "categoryId"]));
+      const categoryName =
+        toText(getValueCaseInsensitive(row, ["category_name", "categoryName"])) ||
+        toText(getValueCaseInsensitive(categoryRecord, ["name", "title", "category_name", "categoryName"]));
+
+      return { id, name, categoryId, categoryName };
+    })
+    .filter((row) => row.id && row.name)
+    .filter((row, index, arr) => {
+      const key = `${row.id}:${row.name.toLowerCase()}:${row.categoryId || ""}`;
+      return (
+        arr.findIndex(
+          (item) =>
+            `${item.id}:${item.name.toLowerCase()}:${item.categoryId || ""}` === key
+        ) === index
+      );
+    });
+}
+
+function parseAdminCategoryOptions(payload) {
+  const record = asRecord(payload);
+  const candidates = Array.isArray(record?.categories)
+    ? record.categories
+    : Array.isArray(record?.data)
+      ? record.data
+      : [];
+  const rows = Array.isArray(candidates) ? candidates : [];
+  const mapped = rows
+    .map((item) => asRecord(item))
+    .filter(Boolean)
+    .map((row) => ({
+      id: toText(getValueCaseInsensitive(row, ["id", "uuid", "category_id", "categoryId"])),
+      name: toText(
+        getValueCaseInsensitive(row, ["name", "title", "category_name", "categoryName"])
+      ),
+    }))
+    .filter((item) => item.id && item.name);
+
+  const seen = new Set();
+  return mapped.filter((item) => {
+    const key = `${item.id}:${item.name.toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function validateFileSize(file, label, maxMb = 3) {
   if (!file) return "";
   const maxBytes = maxMb * 1024 * 1024;
@@ -260,6 +338,7 @@ export default function CreateProduct({ mode = "seller" }) {
   const [brandOptions, setBrandOptions] = useState([]);
   const [tagOptions, setTagOptions] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
+  const [categoryLoading, setCategoryLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
   const [discountEnabled, setDiscountEnabled] = useState(false);
   const [submitIntent, setSubmitIntent] = useState("publish");
@@ -291,65 +370,116 @@ export default function CreateProduct({ mode = "seller" }) {
       return response.json();
     }
 
+    async function requestAdminCategories() {
+      const auth = getAuth();
+      const token = auth?.access_token;
+      const authorization = buildAuthorizationHeader(token);
+      const response = await fetch("/api/admin/categories/raw", {
+        headers: {
+          Accept: "application/json",
+          ...(authorization ? { Authorization: authorization } : {}),
+        },
+      });
+      if (!response.ok) throw new Error(`Could not load admin categories (${response.status}).`);
+      return response.json();
+    }
+
     async function loadCatalog() {
       setCatalogLoading(true);
+      setCategoryLoading(true);
       setCatalogError("");
       try {
-        const [categoriesResult, productTypesResult, brandsResult, tagsResult] =
-          await Promise.allSettled([
-          requestCatalog("categories"),
+        const cachedCategories = readCachedAdminCategories();
+        if (cachedCategories.length > 0) {
+          setCategoryOptions(cachedCategories);
+          setCategoryLoading(false);
+        }
+
+        const cachedProductTypes = readCachedAdminProductTypes();
+        if (cachedProductTypes.length > 0) {
+          setTypeOptions(cachedProductTypes);
+        }
+
+        let categoriesWarning = "";
+        let typesWarning = "";
+        const failedMessages = [];
+        let apiCategories = [];
+        let apiProductTypes = [];
+
+        try {
+          const adminCategoriesPayload = await requestAdminCategories();
+          if (!isMounted) return;
+          apiCategories = parseAdminCategoryOptions(adminCategoriesPayload);
+          if (apiCategories.length > 0) {
+            setCategoryOptions(apiCategories);
+          }
+          categoriesWarning =
+            adminCategoriesPayload &&
+            typeof adminCategoriesPayload === "object" &&
+            "warning" in adminCategoriesPayload
+              ? String(adminCategoriesPayload.warning ?? "")
+              : "";
+        } catch (error) {
+          failedMessages.push(
+            error instanceof Error ? error.message : "Failed to load categories."
+          );
+        } finally {
+          if (isMounted) setCategoryLoading(false);
+        }
+
+        const [productTypesResult, brandsResult, tagsResult] = await Promise.allSettled([
           requestCatalog("product-types"),
           requestCatalog("brands"),
           requestCatalog("tags"),
         ]);
         if (!isMounted) return;
 
-        const categories =
-          categoriesResult.status === "fulfilled" ? categoriesResult.value : null;
         const productTypes =
           productTypesResult.status === "fulfilled" ? productTypesResult.value : null;
         const brands = brandsResult.status === "fulfilled" ? brandsResult.value : null;
         const tags = tagsResult.status === "fulfilled" ? tagsResult.value : null;
 
-        const apiCategories = parseOptions(categories);
-        const cachedCategories = readCachedAdminCategories();
-        setCategoryOptions(apiCategories.length > 0 ? apiCategories : cachedCategories);
-        const apiProductTypes = parseOptions(productTypes);
-        const cachedProductTypes = readCachedAdminProductTypes();
-        setTypeOptions(apiProductTypes.length > 0 ? apiProductTypes : cachedProductTypes);
+        apiProductTypes = parseProductTypeOptions(productTypes);
+        if (apiProductTypes.length > 0) {
+          setTypeOptions(apiProductTypes);
+        }
         setBrandOptions(parseOptions(brands));
         setTagOptions(parseOptions(tags));
 
-        const failedMessages = [
-          categoriesResult,
-          productTypesResult,
-          brandsResult,
-          tagsResult,
-        ]
-          .filter((item) => item.status === "rejected")
-          .map((item) =>
-            item.reason instanceof Error
-              ? item.reason.message
-              : "Catalog endpoint failed."
+        if (productTypesResult.status === "rejected") {
+          failedMessages.push(
+            productTypesResult.reason instanceof Error
+              ? productTypesResult.reason.message
+              : "Failed to load product types."
           );
+        }
+        if (brandsResult.status === "rejected") {
+          failedMessages.push(
+            brandsResult.reason instanceof Error
+              ? brandsResult.reason.message
+              : "Failed to load brands."
+          );
+        }
+        if (tagsResult.status === "rejected") {
+          failedMessages.push(
+            tagsResult.reason instanceof Error
+              ? tagsResult.reason.message
+              : "Failed to load tags."
+          );
+        }
 
-        const categoriesWarning =
-          categories && typeof categories === "object" && "warning" in categories
-            ? String(categories.warning ?? "")
-            : "";
-        const typesWarning =
+        typesWarning =
           productTypes && typeof productTypes === "object" && "warning" in productTypes
             ? String(productTypes.warning ?? "")
             : "";
+
         if (
           !apiCategories.length &&
           !apiProductTypes.length &&
           (categoriesWarning || typesWarning || failedMessages.length)
         ) {
           setCatalogError(
-            [categoriesWarning, typesWarning, ...failedMessages]
-              .filter(Boolean)
-              .join(" ")
+            [categoriesWarning, typesWarning, ...failedMessages].filter(Boolean).join(" ")
           );
         }
       } catch (loadError) {
@@ -360,7 +490,10 @@ export default function CreateProduct({ mode = "seller" }) {
           loadError instanceof Error ? loadError.message : "Failed to load seller catalog options."
         );
       } finally {
-        if (isMounted) setCatalogLoading(false);
+        if (isMounted) {
+          setCatalogLoading(false);
+          setCategoryLoading(false);
+        }
       }
     }
 
@@ -372,7 +505,12 @@ export default function CreateProduct({ mode = "seller" }) {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => {
+      if (name === "category") {
+        return { ...prev, category: value, type: "" };
+      }
+      return { ...prev, [name]: value };
+    });
   };
 
   const removeDiscount = () => {
@@ -664,7 +802,12 @@ async function uploadFile(file, folder, token) {
   };
 
   const hasCategoryOptions = categoryOptions.length > 0;
-  const hasTypeOptions = typeOptions.length > 0;
+  const filteredTypeOptions = typeOptions.filter((item) => {
+    if (!form.category) return false;
+    if (item.categoryId) return String(item.categoryId) === String(form.category);
+    return true;
+  });
+  const hasTypeOptions = filteredTypeOptions.length > 0;
   const hasBrandOptions = brandOptions.length > 0;
 
   return (
@@ -708,7 +851,7 @@ async function uploadFile(file, folder, token) {
                 <label>Category</label>
                 <select name="category" value={form.category} onChange={handleChange}>
                   <option value="">
-                    {catalogLoading ? "Loading categories..." : "Select Category"}
+                    {categoryLoading ? "Loading categories..." : "Select Category"}
                   </option>
                   {categoryOptions.map((item) => (
                     <option key={item.id} value={item.id}>
@@ -716,7 +859,7 @@ async function uploadFile(file, folder, token) {
                     </option>
                   ))}
                 </select>
-                {!catalogLoading && !hasCategoryOptions ? (
+                {!categoryLoading && !hasCategoryOptions ? (
                   <div className="mt-2 text-xs text-slate-500">
                     No categories available yet. Ask admin to create categories first.
                   </div>
@@ -724,19 +867,28 @@ async function uploadFile(file, folder, token) {
               </div>
               <div className="field">
                 <label>Product Type</label>
-                <select name="type" value={form.type} onChange={handleChange}>
+                <select
+                  name="type"
+                  value={form.type}
+                  onChange={handleChange}
+                  disabled={!form.category}
+                >
                   <option value="">
-                    {catalogLoading ? "Loading product types..." : "Select Product Type"}
+                    {!form.category
+                      ? "Select category first"
+                      : catalogLoading
+                      ? "Loading product types..."
+                      : "Select Product Type"}
                   </option>
-                  {typeOptions.map((item) => (
+                  {filteredTypeOptions.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
                     </option>
                   ))}
                 </select>
-                {!catalogLoading && !hasTypeOptions ? (
+                {form.category && !catalogLoading && !hasTypeOptions ? (
                   <div className="mt-2 text-xs text-slate-500">
-                    No product types available yet. Ask admin to create product types first.
+                    No product types available for this category yet.
                   </div>
                 ) : null}
               </div>

@@ -63,6 +63,8 @@ function validateCreatePayload(payload: Record<string, unknown>) {
 async function proxySellerCollection(req: Request, method: "GET" | "POST") {
   const url = new URL(req.url);
   const params = new URLSearchParams(url.search);
+  const limit = Number(params.get("limit") ?? 20);
+  const offset = Number(params.get("offset") ?? 0);
   if (method === "GET") {
     if (!params.has("limit")) params.set("limit", "20");
     if (!params.has("offset")) params.set("offset", "0");
@@ -180,17 +182,21 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
 
     const text = await finalRes.text();
     if (method === "GET" && finalRes.status >= 500) {
+      const items = listMockProducts(limit, offset);
       return new Response(
         JSON.stringify({
-          error: `Seller products upstream unavailable (${finalRes.status}).`,
+          data: items,
+          fallback: true,
+          warning: `Seller products upstream unavailable (${finalRes.status}). Showing local fallback data.`,
           tried: urls,
           attempts,
           details: text.slice(0, 1000),
         }),
         {
-          status: 502,
+          status: 200,
           headers: {
             "Content-Type": "application/json",
+            "X-Proxy-Fallback": "seller-products-list-mock",
           },
         }
       );
@@ -235,6 +241,26 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
       },
     });
   } catch (error) {
+    if (method === "GET") {
+      const items = listMockProducts(limit, offset);
+      return new Response(
+        JSON.stringify({
+          data: items,
+          fallback: true,
+          warning: "Failed to reach seller products upstream. Showing local fallback data.",
+          details: error instanceof Error ? error.message : "Unknown fetch error",
+          tried: urls,
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Proxy-Fallback": "seller-products-list-mock",
+          },
+        }
+      );
+    }
+
     return new Response(
       JSON.stringify({
         error: "Failed to reach seller products upstream.",

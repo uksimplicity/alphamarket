@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
+import { useAdminCategoryNames } from "@/components/marketplace/useAdminCategoryNames";
 
 const LOCAL_CREATED_PRODUCTS_KEY = "alpha.createdProducts";
 const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
@@ -17,6 +18,7 @@ export default function ProductList({
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
   const [publishingId, setPublishingId] = useState(null);
+  const adminCategoryNames = useAdminCategoryNames();
 
   const normalizeList = (payload) => {
     const list = Array.isArray(payload)
@@ -241,6 +243,14 @@ export default function ProductList({
   };
 
   const products = useMemo(() => rows, [rows]);
+  const categoryOptions = useMemo(() => {
+    const fromRows = rows
+      .map((row) => String(row?.category ?? "").trim())
+      .filter((value) => value && value !== "-");
+    return Array.from(new Set([...adminCategoryNames, ...fromRows])).sort((a, b) =>
+      a.localeCompare(b)
+    );
+  }, [adminCategoryNames, rows]);
 
   return (
     <div className="product-page">
@@ -270,13 +280,9 @@ export default function ProductList({
           <div className="filter-group">
             <select aria-label="Filter by category">
               <option>Category</option>
-              <option>Cloth</option>
-              <option>Fashion</option>
-            </select>
-            <select aria-label="Filter by vendor">
-              <option>Vendor</option>
-              <option>Sk Ibrahim</option>
-              <option>Jerome Bell</option>
+              {categoryOptions.map((name) => (
+                <option key={name}>{name}</option>
+              ))}
             </select>
             <select aria-label="Filter by status">
               <option>Status</option>

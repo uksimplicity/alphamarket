@@ -12,13 +12,25 @@ type SellerProduct = {
   stock: number;
   price: number | null;
   status: string;
+  createdAt: string;
 };
 
 type SellerOrder = {
   id: string;
   amount: number;
   status: string;
+  customer: string;
+  createdAt: string;
 };
+
+type DateRangeValue = "all" | "7d" | "30d" | "90d";
+
+const dateRangeOptions: Array<{ value: DateRangeValue; label: string }> = [
+  { value: "all", label: "All time" },
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "90d", label: "Last 90 days" },
+];
 
 function normalizeList(payload: unknown): unknown[] {
   if (Array.isArray(payload)) return payload;
@@ -92,6 +104,41 @@ function formatNaira(value: number) {
   return nairaFormatter.format(value);
 }
 
+function formatDate(value: string) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("en-NG", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getOrderStatusTone(status: string): "success" | "danger" | "warning" | "neutral" {
+  const normalized = status.toLowerCase();
+  if (normalized.includes("deliver") || normalized.includes("complete")) return "success";
+  if (normalized.includes("cancel") || normalized.includes("fail")) return "danger";
+  if (normalized.includes("pend") || normalized.includes("process")) return "warning";
+  return "neutral";
+}
+
+function getDateRangeCutoff(value: DateRangeValue) {
+  if (value === "all") return null;
+  const days = value === "7d" ? 7 : value === "30d" ? 30 : 90;
+  return Date.now() - days * 24 * 60 * 60 * 1000;
+}
+
+function isWithinDateRange(value: string, cutoff: number | null) {
+  if (cutoff === null) return true;
+  if (!value) return true;
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return true;
+  return timestamp >= cutoff;
+}
+
 export default function VendorDashboard() {
   const [products, setProducts] = useState<SellerProduct[]>([]);
   const [orders, setOrders] = useState<SellerOrder[]>([]);
@@ -99,6 +146,7 @@ export default function VendorDashboard() {
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [dateRange, setDateRange] = useState<DateRangeValue>("30d");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
   const loadProducts = useCallback(async () => {
@@ -143,10 +191,6 @@ export default function VendorDashboard() {
         throw new Error(message);
       }
 
-      if (productsPayload && typeof productsPayload === "object" && "fallback" in productsPayload) {
-        throw new Error("Seller products endpoint is in fallback mode. Please retry when backend is available.");
-      }
-
       const rows = normalizeList(productsPayload);
       const normalized = rows
         .map((row, index) => {
@@ -169,6 +213,7 @@ export default function VendorDashboard() {
               ? toNumber(record.basePrice ?? record.price, 0)
               : null,
           status: String(record.status ?? "unknown"),
+          createdAt: toText(record.created_at ?? record.createdAt ?? record.updated_at ?? record.updatedAt),
         } satisfies SellerProduct;
       })
         .filter((row, index) => {
@@ -185,10 +230,25 @@ export default function VendorDashboard() {
         .map((row, index) => {
           const record =
             row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+          const customerName = toText(
+            record.customer_name ??
+              record.customerName ??
+              (record.customer && typeof record.customer === "object"
+                ? (record.customer as Record<string, unknown>).name
+                : "")
+          );
+          const createdAt = toText(
+            record.created_at ??
+              record.createdAt ??
+              record.ordered_at ??
+              record.orderedAt
+          );
           return {
             id: toText(record.id ?? record.order_id ?? record.uuid ?? `order-${index}`),
             amount: toNumber(record.amount ?? record.total_amount ?? record.total ?? 0, 0),
             status: toText(record.status ?? "unknown") || "unknown",
+            customer: customerName || "Customer",
+            createdAt,
           } satisfies SellerOrder;
         })
         .filter((order) => order.id);
@@ -209,21 +269,36 @@ export default function VendorDashboard() {
     void loadProducts();
   }, [loadProducts]);
 
+  const dateRangeCutoff = useMemo(() => getDateRangeCutoff(dateRange), [dateRange]);
+  const dateRangeLabel = useMemo(
+    () => dateRangeOptions.find((option) => option.value === dateRange)?.label ?? "All time",
+    [dateRange]
+  );
+
+  const dateScopedProducts = useMemo(
+    () => products.filter((product) => isWithinDateRange(product.createdAt, dateRangeCutoff)),
+    [products, dateRangeCutoff]
+  );
+  const dateScopedOrders = useMemo(
+    () => orders.filter((order) => isWithinDateRange(order.createdAt, dateRangeCutoff)),
+    [orders, dateRangeCutoff]
+  );
+
   const metrics = useMemo(() => {
-    const totalProducts = products.length;
-    const published = products.filter((product) => product.status.toLowerCase().includes("publish")).length;
-    const draft = products.filter((product) => product.status.toLowerCase().includes("draft")).length;
-    const lowStock = products.filter((product) => product.stock > 0 && product.stock <= 10).length;
-    const outOfStock = products.filter((product) => product.stock <= 0).length;
-    const inventoryValue = products.reduce((sum, product) => {
+    const totalProducts = dateScopedProducts.length;
+    const published = dateScopedProducts.filter((product) => product.status.toLowerCase().includes("publish")).length;
+    const draft = dateScopedProducts.filter((product) => product.status.toLowerCase().includes("draft")).length;
+    const lowStock = dateScopedProducts.filter((product) => product.stock > 0 && product.stock <= 10).length;
+    const outOfStock = dateScopedProducts.filter((product) => product.stock <= 0).length;
+    const inventoryValue = dateScopedProducts.reduce((sum, product) => {
       if (product.price === null) return sum;
       return sum + product.price * Math.max(product.stock, 0);
     }, 0);
-    const totalOrders = orders.length;
-    const fulfilledOrders = orders.filter((order) =>
+    const totalOrders = dateScopedOrders.length;
+    const fulfilledOrders = dateScopedOrders.filter((order) =>
       order.status.toLowerCase().includes("deliver") || order.status.toLowerCase().includes("complete")
     ).length;
-    const orderRevenue = orders.reduce((sum, order) => sum + Math.max(order.amount, 0), 0);
+    const orderRevenue = dateScopedOrders.reduce((sum, order) => sum + Math.max(order.amount, 0), 0);
 
     return {
       totalProducts,
@@ -236,19 +311,19 @@ export default function VendorDashboard() {
       fulfilledOrders,
       orderRevenue,
     };
-  }, [orders, products]);
+  }, [dateScopedOrders, dateScopedProducts]);
 
   const statusOptions = useMemo(() => {
     const entries = new Set<string>();
-    products.forEach((product) => {
+    dateScopedProducts.forEach((product) => {
       entries.add(product.status.toLowerCase());
     });
     return Array.from(entries).sort();
-  }, [products]);
+  }, [dateScopedProducts]);
 
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return products.filter((product) => {
+    return dateScopedProducts.filter((product) => {
       const statusPass =
         statusFilter === "all" || product.status.toLowerCase() === statusFilter;
       const queryPass =
@@ -257,20 +332,34 @@ export default function VendorDashboard() {
         product.category.toLowerCase().includes(query);
       return statusPass && queryPass;
     });
-  }, [products, searchQuery, statusFilter]);
+  }, [dateScopedProducts, searchQuery, statusFilter]);
 
   const recentProducts = useMemo(() => filteredProducts.slice(0, 8), [filteredProducts]);
+  const recentOrders = useMemo(
+    () =>
+      [...dateScopedOrders]
+        .sort((a, b) => {
+          const left = new Date(a.createdAt).getTime();
+          const right = new Date(b.createdAt).getTime();
+          if (Number.isNaN(left) && Number.isNaN(right)) return 0;
+          if (Number.isNaN(left)) return 1;
+          if (Number.isNaN(right)) return -1;
+          return right - left;
+        })
+        .slice(0, 8),
+    [dateScopedOrders]
+  );
   const lowStockProducts = useMemo(
     () =>
-      [...products]
+      [...dateScopedProducts]
         .filter((product) => product.stock > 0 && product.stock <= 10)
         .sort((a, b) => a.stock - b.stock)
         .slice(0, 5),
-    [products]
+    [dateScopedProducts]
   );
 
-  const hasProducts = products.length > 0;
-  const stockTracked = products.filter((product) => product.stock > 0).length;
+  const hasProducts = dateScopedProducts.length > 0;
+  const stockTracked = dateScopedProducts.filter((product) => product.stock > 0).length;
   const safeStock = Math.max(stockTracked - metrics.lowStock, 0);
 
   return (
@@ -284,14 +373,28 @@ export default function VendorDashboard() {
               {lastUpdatedAt ? ` Updated ${lastUpdatedAt.toLocaleTimeString()}.` : ""}
             </div>
           </div>
-          <button
-            type="button"
-            className={styles.actionBtn}
-            onClick={() => void loadProducts()}
-            disabled={loading}
-          >
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
+          <div className={styles.tableFilters}>
+            <select
+              className={styles.filterInput}
+              value={dateRange}
+              onChange={(event) => setDateRange(event.target.value as DateRangeValue)}
+              aria-label="Filter dashboard by date range"
+            >
+              {dateRangeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className={styles.actionBtn}
+              onClick={() => void loadProducts()}
+              disabled={loading}
+            >
+              {loading ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
         </div>
         {error ? <div className={styles.cardSubtitle}>{error}</div> : null}
       </section>
@@ -347,7 +450,9 @@ export default function VendorDashboard() {
       <section className={styles.gridWide}>
         <section className={styles.card}>
           <div className={styles.cardTitle}>Stock Health</div>
-          <div className={styles.cardSubtitle}>Products grouped by inventory state.</div>
+          <div className={styles.cardSubtitle}>
+            Products grouped by inventory state for {dateRangeLabel.toLowerCase()}.
+          </div>
           <div className={styles.progressList}>
             <div className={styles.progressRow}>
               <span>Healthy stock</span>
@@ -357,7 +462,7 @@ export default function VendorDashboard() {
               <div
                 className={styles.progressFill}
                 style={{
-                  width: hasProducts ? `${(safeStock / Math.max(products.length, 1)) * 100}%` : "0%",
+                  width: hasProducts ? `${(safeStock / Math.max(dateScopedProducts.length, 1)) * 100}%` : "0%",
                 }}
               />
             </div>
@@ -370,7 +475,7 @@ export default function VendorDashboard() {
               <div
                 className={styles.progressFill}
                 style={{
-                  width: hasProducts ? `${(metrics.lowStock / Math.max(products.length, 1)) * 100}%` : "0%",
+                  width: hasProducts ? `${(metrics.lowStock / Math.max(dateScopedProducts.length, 1)) * 100}%` : "0%",
                 }}
               />
             </div>
@@ -383,7 +488,7 @@ export default function VendorDashboard() {
               <div
                 className={styles.progressFill}
                 style={{
-                  width: hasProducts ? `${(metrics.outOfStock / Math.max(products.length, 1)) * 100}%` : "0%",
+                  width: hasProducts ? `${(metrics.outOfStock / Math.max(dateScopedProducts.length, 1)) * 100}%` : "0%",
                 }}
               />
             </div>
@@ -420,7 +525,8 @@ export default function VendorDashboard() {
           <div>
             <div className={styles.cardTitle}>Products</div>
             <div className={styles.cardSubtitle}>
-              Showing {recentProducts.length} of {filteredProducts.length} matching products.
+              Showing {recentProducts.length} of {filteredProducts.length} matching products in{" "}
+              {dateRangeLabel.toLowerCase()}.
             </div>
           </div>
           <div className={styles.tableFilters}>
@@ -448,7 +554,7 @@ export default function VendorDashboard() {
         </div>
         {loading ? <div className={styles.cardSubtitle}>Loading seller data...</div> : null}
         {!loading && !hasProducts ? (
-          <div className={styles.cardSubtitle}>No seller products yet.</div>
+          <div className={styles.cardSubtitle}>No seller products found for this date range.</div>
         ) : null}
         {!loading && hasProducts && filteredProducts.length === 0 ? (
           <div className={styles.cardSubtitle}>
@@ -479,6 +585,73 @@ export default function VendorDashboard() {
                     </td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </section>
+
+      <section className={styles.card}>
+        <div className={styles.cardHeader}>
+          <div>
+            <div className={styles.cardTitle}>Recent Orders</div>
+            <div className={styles.cardSubtitle}>
+              Latest {recentOrders.length} of {dateScopedOrders.length} seller orders in{" "}
+              {dateRangeLabel.toLowerCase()}.
+            </div>
+          </div>
+          <Link to="/vendor/orders" className={styles.actionBtn}>
+            View all orders
+          </Link>
+        </div>
+        {loading ? <div className={styles.cardSubtitle}>Loading order activity...</div> : null}
+        {!loading && dateScopedOrders.length === 0 ? (
+          <div className={styles.cardSubtitle}>No orders found for this date range.</div>
+        ) : null}
+        {!loading && recentOrders.length > 0 ? (
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>Customer</th>
+                  <th>Date</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentOrders.map((order) => {
+                  const tone = getOrderStatusTone(order.status);
+                  const toneClass =
+                    tone === "success"
+                      ? styles.pillSuccess
+                      : tone === "danger"
+                      ? styles.pillDanger
+                      : tone === "warning"
+                      ? styles.pillWarning
+                      : "";
+
+                  return (
+                    <tr key={order.id}>
+                      <td>{order.id}</td>
+                      <td>{order.customer}</td>
+                      <td>{formatDate(order.createdAt)}</td>
+                      <td>{formatNaira(order.amount)}</td>
+                      <td>
+                        <span className={`${styles.pill} ${toneClass}`}>
+                          {order.status}
+                        </span>
+                      </td>
+                      <td>
+                        <Link to={`/vendor/orders/${order.id}`} className={styles.actionBtn}>
+                          Open
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
