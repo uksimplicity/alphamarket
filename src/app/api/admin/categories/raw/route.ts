@@ -15,6 +15,12 @@ function buildHeaders(req: NextRequest) {
   };
 }
 
+function buildPublicHeaders() {
+  return {
+    Accept: "application/json",
+  };
+}
+
 function hasCategoryLikeRecords(payload: unknown): boolean {
   const visited = new WeakSet<object>();
 
@@ -75,7 +81,7 @@ function normalizeCategories(payload: unknown) {
       found.push({
         id,
         name,
-        createdBy: String(record.created_by ?? record.createdBy ?? "Admin"),
+        createdBy: String(record.created_by ?? record.createdBy ?? ""),
         date: String(record.created_at ?? record.date ?? ""),
       });
     }
@@ -103,16 +109,7 @@ export async function GET(req: NextRequest) {
   const headers = buildHeaders(req);
   const queries = ["?limit=200&offset=0", "?limit=200", ""];
   const bases = API_BASE_CANDIDATES;
-  const paths = [
-    "/admin/categories",
-    "/admin/category",
-    "/auth/admin/categories",
-    "/auth/admin/category",
-    "/seller/categories",
-    "/seller/category",
-    "/categories",
-    "/category",
-  ];
+  const paths = ["/admin/categories"];
 
   const candidates: string[] = [];
   for (const base of bases) {
@@ -126,49 +123,52 @@ export async function GET(req: NextRequest) {
   let lastStatus = 0;
   let lastBody = "";
   const attempts: Array<{ url: string; status: number; sample: string }> = [];
-  for (const url of candidates) {
-    try {
-      const res = await fetch(url, {
-        method: "GET",
-        headers,
-        cache: "no-store",
-      });
-      const text = await res.text();
-      lastStatus = res.status;
-      lastBody = text;
-      attempts.push({
-        url,
-        status: res.status,
-        sample: String(text ?? "").slice(0, 180),
-      });
+  const headerCandidates = [headers, buildPublicHeaders()];
+  for (const outboundHeaders of headerCandidates) {
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, {
+          method: "GET",
+          headers: outboundHeaders,
+          cache: "no-store",
+        });
+        const text = await res.text();
+        lastStatus = res.status;
+        lastBody = text;
+        attempts.push({
+          url,
+          status: res.status,
+          sample: String(text ?? "").slice(0, 180),
+        });
 
-      if (res.status >= 200 && res.status < 300 && text) {
-        let payload: unknown = text;
-        try {
-          payload = JSON.parse(text);
-        } catch {
-          payload = text;
+        if (res.status >= 200 && res.status < 300 && text) {
+          let payload: unknown = text;
+          try {
+            payload = JSON.parse(text);
+          } catch {
+            payload = text;
+          }
+          if (!hasCategoryLikeRecords(payload)) {
+            continue;
+          }
+          const categories = normalizeCategories(payload);
+          return new Response(
+            JSON.stringify({
+              source: url,
+              status: res.status,
+              payload,
+              categories,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
         }
-        if (!hasCategoryLikeRecords(payload)) {
-          continue;
-        }
-        const categories = normalizeCategories(payload);
-        return new Response(
-          JSON.stringify({
-            source: url,
-            status: res.status,
-            payload,
-            categories,
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        );
+      } catch {
+        attempts.push({
+          url,
+          status: 0,
+          sample: "network error",
+        });
       }
-    } catch {
-      attempts.push({
-        url,
-        status: 0,
-        sample: "network error",
-      });
     }
   }
 
