@@ -459,38 +459,55 @@ export default function CreateProduct({ mode = "seller" }) {
         let apiCategories = [];
         let apiProductTypes = [];
 
+        let adminCategoriesPayload = null;
         try {
-          const adminCategoriesPayload = await requestAdminCategories();
+          adminCategoriesPayload = await requestAdminCategories();
           if (!isMounted) return;
           apiCategories = parseAdminCategoryOptions(adminCategoriesPayload);
-          if (apiCategories.length === 0) {
+        } catch (error) {
+          failedMessages.push(
+            error instanceof Error ? error.message : "Failed to load admin categories."
+          );
+        }
+
+        if (apiCategories.length === 0) {
+          try {
             const sellerCatalogCategories = await requestCatalog("categories");
             if (!isMounted) return;
             apiCategories = parseOptions(sellerCatalogCategories);
+          } catch (error) {
+            failedMessages.push(
+              error instanceof Error ? error.message : "Failed to load seller catalog categories."
+            );
           }
-          if (apiCategories.length === 0) {
+        }
+
+        if (apiCategories.length === 0) {
+          try {
             const productsPayload = await requestSellerProducts();
             if (!isMounted) return;
             apiCategories = parseCategoryOptionsFromProducts(productsPayload);
+          } catch (error) {
+            failedMessages.push(
+              error instanceof Error ? error.message : "Failed to derive categories from products."
+            );
           }
-          if (apiCategories.length > 0) {
-            setCategoryOptions(apiCategories);
-          } else if (cachedCategories.length > 0) {
-            setCategoryOptions(cachedCategories);
-          }
-          categoriesWarning =
-            adminCategoriesPayload &&
-            typeof adminCategoriesPayload === "object" &&
-            "warning" in adminCategoriesPayload
-              ? String(adminCategoriesPayload.warning ?? "")
-              : "";
-        } catch (error) {
-          failedMessages.push(
-            error instanceof Error ? error.message : "Failed to load categories."
-          );
-        } finally {
-          if (isMounted) setCategoryLoading(false);
         }
+
+        if (apiCategories.length > 0) {
+          setCategoryOptions(apiCategories);
+        } else if (cachedCategories.length > 0) {
+          setCategoryOptions(cachedCategories);
+        }
+
+        categoriesWarning =
+          adminCategoriesPayload &&
+          typeof adminCategoriesPayload === "object" &&
+          "warning" in adminCategoriesPayload
+            ? String(adminCategoriesPayload.warning ?? "")
+            : "";
+
+        if (isMounted) setCategoryLoading(false);
 
         const [productTypesResult, brandsResult, tagsResult] = await Promise.allSettled([
           requestCatalog("product-types"),
