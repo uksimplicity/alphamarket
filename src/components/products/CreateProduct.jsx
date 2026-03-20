@@ -222,6 +222,38 @@ function parseAdminCategoryOptions(payload) {
   });
 }
 
+function parseCatalogCategoryOptions(payload) {
+  const record = asRecord(payload);
+  const candidates = Array.isArray(payload)
+    ? payload
+    : Array.isArray(record?.data)
+      ? record.data
+      : Array.isArray(record?.items)
+        ? record.items
+        : Array.isArray(record?.categories)
+          ? record.categories
+          : [];
+  const rows = Array.isArray(candidates) ? candidates : [];
+  const mapped = rows
+    .map((item) => asRecord(item))
+    .filter(Boolean)
+    .map((row) => ({
+      id: toText(getValueCaseInsensitive(row, ["id", "uuid", "category_id", "categoryId"])),
+      name: toText(
+        getValueCaseInsensitive(row, ["name", "title", "category_name", "categoryName"])
+      ),
+    }))
+    .filter((item) => item.id && item.name);
+
+  const seen = new Set();
+  return mapped.filter((item) => {
+    const key = `${item.id}:${item.name.toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function validateFileSize(file, label, maxMb = 3) {
   if (!file) return "";
   const maxBytes = maxMb * 1024 * 1024;
@@ -410,8 +442,22 @@ export default function CreateProduct({ mode = "seller" }) {
 
         if (apiCategories.length > 0) {
           setCategoryOptions(apiCategories);
-        } else if (cachedCategories.length > 0) {
-          setCategoryOptions(cachedCategories);
+        } else {
+          try {
+            const sellerCatalogCategories = await requestCatalog("categories");
+            if (!isMounted) return;
+            const sellerCatalogOptions = parseCatalogCategoryOptions(sellerCatalogCategories);
+            if (sellerCatalogOptions.length > 0) {
+              setCategoryOptions(sellerCatalogOptions);
+              apiCategories = sellerCatalogOptions;
+            } else if (cachedCategories.length > 0) {
+              setCategoryOptions(cachedCategories);
+            }
+          } catch {
+            if (cachedCategories.length > 0) {
+              setCategoryOptions(cachedCategories);
+            }
+          }
         }
 
         categoriesWarning =

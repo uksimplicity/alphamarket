@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
   const headers = buildHeaders(req);
   const queries = ["?limit=200&offset=0", "?limit=200", ""];
   const bases = API_BASE_CANDIDATES;
-  const paths = ["/admin/categories"];
+  const paths = ["/admin/categories", "/auth/admin/categories"];
 
   const candidates: string[] = [];
   for (const base of bases) {
