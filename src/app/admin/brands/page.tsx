@@ -138,6 +138,7 @@ export default function AdminBrandsPage() {
       slug: string;
       description: string;
       website_url?: string;
+      website?: string;
       media: { logo: string; banner: string };
     } = {
       name,
@@ -148,7 +149,11 @@ export default function AdminBrandsPage() {
         banner: "",
       },
     };
-    payload.website_url = createForm.websiteUrl.trim() || existingWebsite;
+    const resolvedWebsite = createForm.websiteUrl.trim() || existingWebsite;
+    if (resolvedWebsite) {
+      payload.website_url = resolvedWebsite;
+      payload.website = resolvedWebsite;
+    }
     try {
       setPendingKey("create-brand");
       setActionMessage("");
@@ -211,6 +216,8 @@ export default function AdminBrandsPage() {
             logo: uploadedLogo || existingMedia.logo || "",
             banner: uploadedBanner || existingMedia.banner || "",
           };
+          updatePayload.logo = uploadedLogo || existingMedia.logo || "";
+          updatePayload.banner = uploadedBanner || existingMedia.banner || "";
         }
         await callBrandEndpoint(`/brands/${editingBrandId}`, {
           method: "PUT",
@@ -219,10 +226,22 @@ export default function AdminBrandsPage() {
         });
         setActionMessage("Brand updated successfully.");
       } else {
+        const hasCreateMedia = Boolean(uploadedLogo || uploadedBanner);
+        const createPayload: Record<string, unknown> = {
+          name: payload.name,
+          slug: payload.slug,
+          description: payload.description,
+          ...(payload.website_url ? { website_url: payload.website_url, website: payload.website_url } : {}),
+        };
+        if (hasCreateMedia) {
+          createPayload.media = { logo: uploadedLogo, banner: uploadedBanner };
+          createPayload.logo = uploadedLogo;
+          createPayload.banner = uploadedBanner;
+        }
         await callBrandEndpoint("/brands", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(createPayload),
         });
         setActionMessage("Brand created successfully.");
       }
