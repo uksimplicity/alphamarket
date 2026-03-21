@@ -787,21 +787,46 @@ async function uploadFile(file, folder, token) {
       const createEndpoint =
         mode === "admin" ? "/api/admin/products" : "/api/seller/products";
 
-      const response = await fetch(createEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: authorization,
-        },
-        body: JSON.stringify(payload),
-      });
+      async function createWithPayload(nextPayload) {
+        const response = await fetch(createEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authorization,
+          },
+          body: JSON.stringify(nextPayload),
+        });
 
-      const text = await response.text();
-      let data = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        data = text;
+        const text = await response.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = text;
+        }
+
+        return { response, data };
+      }
+
+      let { response, data } = await createWithPayload(payload);
+
+      if (!response.ok && payload.brandId) {
+        const errorText =
+          data && typeof data === "object"
+            ? String(data.error ?? data.message ?? data.details ?? "")
+            : String(data ?? "");
+        const isBrandForeignKeyError =
+          errorText.toLowerCase().includes("fk_products_brand") ||
+          errorText.toLowerCase().includes("violates foreign key constraint");
+
+        if (isBrandForeignKeyError) {
+          const retryPayload = { ...payload };
+          delete retryPayload.brandId;
+          ({ response, data } = await createWithPayload(retryPayload));
+          if (response.ok) {
+            setForm((prev) => ({ ...prev, brand: "" }));
+          }
+        }
       }
 
       if (!response.ok) {
