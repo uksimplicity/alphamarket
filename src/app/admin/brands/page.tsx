@@ -49,6 +49,7 @@ export default function AdminBrandsPage() {
   const [pendingKey, setPendingKey] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingBrandId, setEditingBrandId] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [createForm, setCreateForm] = useState({
@@ -93,7 +94,19 @@ export default function AdminBrandsPage() {
     );
   }
 
-  async function createBrand() {
+  function resetBrandForm() {
+    setCreateForm({
+      name: "",
+      slug: "",
+      description: "",
+      websiteUrl: "",
+    });
+    setLogoFile(null);
+    setBannerFile(null);
+    setEditingBrandId(null);
+  }
+
+  async function saveBrand() {
     const name = createForm.name.trim();
     if (!name) {
       setActionMessage("Brand name is required.");
@@ -161,56 +174,65 @@ export default function AdminBrandsPage() {
         );
       }
 
-      payload.media.logo = await uploadFile(logoFile);
-      payload.media.banner = await uploadFile(bannerFile);
+      const uploadedLogo = await uploadFile(logoFile);
+      const uploadedBanner = await uploadFile(bannerFile);
+      payload.media.logo = uploadedLogo;
+      payload.media.banner = uploadedBanner;
 
-      await callBrandEndpoint("/brands", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      setActionMessage("Brand created successfully.");
-      setCreateForm({
-        name: "",
-        slug: "",
-        description: "",
-        websiteUrl: "",
-      });
-      setLogoFile(null);
-      setBannerFile(null);
+      if (editingBrandId) {
+        const updatePayload: Record<string, unknown> = {
+          name: payload.name,
+          slug: payload.slug,
+          description: payload.description,
+          ...(payload.website_url ? { website_url: payload.website_url } : {}),
+        };
+        if (uploadedLogo || uploadedBanner) {
+          updatePayload.media = {
+            logo: uploadedLogo,
+            banner: uploadedBanner,
+          };
+        }
+        await callBrandEndpoint(`/brands/${editingBrandId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatePayload),
+        });
+        setActionMessage("Brand updated successfully.");
+      } else {
+        await callBrandEndpoint("/brands", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        setActionMessage("Brand created successfully.");
+      }
+      resetBrandForm();
       await refetch();
     } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : "Failed to create brand.");
+      setActionMessage(
+        err instanceof Error
+          ? err.message
+          : editingBrandId
+          ? "Failed to update brand."
+          : "Failed to create brand."
+      );
     } finally {
       setPendingKey("");
     }
   }
 
   async function editBrand(item: Brand) {
-    const seed = {
-      id: item.id,
+    setActionMessage("");
+    setEditingBrandId(item.id);
+    setShowCreateForm(true);
+    setLogoFile(null);
+    setBannerFile(null);
+    setCreateForm({
       name: item.name,
       slug: toSlug(item.name),
       description: item.description,
-      website_url: item.website,
-    };
-    const input = window.prompt("Update brand payload (JSON)", JSON.stringify(seed, null, 2));
-    if (!input) return;
-    try {
-      setPendingKey(`edit-${item.id}`);
-      setActionMessage("");
-      await callBrandEndpoint(`/brands/${item.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: input,
-      });
-      setActionMessage("Brand updated successfully.");
-      await refetch();
-    } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : "Failed to update brand.");
-    } finally {
-      setPendingKey("");
-    }
+      websiteUrl: item.website,
+    });
   }
 
   async function deleteBrand(id: string) {
@@ -234,7 +256,16 @@ export default function AdminBrandsPage() {
         title="Brands"
         subtitle="Manage brand records."
         action={
-          <Button onClick={() => setShowCreateForm((prev) => !prev)}>
+          <Button
+            onClick={() => {
+              if (showCreateForm) {
+                resetBrandForm();
+                setShowCreateForm(false);
+              } else {
+                setShowCreateForm(true);
+              }
+            }}
+          >
             {showCreateForm ? "Close" : "Create Brands"}
           </Button>
         }
@@ -298,10 +329,16 @@ export default function AdminBrandsPage() {
             <button
               type="button"
               disabled={pendingKey === "create-brand"}
-              onClick={createBrand}
+              onClick={saveBrand}
               className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {pendingKey === "create-brand" ? "Creating..." : "Create"}
+              {pendingKey === "create-brand"
+                ? editingBrandId
+                  ? "Saving..."
+                  : "Creating..."
+                : editingBrandId
+                ? "Save Changes"
+                : "Create"}
             </button>
           </div>
         </div>
