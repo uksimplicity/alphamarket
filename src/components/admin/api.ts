@@ -27,7 +27,13 @@ async function readResponseData(response: Response) {
 function extractErrorMessage(data: unknown, status: number) {
   const record = asRecord(data);
   if (record) {
-    return String(record.error ?? record.message ?? record.details ?? `Request failed (${status}).`);
+    const primary = String(record.error ?? record.message ?? `Request failed (${status}).`);
+    const details =
+      typeof record.details === "string" && record.details.trim() ? record.details.trim() : "";
+    if (details && details !== primary) {
+      return `${primary} ${details}`;
+    }
+    return primary;
   }
   if (typeof data === "string" && data.trim()) {
     return data.trim();

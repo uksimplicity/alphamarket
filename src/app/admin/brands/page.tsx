@@ -199,16 +199,19 @@ export default function AdminBrandsPage() {
       payload.media.banner = uploadedBanner;
 
       if (editingBrandId) {
+        const hasMediaUpdate = Boolean(uploadedLogo || uploadedBanner);
         const updatePayload: Record<string, unknown> = {
           name: payload.name,
           slug: payload.slug,
           description: payload.description,
-          ...(payload.website_url ? { website_url: payload.website_url } : {}),
-          media: {
+          ...(payload.website_url ? { website_url: payload.website_url, website: payload.website_url } : {}),
+        };
+        if (hasMediaUpdate) {
+          updatePayload.media = {
             logo: uploadedLogo || existingMedia.logo || "",
             banner: uploadedBanner || existingMedia.banner || "",
-          },
-        };
+          };
+        }
         await callBrandEndpoint(`/brands/${editingBrandId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
