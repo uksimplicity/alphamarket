@@ -290,6 +290,15 @@ function parseNonNegativeInteger(value) {
   return numeric;
 }
 
+function findFirstValidBrandId(options) {
+  if (!Array.isArray(options)) return "";
+  for (const option of options) {
+    const id = String(option?.id ?? "").trim();
+    if (isUuid(id)) return id;
+  }
+  return "";
+}
+
 function readFirstFiniteNumber(...values) {
   for (const value of values) {
     if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -741,8 +750,13 @@ async function uploadFile(file, folder, token) {
 
     if (form.location.trim()) payload.location = form.location.trim();
     if (form.shortDescription.trim()) payload.shortDescription = form.shortDescription.trim();
-    // Brand is optional and backend FK can reject stale brand references.
-    // Do not send brand on create until backend brand sync is stable.
+    const selectedBrandId = form.brand.trim();
+    const fallbackBrandId = findFirstValidBrandId(brandOptions);
+    if (selectedBrandId && isUuid(selectedBrandId)) {
+      payload.brandId = selectedBrandId;
+    } else if (fallbackBrandId) {
+      payload.brandId = fallbackBrandId;
+    }
     if (stockNumber !== null) payload.stock = stockNumber;
     if (tagList.length > 0) payload.tags = tagList;
     const latitude = readFirstFiniteNumber(
@@ -810,6 +824,27 @@ async function uploadFile(file, folder, token) {
       }
 
       let { response, data } = await createWithPayload(payload);
+
+      if (!response.ok && payload.brandId) {
+        const fkErrorText =
+          data && typeof data === "object"
+            ? String(data.error ?? data.message ?? data.details ?? "")
+            : String(data ?? "");
+        const isBrandFkViolation =
+          fkErrorText.toLowerCase().includes("fk_products_brand") ||
+          fkErrorText.toLowerCase().includes("violates foreign key constraint");
+
+        if (isBrandFkViolation) {
+          const fallbackBrandId = findFirstValidBrandId(brandOptions);
+          if (fallbackBrandId && fallbackBrandId !== payload.brandId) {
+            const retryWithFallbackBrand = { ...payload, brandId: fallbackBrandId };
+            ({ response, data } = await createWithPayload(retryWithFallbackBrand));
+            if (response.ok) {
+              setForm((prev) => ({ ...prev, brand: fallbackBrandId }));
+            }
+          }
+        }
+      }
 
       if (!response.ok && payload.brandId) {
         const retryPayload = { ...payload };
