@@ -145,19 +145,18 @@ export default function AdminBrandsPage() {
           data = text;
         }
         if (!response.ok) {
+          const dataRecord = asRecord(data);
           const message =
-            data && typeof data === "object" && "error" in data
-              ? data.error
+            dataRecord && "error" in dataRecord
+              ? dataRecord.error
               : `File upload failed (${response.status}).`;
           throw new Error(String(message));
         }
+        const dataRecord = asRecord(data);
+        const nestedDataRecord = asRecord(dataRecord?.data);
         return (
-          data?.url ||
-          data?.file_url ||
-          data?.path ||
-          data?.data?.url ||
-          data?.data?.file_url ||
-          data?.data?.path ||
+          pickString(dataRecord, ["url", "file_url", "path"]) ||
+          pickString(nestedDataRecord, ["url", "file_url", "path"]) ||
           ""
         );
       }
