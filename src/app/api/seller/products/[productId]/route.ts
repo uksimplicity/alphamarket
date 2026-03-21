@@ -9,6 +9,12 @@ const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
 const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v1`;
 
+function normalizeAuthHeader(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return trimmed.replace(/^Bearer\s+Bearer\s+/i, "Bearer ");
+}
+
 async function proxySellerProduct(
   req: Request,
   productId: string,
@@ -72,10 +78,12 @@ async function proxySellerProduct(
     );
   }
 
-  const authHeader = req.headers.get("authorization") ?? "";
+  const authHeader = normalizeAuthHeader(req.headers.get("authorization") ?? "");
+  const cookieHeader = req.headers.get("cookie") ?? "";
   const headers: Record<string, string> = {
     Accept: "application/json",
     ...(authHeader ? { Authorization: authHeader } : {}),
+    ...(cookieHeader ? { Cookie: cookieHeader } : {}),
   };
 
   if (hasBody) {

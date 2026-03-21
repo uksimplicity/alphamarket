@@ -7,6 +7,12 @@ import { useAdminCategoryNames } from "@/components/marketplace/useAdminCategory
 const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
 const REALTIME_POLL_INTERVAL_MS = 2000;
 
+function buildAuthorizationHeader(token) {
+  const raw = String(token ?? "").trim();
+  if (!raw) return "";
+  return /^bearer\s+/i.test(raw) ? raw : `Bearer ${raw}`;
+}
+
 export default function ProductList({
   onView = (id) => {
     void id;
@@ -99,10 +105,10 @@ export default function ProductList({
     setError("");
     try {
       const auth = getAuth();
-      const token = auth?.access_token;
+      const token = buildAuthorizationHeader(auth?.access_token);
       const response = await fetch("/api/seller/products", {
         cache: "no-store",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: token ? { Authorization: token } : {},
       });
       const text = await response.text();
       let data = null;
@@ -171,14 +177,14 @@ export default function ProductList({
     setError("");
     try {
       const auth = getAuth();
-      const token = auth?.access_token;
+      const token = buildAuthorizationHeader(auth?.access_token);
       if (!token) {
         throw new Error("You must be logged in to delete a product.");
       }
       setDeletingId(id);
       const response = await fetch(`/api/seller/products/${encodeURIComponent(id)}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: token },
       });
       const text = await response.text();
       let data = null;
@@ -207,7 +213,7 @@ export default function ProductList({
     setError("");
     try {
       const auth = getAuth();
-      const token = auth?.access_token;
+      const token = buildAuthorizationHeader(auth?.access_token);
       if (!token) {
         throw new Error("You must be logged in to update product status.");
       }
@@ -217,7 +223,7 @@ export default function ProductList({
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: token,
         },
         body: JSON.stringify({
           status: "publish",
@@ -230,7 +236,7 @@ export default function ProductList({
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            Authorization: token,
           },
           body: JSON.stringify({
             product_id: id,

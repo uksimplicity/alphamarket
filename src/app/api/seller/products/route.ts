@@ -58,6 +58,12 @@ function validateCreatePayload(payload: Record<string, unknown>) {
   return null;
 }
 
+function normalizeAuthHeader(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return trimmed.replace(/^Bearer\s+Bearer\s+/i, "Bearer ");
+}
+
 async function proxySellerCollection(req: Request, method: "GET" | "POST") {
   const url = new URL(req.url);
   const params = new URLSearchParams(url.search);
@@ -76,10 +82,12 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
-  const authHeader = req.headers.get("authorization") ?? "";
+  const authHeader = normalizeAuthHeader(req.headers.get("authorization") ?? "");
+  const cookieHeader = req.headers.get("cookie") ?? "";
   const headers: Record<string, string> = {
     Accept: "application/json",
     ...(authHeader ? { Authorization: authHeader } : {}),
+    ...(cookieHeader ? { Cookie: cookieHeader } : {}),
   };
 
   const body = method === "GET" ? "" : await req.text();
