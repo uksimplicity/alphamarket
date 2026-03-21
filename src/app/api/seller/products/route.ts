@@ -1,6 +1,8 @@
 const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
 const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v1`;
+const API_ROOT_BASE = API_BASE.endsWith("/api/v1") ? API_BASE.slice(0, -"/api/v1".length) : API_BASE;
+const API_BASE_CANDIDATES = Array.from(new Set([API_BASE, API_V1_BASE, `${API_ROOT_BASE}/api/v1`, API_ROOT_BASE]));
 const MAX_PRODUCT_PRICE = 1000000000;
 const MAX_PRODUCT_STOCK = 1000000;
 
@@ -119,11 +121,13 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
       : [search];
   const urls = Array.from(
     new Set(
-      queryVariants.flatMap((query) => [
-        `${API_V1_BASE}/seller/products${query}`,
-        `${API_BASE}/seller/products${query}`,
-        `${API_BASE}/auth/seller/products${query}`,
-      ])
+      queryVariants.flatMap((query) =>
+        API_BASE_CANDIDATES.flatMap((base) => [
+          `${base}/seller/products${query}`,
+          `${base}/auth/seller/products${query}`,
+          `${base}/products${query}`,
+        ])
+      )
     )
   );
 
@@ -145,7 +149,14 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
         upstreamErrorRes = res;
         continue;
       }
-      if (method === "GET" && (res.status === 400 || res.status === 405 || res.status === 422)) {
+      if (
+        method === "GET" &&
+        (res.status === 400 ||
+          res.status === 401 ||
+          res.status === 403 ||
+          res.status === 405 ||
+          res.status === 422)
+      ) {
         continue;
       }
       break;

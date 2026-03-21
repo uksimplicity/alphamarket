@@ -8,6 +8,8 @@ import {
 const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
 const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v1`;
+const API_ROOT_BASE = API_BASE.endsWith("/api/v1") ? API_BASE.slice(0, -"/api/v1".length) : API_BASE;
+const API_BASE_CANDIDATES = Array.from(new Set([API_BASE, API_V1_BASE, `${API_ROOT_BASE}/api/v1`, API_ROOT_BASE]));
 
 function normalizeAuthHeader(value: string) {
   const trimmed = value.trim();
@@ -93,9 +95,9 @@ async function proxySellerProduct(
   const safeId = encodeURIComponent(productId);
   const urls = Array.from(
     new Set([
-      `${API_V1_BASE}/seller/products/${safeId}${search}`,
-      `${API_BASE}/seller/products/${safeId}${search}`,
-      `${API_BASE}/auth/seller/products/${safeId}${search}`,
+      ...API_BASE_CANDIDATES.map((base) => `${base}/seller/products/${safeId}${search}`),
+      ...API_BASE_CANDIDATES.map((base) => `${base}/auth/seller/products/${safeId}${search}`),
+      ...API_BASE_CANDIDATES.map((base) => `${base}/products/${safeId}${search}`),
     ])
   );
 
@@ -117,7 +119,13 @@ async function proxySellerProduct(
         upstreamErrorRes = res;
         continue;
       }
-      if (res.status === 400 || res.status === 405 || res.status === 422) {
+      if (
+        res.status === 400 ||
+        res.status === 401 ||
+        res.status === 403 ||
+        res.status === 405 ||
+        res.status === 422
+      ) {
         continue;
       }
       break;
