@@ -113,12 +113,18 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
     headers["Content-Type"] = "application/json";
   }
 
+  const queryVariants =
+    method === "GET"
+      ? Array.from(new Set([search, ""]))
+      : [search];
   const urls = Array.from(
-    new Set([
-      `${API_V1_BASE}/seller/products${search}`,
-      `${API_BASE}/seller/products${search}`,
-      `${API_BASE}/auth/seller/products${search}`,
-    ])
+    new Set(
+      queryVariants.flatMap((query) => [
+        `${API_V1_BASE}/seller/products${query}`,
+        `${API_BASE}/seller/products${query}`,
+        `${API_BASE}/auth/seller/products${query}`,
+      ])
+    )
   );
 
   try {
@@ -137,6 +143,9 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
       if (res.status === 404) continue;
       if (res.status >= 500) {
         upstreamErrorRes = res;
+        continue;
+      }
+      if (method === "GET" && (res.status === 400 || res.status === 405 || res.status === 422)) {
         continue;
       }
       break;

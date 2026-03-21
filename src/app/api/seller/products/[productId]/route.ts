@@ -117,6 +117,9 @@ async function proxySellerProduct(
         upstreamErrorRes = res;
         continue;
       }
+      if (res.status === 400 || res.status === 405 || res.status === 422) {
+        continue;
+      }
       break;
     }
 
