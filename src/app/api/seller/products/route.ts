@@ -93,7 +93,7 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
   };
 
   const incomingBody = method === "GET" ? "" : await req.text();
-  const body = incomingBody;
+  let body = incomingBody;
 
   if (method === "POST") {
     let payload: Record<string, unknown> = {};
@@ -102,6 +102,11 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
     } catch {
       payload = {};
     }
+
+    // Seller create: temporarily ignore brand fields to avoid backend FK constraint failure.
+    if ("brandId" in payload) delete payload.brandId;
+    if ("brand_id" in payload) delete payload.brand_id;
+    body = JSON.stringify(payload);
 
     const validationError = validateCreatePayload(payload);
     if (validationError) {

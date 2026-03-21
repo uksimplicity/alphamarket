@@ -290,15 +290,6 @@ function parseNonNegativeInteger(value) {
   return numeric;
 }
 
-function findFirstValidBrandId(options) {
-  if (!Array.isArray(options)) return "";
-  for (const option of options) {
-    const id = String(option?.id ?? "").trim();
-    if (isUuid(id)) return id;
-  }
-  return "";
-}
-
 function readFirstFiniteNumber(...values) {
   for (const value of values) {
     if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -751,11 +742,8 @@ async function uploadFile(file, folder, token) {
     if (form.location.trim()) payload.location = form.location.trim();
     if (form.shortDescription.trim()) payload.shortDescription = form.shortDescription.trim();
     const selectedBrandId = form.brand.trim();
-    const fallbackBrandId = findFirstValidBrandId(brandOptions);
-    if (selectedBrandId && isUuid(selectedBrandId)) {
+    if (mode === "admin" && selectedBrandId && isUuid(selectedBrandId)) {
       payload.brandId = selectedBrandId;
-    } else if (fallbackBrandId) {
-      payload.brandId = fallbackBrandId;
     }
     if (stockNumber !== null) payload.stock = stockNumber;
     if (tagList.length > 0) payload.tags = tagList;
@@ -824,36 +812,6 @@ async function uploadFile(file, folder, token) {
       }
 
       let { response, data } = await createWithPayload(payload);
-
-      if (!response.ok && payload.brandId) {
-        const fkErrorText =
-          data && typeof data === "object"
-            ? String(data.error ?? data.message ?? data.details ?? "")
-            : String(data ?? "");
-        const isBrandFkViolation =
-          fkErrorText.toLowerCase().includes("fk_products_brand") ||
-          fkErrorText.toLowerCase().includes("violates foreign key constraint");
-
-        if (isBrandFkViolation) {
-          const fallbackBrandId = findFirstValidBrandId(brandOptions);
-          if (fallbackBrandId && fallbackBrandId !== payload.brandId) {
-            const retryWithFallbackBrand = { ...payload, brandId: fallbackBrandId };
-            ({ response, data } = await createWithPayload(retryWithFallbackBrand));
-            if (response.ok) {
-              setForm((prev) => ({ ...prev, brand: fallbackBrandId }));
-            }
-          }
-        }
-      }
-
-      if (!response.ok && payload.brandId) {
-        const retryPayload = { ...payload };
-        delete retryPayload.brandId;
-        ({ response, data } = await createWithPayload(retryPayload));
-        if (response.ok) {
-          setForm((prev) => ({ ...prev, brand: "" }));
-        }
-      }
 
       if (!response.ok) {
         const message =
@@ -963,9 +921,18 @@ async function uploadFile(file, folder, token) {
               </div>
               <div className="field">
                 <label>Brand (optional)</label>
-                <select name="brand" value={form.brand} onChange={handleChange}>
+                <select
+                  name="brand"
+                  value={form.brand}
+                  onChange={handleChange}
+                  disabled={mode === "seller"}
+                >
                   <option value="">
-                    {catalogLoading ? "Loading brands..." : "Select Brand"}
+                    {mode === "seller"
+                      ? "Temporarily unavailable"
+                      : catalogLoading
+                      ? "Loading brands..."
+                      : "Select Brand"}
                   </option>
                   {brandOptions.map((item) => (
                     <option key={item.id} value={item.id}>
@@ -973,7 +940,11 @@ async function uploadFile(file, folder, token) {
                     </option>
                   ))}
                 </select>
-                {!catalogLoading && !hasBrandOptions ? (
+                {mode === "seller" ? (
+                  <div className="mt-2 text-xs text-slate-500">
+                    Brand selection is temporarily disabled for seller product create.
+                  </div>
+                ) : !catalogLoading && !hasBrandOptions ? (
                   <div className="mt-2 text-xs text-slate-500">No brands available yet.</div>
                 ) : null}
               </div>
