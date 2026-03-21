@@ -31,6 +31,7 @@ export default function ProductList({
   const [deletingId, setDeletingId] = useState(null);
   const [publishingId, setPublishingId] = useState(null);
   const isRequestInFlight = useRef(false);
+  const consecutiveSilentFailuresRef = useRef(0);
   const adminCategoryNames = useAdminCategoryNames();
 
   const normalizeList = (payload) => {
@@ -101,8 +102,8 @@ export default function ProductList({
     isRequestInFlight.current = true;
     if (!silent) {
       setLoading(true);
+      setError("");
     }
-    setError("");
     try {
       const auth = getAuth();
       const token = buildAuthorizationHeader(auth?.access_token);
@@ -126,10 +127,20 @@ export default function ProductList({
       }
       const list = normalizeList(data);
       setRows(list.map(toProductRow));
+      consecutiveSilentFailuresRef.current = 0;
+      if (silent) {
+        setError("");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load products.");
+      const message = err instanceof Error ? err.message : "Failed to load products.";
       if (!silent) {
+        setError(message);
         setRows([]);
+      } else {
+        consecutiveSilentFailuresRef.current += 1;
+        if (consecutiveSilentFailuresRef.current >= 3) {
+          setError(message);
+        }
       }
     } finally {
       isRequestInFlight.current = false;
