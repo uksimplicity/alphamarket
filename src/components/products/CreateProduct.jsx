@@ -269,13 +269,13 @@ function buildAuthorizationHeader(token) {
   return /^bearer\s+/i.test(trimmed) ? trimmed : `Bearer ${trimmed}`;
 }
 
-const LOCAL_CREATED_PRODUCTS_KEY = "alpha.createdProducts";
 const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
 const ADMIN_CATEGORIES_CACHE_KEY = "alpha.admin.categories";
 const ADMIN_PRODUCT_TYPES_CACHE_KEY = "alpha.admin.product-types";
 const MAX_PRODUCT_PRICE = 1000000000;
 const MAX_PRODUCT_STOCK = 1000000;
 const MAX_DISCOUNT_PRICE = 1000000000;
+const CATALOG_POLL_INTERVAL_MS = 5000;
 
 function parsePositivePrice(value) {
   const numeric = Number(value);
@@ -299,27 +299,6 @@ function readFirstFiniteNumber(...values) {
     }
   }
   return null;
-}
-
-function persistCreatedProduct(product) {
-  if (typeof window === "undefined" || !product) return;
-  try {
-    const existingRaw = localStorage.getItem(LOCAL_CREATED_PRODUCTS_KEY);
-    const existing = existingRaw ? JSON.parse(existingRaw) : [];
-    const list = Array.isArray(existing) ? existing : [];
-    const normalized = {
-      ...product,
-      id: String(product.id ?? product.product_id ?? product.uuid ?? crypto.randomUUID()),
-    };
-    const merged = [
-      normalized,
-      ...list.filter((item) => String(item?.id) !== String(normalized.id)),
-    ].slice(0, 200);
-    localStorage.setItem(LOCAL_CREATED_PRODUCTS_KEY, JSON.stringify(merged));
-    window.dispatchEvent(new Event(LOCAL_PRODUCTS_UPDATED_EVENT));
-  } catch {
-    // ignore local storage errors
-  }
 }
 
 function readCachedAdminCategories() {
@@ -541,9 +520,24 @@ export default function CreateProduct({ mode = "seller" }) {
       }
     }
 
+    const pollId = window.setInterval(() => {
+      if (isMounted) {
+        void loadCatalog();
+      }
+    }, CATALOG_POLL_INTERVAL_MS);
+
+    const handleFocus = () => {
+      if (isMounted) {
+        void loadCatalog();
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+
     void loadCatalog();
     return () => {
       isMounted = false;
+      window.clearInterval(pollId);
+      window.removeEventListener("focus", handleFocus);
     };
   }, []);
 
@@ -819,18 +813,9 @@ async function uploadFile(file, folder, token) {
         return;
       }
 
-      const createdRecord =
-        data && typeof data === "object"
-          ? (data.data ?? data.product ?? data.item ?? data)
-          : null;
-      persistCreatedProduct(
-        createdRecord && typeof createdRecord === "object"
-          ? createdRecord
-          : {
-              ...payload,
-              id: crypto.randomUUID(),
-            }
-      );
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event(LOCAL_PRODUCTS_UPDATED_EVENT));
+      }
 
       setSuccess(
         submitIntent === "draft"

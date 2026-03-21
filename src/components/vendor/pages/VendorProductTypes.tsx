@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
 
 type ProductTypeOption = {
@@ -49,6 +49,7 @@ export default function VendorProductTypes() {
   const [types, setTypes] = useState<ProductTypeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const isRequestInFlight = useRef(false);
 
   function persistProductTypes(nextTypes: ProductTypeOption[]) {
     if (typeof window === "undefined") return;
@@ -65,45 +66,61 @@ export default function VendorProductTypes() {
     }
   }
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadTypes() {
-      setLoading(true);
-      setError("");
-      try {
-        const auth = getAuth();
-        const token = auth?.access_token;
-        const response = await fetch("/api/seller/catalog?resource=product-types&limit=200&offset=0", {
+  const loadTypes = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (isRequestInFlight.current) return;
+    isRequestInFlight.current = true;
+    if (!silent) setLoading(true);
+    setError("");
+    try {
+      const auth = getAuth();
+      const token = auth?.access_token;
+      const response = await fetch(
+        `/api/seller/catalog?resource=product-types&limit=200&offset=0&ts=${Date.now()}`,
+        {
           headers: {
             Accept: "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           cache: "no-store",
-        });
-        if (!response.ok) {
-          throw new Error(`Failed to load product types (${response.status}).`);
         }
-        const payload = await response.json();
-        if (!active) return;
-        const parsed = parseOptions(payload);
-        setTypes(parsed);
-        if (parsed.length > 0) {
-          persistProductTypes(parsed);
-        }
-      } catch (err) {
-        if (!active) return;
-        setError(err instanceof Error ? err.message : "Failed to load product types.");
-      } finally {
-        if (active) setLoading(false);
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to load product types (${response.status}).`);
       }
+      const payload = await response.json();
+      const parsed = parseOptions(payload);
+      setTypes(parsed);
+      if (parsed.length > 0) {
+        persistProductTypes(parsed);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load product types.");
+    } finally {
+      isRequestInFlight.current = false;
+      if (!silent) setLoading(false);
     }
-
-    void loadTypes();
-    return () => {
-      active = false;
-    };
   }, []);
+
+  useEffect(() => {
+    void loadTypes();
+  }, [loadTypes]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const intervalId = window.setInterval(() => {
+      void loadTypes({ silent: true });
+    }, 5000);
+
+    const handleFocus = () => {
+      void loadTypes({ silent: true });
+    };
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [loadTypes]);
 
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

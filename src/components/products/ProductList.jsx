@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
 import { useAdminCategoryNames } from "@/components/marketplace/useAdminCategoryNames";
 
-const LOCAL_CREATED_PRODUCTS_KEY = "alpha.createdProducts";
 const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
+const REALTIME_POLL_INTERVAL_MS = 2000;
 
 export default function ProductList({
-  onView = (id) => {},
-  onEdit = (id) => {},
-  onDelete = (id) => {},
+  onView = () => {},
+  onEdit = () => {},
+  onDelete = () => {},
   onCreate = () => {},
 }) {
   const [rows, setRows] = useState([]);
@@ -18,6 +18,7 @@ export default function ProductList({
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState(null);
   const [publishingId, setPublishingId] = useState(null);
+  const isRequestInFlight = useRef(false);
   const adminCategoryNames = useAdminCategoryNames();
 
   const normalizeList = (payload) => {
@@ -27,7 +28,7 @@ export default function ProductList({
     return Array.isArray(list) ? list : [];
   };
 
-  const formatPrice = (value) => {
+  const formatPrice = useCallback((value) => {
     if (value === null || value === undefined || value === "") return "-";
     if (typeof value === "number" && Number.isFinite(value)) {
       return `N${value.toLocaleString()}`;
@@ -37,9 +38,9 @@ export default function ProductList({
       return `N${numeric.toLocaleString()}`;
     }
     return String(value);
-  };
+  }, []);
 
-  const toProductRow = (item, index) => {
+  const toProductRow = useCallback((item, index) => {
     const id =
       item?.id ||
       item?.productId ||
@@ -81,15 +82,20 @@ export default function ProductList({
         "-",
       status: resolvedStatus,
     };
-  };
+  }, [formatPrice]);
 
-  const loadProducts = async () => {
-    setLoading(true);
+  const loadProducts = useCallback(async ({ silent = false } = {}) => {
+    if (isRequestInFlight.current) return;
+    isRequestInFlight.current = true;
+    if (!silent) {
+      setLoading(true);
+    }
     setError("");
     try {
       const auth = getAuth();
       const token = auth?.access_token;
-      const response = await fetch("/api/seller/products", {
+      const response = await fetch(`/api/seller/products?ts=${Date.now()}`, {
+        cache: "no-store",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const text = await response.text();
@@ -110,15 +116,48 @@ export default function ProductList({
       setRows(list.map(toProductRow));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load products.");
-      setRows([]);
+      if (!silent) {
+        setRows([]);
+      }
     } finally {
-      setLoading(false);
+      isRequestInFlight.current = false;
+      if (!silent) {
+        setLoading(false);
+      }
     }
-  };
+  }, [toProductRow]);
 
   useEffect(() => {
     loadProducts();
-  }, []);
+  }, [loadProducts]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleProductsUpdated = () => {
+      void loadProducts({ silent: true });
+    };
+    const handleWindowFocus = () => {
+      void loadProducts({ silent: true });
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadProducts({ silent: true });
+      }
+    };
+    const intervalId = window.setInterval(() => {
+      void loadProducts({ silent: true });
+    }, REALTIME_POLL_INTERVAL_MS);
+
+    window.addEventListener(LOCAL_PRODUCTS_UPDATED_EVENT, handleProductsUpdated);
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener(LOCAL_PRODUCTS_UPDATED_EVENT, handleProductsUpdated);
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadProducts]);
 
   const handleDelete = async (id) => {
     const confirmed = window.confirm("Are you sure you want to delete this item?");
@@ -149,21 +188,7 @@ export default function ProductList({
             : `Delete failed (${response.status}).`;
         throw new Error(String(message));
       }
-      setRows((prev) => prev.filter((item) => item.id !== id));
-      try {
-        const raw = localStorage.getItem(LOCAL_CREATED_PRODUCTS_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
-        const list = Array.isArray(parsed) ? parsed : [];
-        const next = list.filter((item) => String(item?.id) !== String(id));
-        localStorage.setItem(LOCAL_CREATED_PRODUCTS_KEY, JSON.stringify(next));
-        window.dispatchEvent(
-          new CustomEvent(LOCAL_PRODUCTS_UPDATED_EVENT, {
-            detail: { deletedId: id },
-          })
-        );
-      } catch {
-        // ignore local storage cleanup issues
-      }
+      void loadProducts({ silent: true });
       onDelete(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed.");
@@ -225,16 +250,7 @@ export default function ProductList({
         throw new Error(String(message));
       }
 
-      setRows((prev) =>
-        prev.map((row) =>
-          row.id === id
-            ? {
-                ...row,
-                status: "Publish",
-              }
-            : row
-        )
-      );
+      void loadProducts({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to move product from draft.");
     } finally {

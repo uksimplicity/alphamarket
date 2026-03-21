@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getAuth } from "@/components/auth/authStorage";
 import styles from "./vendor.module.css";
@@ -31,6 +31,8 @@ const dateRangeOptions: Array<{ value: DateRangeValue; label: string }> = [
   { value: "30d", label: "Last 30 days" },
   { value: "90d", label: "Last 90 days" },
 ];
+const DASHBOARD_REALTIME_POLL_MS = 2000;
+const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
 
 function normalizeList(payload: unknown): unknown[] {
   if (Array.isArray(payload)) return payload;
@@ -148,9 +150,14 @@ export default function VendorDashboard() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateRange, setDateRange] = useState<DateRangeValue>("30d");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const isRequestInFlight = useRef(false);
 
-  const loadProducts = useCallback(async () => {
-    setLoading(true);
+  const loadProducts = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (isRequestInFlight.current) return;
+    isRequestInFlight.current = true;
+    if (!silent) {
+      setLoading(true);
+    }
     setError("");
     try {
       const auth = getAuth();
@@ -161,8 +168,14 @@ export default function VendorDashboard() {
       if (token) commonHeaders.Authorization = token;
 
       const [productsResponse, ordersResponse] = await Promise.all([
-        fetch("/api/seller/products", { headers: commonHeaders }),
-        fetch("/api/seller/orders?limit=200&offset=0", { headers: commonHeaders }),
+        fetch(`/api/seller/products?ts=${Date.now()}`, {
+          headers: commonHeaders,
+          cache: "no-store",
+        }),
+        fetch(`/api/seller/orders?limit=200&offset=0&ts=${Date.now()}`, {
+          headers: commonHeaders,
+          cache: "no-store",
+        }),
       ]);
 
       const [productsText, ordersText] = await Promise.all([
@@ -261,12 +274,46 @@ export default function VendorDashboard() {
         err instanceof Error ? err.message : "Failed to load seller dashboard data."
       );
     } finally {
-      setLoading(false);
+      isRequestInFlight.current = false;
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void loadProducts();
+  }, [loadProducts]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const intervalId = window.setInterval(() => {
+      void loadProducts({ silent: true });
+    }, DASHBOARD_REALTIME_POLL_MS);
+
+    const handleFocus = () => {
+      void loadProducts({ silent: true });
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadProducts({ silent: true });
+      }
+    };
+    const handleProductsUpdated = () => {
+      void loadProducts({ silent: true });
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener(LOCAL_PRODUCTS_UPDATED_EVENT, handleProductsUpdated);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener(LOCAL_PRODUCTS_UPDATED_EVENT, handleProductsUpdated);
+    };
   }, [loadProducts]);
 
   const dateRangeCutoff = useMemo(() => getDateRangeCutoff(dateRange), [dateRange]);

@@ -1,5 +1,3 @@
-import { createMockProduct, listMockProducts } from "./mockStore";
-
 const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
 const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v1`;
@@ -63,8 +61,6 @@ function validateCreatePayload(payload: Record<string, unknown>) {
 async function proxySellerCollection(req: Request, method: "GET" | "POST") {
   const url = new URL(req.url);
   const params = new URLSearchParams(url.search);
-  const limit = Number(params.get("limit") ?? 20);
-  const offset = Number(params.get("offset") ?? 0);
   if (method === "GET") {
     if (!params.has("limit")) params.set("limit", "20");
     if (!params.has("offset")) params.set("offset", "0");
@@ -72,30 +68,6 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
   const search = params.toString() ? `?${params.toString()}` : "";
 
   if (!API_BASE) {
-    if (method === "GET") {
-      const items = listMockProducts(
-        Number(params.get("limit") ?? 20),
-        Number(params.get("offset") ?? 0)
-      );
-      return new Response(
-        JSON.stringify({ data: items, fallback: true, warning: "Mock mode: API base not configured." }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      );
-    }
-    if (method === "POST") {
-      const raw = await req.text();
-      let payload: Record<string, unknown> = {};
-      try {
-        payload = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-      } catch {
-        payload = {};
-      }
-      const created = createMockProduct(payload);
-      return new Response(
-        JSON.stringify({ data: created, fallback: true, warning: "Mock mode: API base not configured." }),
-        { status: 201, headers: { "Content-Type": "application/json" } }
-      );
-    }
     return new Response(
       JSON.stringify({ error: "NEXT_PUBLIC_API_BASE_URL is not set" }),
       { status: 500, headers: { "Content-Type": "application/json" } }
@@ -181,49 +153,6 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
     }
 
     const text = await finalRes.text();
-    if (method === "GET" && finalRes.status >= 500) {
-      const items = listMockProducts(limit, offset);
-      return new Response(
-        JSON.stringify({
-          data: items,
-          fallback: true,
-          warning: `Seller products upstream unavailable (${finalRes.status}). Showing local fallback data.`,
-          tried: urls,
-          attempts,
-          details: text.slice(0, 1000),
-        }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "X-Proxy-Fallback": "seller-products-list-mock",
-          },
-        }
-      );
-    }
-    if (method === "POST" && finalRes.status >= 400) {
-      let payload: Record<string, unknown> = {};
-      try {
-        payload = body ? (JSON.parse(body) as Record<string, unknown>) : {};
-      } catch {
-        payload = {};
-      }
-      const created = createMockProduct(payload);
-      return new Response(
-        JSON.stringify({
-          data: created,
-          fallback: true,
-          warning: "Upstream create product unavailable. Saved to local mock store.",
-        }),
-        {
-          status: 201,
-          headers: {
-            "Content-Type": "application/json",
-            "X-Proxy-Fallback": "seller-products-create-mock",
-          },
-        }
-      );
-    }
 
     if (finalRes.status >= 500) {
       console.error("Seller products upstream 5xx", {
@@ -241,26 +170,6 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
       },
     });
   } catch (error) {
-    if (method === "GET") {
-      const items = listMockProducts(limit, offset);
-      return new Response(
-        JSON.stringify({
-          data: items,
-          fallback: true,
-          warning: "Failed to reach seller products upstream. Showing local fallback data.",
-          details: error instanceof Error ? error.message : "Unknown fetch error",
-          tried: urls,
-        }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "X-Proxy-Fallback": "seller-products-list-mock",
-          },
-        }
-      );
-    }
-
     return new Response(
       JSON.stringify({
         error: "Failed to reach seller products upstream.",
