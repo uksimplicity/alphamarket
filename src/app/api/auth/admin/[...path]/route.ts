@@ -37,8 +37,13 @@ async function forwardRequest(
   const headers = buildHeaders(req, hasBody);
   const joinedPath = pathParts.join("/");
 
-  const candidateUrls = API_BASE_CANDIDATES.map(
-    (base) => `${base}/auth/admin/${joinedPath}${search}`
+  const candidateUrls = Array.from(
+    new Set(
+      API_BASE_CANDIDATES.flatMap((base) => [
+        `${base}/auth/admin/${joinedPath}${search}`,
+        `${base}/${joinedPath}${search}`,
+      ])
+    )
   );
 
   let res: Response | null = null;
