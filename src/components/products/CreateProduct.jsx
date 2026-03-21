@@ -811,21 +811,11 @@ async function uploadFile(file, folder, token) {
       let { response, data } = await createWithPayload(payload);
 
       if (!response.ok && payload.brandId) {
-        const errorText =
-          data && typeof data === "object"
-            ? String(data.error ?? data.message ?? data.details ?? "")
-            : String(data ?? "");
-        const isBrandForeignKeyError =
-          errorText.toLowerCase().includes("fk_products_brand") ||
-          errorText.toLowerCase().includes("violates foreign key constraint");
-
-        if (isBrandForeignKeyError) {
-          const retryPayload = { ...payload };
-          delete retryPayload.brandId;
-          ({ response, data } = await createWithPayload(retryPayload));
-          if (response.ok) {
-            setForm((prev) => ({ ...prev, brand: "" }));
-          }
+        const retryPayload = { ...payload };
+        delete retryPayload.brandId;
+        ({ response, data } = await createWithPayload(retryPayload));
+        if (response.ok) {
+          setForm((prev) => ({ ...prev, brand: "" }));
         }
       }
 
