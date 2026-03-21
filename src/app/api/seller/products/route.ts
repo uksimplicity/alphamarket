@@ -92,15 +92,21 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
     ...(cookieHeader ? { Cookie: cookieHeader } : {}),
   };
 
-  const body = method === "GET" ? "" : await req.text();
+  const incomingBody = method === "GET" ? "" : await req.text();
+  let body = incomingBody;
 
   if (method === "POST") {
     let payload: Record<string, unknown> = {};
     try {
-      payload = body ? (JSON.parse(body) as Record<string, unknown>) : {};
+      payload = incomingBody ? (JSON.parse(incomingBody) as Record<string, unknown>) : {};
     } catch {
       payload = {};
     }
+
+    // Brand is optional. Strip brand fields to avoid FK failures on stale brand records.
+    if ("brandId" in payload) delete payload.brandId;
+    if ("brand_id" in payload) delete payload.brand_id;
+    body = JSON.stringify(payload);
 
     const validationError = validateCreatePayload(payload);
     if (validationError) {

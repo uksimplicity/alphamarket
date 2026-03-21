@@ -741,7 +741,8 @@ async function uploadFile(file, folder, token) {
 
     if (form.location.trim()) payload.location = form.location.trim();
     if (form.shortDescription.trim()) payload.shortDescription = form.shortDescription.trim();
-    if (form.brand.trim()) payload.brandId = form.brand.trim();
+    // Brand is optional and backend FK can reject stale brand references.
+    // Do not send brand on create until backend brand sync is stable.
     if (stockNumber !== null) payload.stock = stockNumber;
     if (tagList.length > 0) payload.tags = tagList;
     const latitude = readFirstFiniteNumber(
