@@ -66,24 +66,34 @@ function normalizeAuthHeader(value: string) {
   return trimmed.replace(/^Bearer\s+Bearer\s+/i, "Bearer ");
 }
 
-function pickFirstBrandId(payload: unknown): string {
-  const visited = new WeakSet<object>();
-  const queue: unknown[] = [payload];
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (Array.isArray(current)) {
-      for (const item of current) queue.push(item);
-      continue;
+function normalizeBrandsList(payload: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(payload)) {
+    return payload.filter((item) => item && typeof item === "object") as Array<Record<string, unknown>>;
+  }
+  if (!payload || typeof payload !== "object") return [];
+  const record = payload as Record<string, unknown>;
+  const candidates = [record.data, record.items, record.brands, record.rows];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate.filter((item) => item && typeof item === "object") as Array<Record<string, unknown>>;
     }
-    if (!current || typeof current !== "object") continue;
-    const record = current as Record<string, unknown>;
-    if (visited.has(record)) continue;
-    visited.add(record);
+  }
+  return [];
+}
 
-    const id = record.id ?? record.uuid ?? record.brand_id ?? record.brandId;
-    if (typeof id === "string" && id.trim()) return id.trim();
-    if (typeof id === "number") return String(id);
-    for (const value of Object.values(record)) queue.push(value);
+function pickFirstBrandId(payload: unknown): string {
+  const rows = normalizeBrandsList(payload);
+  for (const row of rows) {
+    const name =
+      (typeof row.name === "string" && row.name.trim()) ||
+      (typeof row.title === "string" && row.title.trim()) ||
+      (typeof row.brand_name === "string" && row.brand_name.trim()) ||
+      "";
+    if (!name) continue;
+
+    const idValue = row.id ?? row.uuid ?? row.brand_id ?? row.brandId;
+    if (typeof idValue === "string" && idValue.trim()) return idValue.trim();
+    if (typeof idValue === "number") return String(idValue);
   }
   return "";
 }
@@ -170,9 +180,17 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
 
     // Backend enforces fk_products_brand; attach a valid default brand when available.
     const defaultBrandId = await resolveDefaultBrandId(headers);
-    if (defaultBrandId) {
-      payload.brandId = defaultBrandId;
+    if (!defaultBrandId) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "No valid brand is available for seller create. Ask admin to create at least one brand.",
+        }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
     }
+    payload.brandId = defaultBrandId;
+    payload.brand_id = defaultBrandId;
     body = JSON.stringify(payload);
 
     const validationError = validateCreatePayload(payload);
