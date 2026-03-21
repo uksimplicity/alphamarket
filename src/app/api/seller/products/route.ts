@@ -61,6 +61,9 @@ function validateCreatePayload(payload: Record<string, unknown>) {
 async function proxySellerCollection(req: Request, method: "GET" | "POST") {
   const url = new URL(req.url);
   const params = new URLSearchParams(url.search);
+  params.delete("ts");
+  params.delete("_");
+  params.delete("cacheBust");
   if (method === "GET") {
     if (!params.has("limit")) params.set("limit", "20");
     if (!params.has("offset")) params.set("offset", "0");

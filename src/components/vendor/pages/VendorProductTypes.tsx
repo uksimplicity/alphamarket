@@ -75,7 +75,7 @@ export default function VendorProductTypes() {
       const auth = getAuth();
       const token = auth?.access_token;
       const response = await fetch(
-        `/api/seller/catalog?resource=product-types&limit=200&offset=0&ts=${Date.now()}`,
+        "/api/seller/catalog?resource=product-types&limit=200&offset=0",
         {
           headers: {
             Accept: "application/json",

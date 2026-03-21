@@ -100,7 +100,7 @@ export default function ProductList({
     try {
       const auth = getAuth();
       const token = auth?.access_token;
-      const response = await fetch(`/api/seller/products?ts=${Date.now()}`, {
+      const response = await fetch("/api/seller/products", {
         cache: "no-store",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });

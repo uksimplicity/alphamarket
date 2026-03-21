@@ -168,11 +168,11 @@ export default function VendorDashboard() {
       if (token) commonHeaders.Authorization = token;
 
       const [productsResponse, ordersResponse] = await Promise.all([
-        fetch(`/api/seller/products?ts=${Date.now()}`, {
+        fetch("/api/seller/products", {
           headers: commonHeaders,
           cache: "no-store",
         }),
-        fetch(`/api/seller/orders?limit=200&offset=0&ts=${Date.now()}`, {
+        fetch("/api/seller/orders?limit=200&offset=0", {
           headers: commonHeaders,
           cache: "no-store",
         }),
