@@ -13,6 +13,17 @@ type Brand = {
   website: string;
 };
 
+function flattenRows(value: unknown, target: unknown[] = []): unknown[] {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      flattenRows(item, target);
+    }
+    return target;
+  }
+  target.push(value);
+  return target;
+}
+
 async function callBrandEndpoint<T>(path: string, init?: RequestInit): Promise<T> {
   const candidates = [() => authAdminFetcher<T>(path, init), () => adminFetcher<T>(path, init)];
   let lastError: unknown = null;
@@ -51,13 +62,14 @@ export default function AdminBrandsPage() {
     queryKey: ["admin-brands-page"],
     queryFn: async () => {
       const payload = await callBrandEndpoint<unknown>("/brands?limit=100&offset=0");
-      return asArray(payload).map((row, index) => {
+      const rows = flattenRows(asArray(payload));
+      return rows.map((row, index) => {
         const record = asRecord(row);
         return {
           id: pickString(record, ["id", "uuid"], `brand-${index}`),
-          name: pickString(record, ["name", "title"], "Unnamed brand"),
-          description: pickString(record, ["description"], ""),
-          website: pickString(record, ["website_url", "website"], ""),
+          name: pickString(record, ["name", "title", "brand_name", "brandTitle"], "Unnamed brand"),
+          description: pickString(record, ["description", "brand_description"], ""),
+          website: pickString(record, ["website_url", "website", "websiteUrl"], ""),
         } satisfies Brand;
       });
     },
@@ -126,7 +138,7 @@ export default function AdminBrandsPage() {
           body: fd,
         });
         const text = await response.text();
-        let data: any = null;
+        let data: unknown = null;
         try {
           data = text ? JSON.parse(text) : null;
         } catch {
