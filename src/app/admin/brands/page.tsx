@@ -11,6 +11,9 @@ type Brand = {
   name: string;
   description: string;
   website: string;
+  slug: string;
+  logo: string;
+  banner: string;
 };
 
 function flattenRows(value: unknown, target: unknown[] = []): unknown[] {
@@ -22,6 +25,13 @@ function flattenRows(value: unknown, target: unknown[] = []): unknown[] {
   }
   target.push(value);
   return target;
+}
+
+function extractBrandRecord(payload: unknown): Record<string, unknown> | null {
+  const direct = asRecord(payload);
+  if (!direct) return null;
+  const nested = asRecord(direct.data) ?? asRecord(direct.brand) ?? asRecord(direct.item);
+  return nested ?? direct;
 }
 
 async function callBrandEndpoint<T>(path: string, init?: RequestInit): Promise<T> {
@@ -58,6 +68,8 @@ export default function AdminBrandsPage() {
     description: "",
     websiteUrl: "",
   });
+  const [existingWebsite, setExistingWebsite] = useState("");
+  const [existingMedia, setExistingMedia] = useState({ logo: "", banner: "" });
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-brands-page"],
@@ -71,6 +83,13 @@ export default function AdminBrandsPage() {
           name: pickString(record, ["name", "title", "brand_name", "brandTitle"], "Unnamed brand"),
           description: pickString(record, ["description", "brand_description"], ""),
           website: pickString(record, ["website_url", "website", "websiteUrl"], ""),
+          slug: pickString(record, ["slug"], ""),
+          logo:
+            pickString(record, ["logo", "logo_url", "image", "image_url"]) ||
+            pickString(asRecord(record?.media), ["logo", "image", "image_url"]),
+          banner:
+            pickString(record, ["banner", "banner_url", "cover", "cover_url"]) ||
+            pickString(asRecord(record?.media), ["banner", "cover", "cover_url"]),
         } satisfies Brand;
       });
     },
@@ -104,6 +123,8 @@ export default function AdminBrandsPage() {
     setLogoFile(null);
     setBannerFile(null);
     setEditingBrandId(null);
+    setExistingWebsite("");
+    setExistingMedia({ logo: "", banner: "" });
   }
 
   async function saveBrand() {
@@ -127,9 +148,7 @@ export default function AdminBrandsPage() {
         banner: "",
       },
     };
-    if (createForm.websiteUrl.trim()) {
-      payload.website_url = createForm.websiteUrl.trim();
-    }
+    payload.website_url = createForm.websiteUrl.trim() || existingWebsite;
     try {
       setPendingKey("create-brand");
       setActionMessage("");
@@ -185,13 +204,11 @@ export default function AdminBrandsPage() {
           slug: payload.slug,
           description: payload.description,
           ...(payload.website_url ? { website_url: payload.website_url } : {}),
+          media: {
+            logo: uploadedLogo || existingMedia.logo || "",
+            banner: uploadedBanner || existingMedia.banner || "",
+          },
         };
-        if (uploadedLogo || uploadedBanner) {
-          updatePayload.media = {
-            logo: uploadedLogo,
-            banner: uploadedBanner,
-          };
-        }
         await callBrandEndpoint(`/brands/${editingBrandId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -223,16 +240,48 @@ export default function AdminBrandsPage() {
 
   async function editBrand(item: Brand) {
     setActionMessage("");
-    setEditingBrandId(item.id);
-    setShowCreateForm(true);
-    setLogoFile(null);
-    setBannerFile(null);
-    setCreateForm({
-      name: item.name,
-      slug: toSlug(item.name),
-      description: item.description,
-      websiteUrl: item.website,
-    });
+    try {
+      setPendingKey(`edit-${item.id}`);
+      const payload = await callBrandEndpoint<unknown>(`/brands/${item.id}`);
+      const record = extractBrandRecord(payload) ?? {};
+      const media = asRecord(record.media);
+
+      const resolvedName = pickString(record, ["name", "title", "brand_name"], item.name);
+      const resolvedSlug = pickString(record, ["slug"], item.slug || toSlug(resolvedName));
+      const resolvedDescription = pickString(
+        record,
+        ["description", "brand_description"],
+        item.description
+      );
+      const resolvedWebsite = pickString(
+        record,
+        ["website_url", "website", "websiteUrl"],
+        item.website
+      );
+      const resolvedLogo =
+        pickString(record, ["logo", "logo_url", "image", "image_url"], item.logo) ||
+        pickString(media, ["logo", "image", "image_url"], item.logo);
+      const resolvedBanner =
+        pickString(record, ["banner", "banner_url", "cover", "cover_url"], item.banner) ||
+        pickString(media, ["banner", "cover", "cover_url"], item.banner);
+
+      setEditingBrandId(item.id);
+      setShowCreateForm(true);
+      setLogoFile(null);
+      setBannerFile(null);
+      setExistingWebsite(resolvedWebsite);
+      setExistingMedia({ logo: resolvedLogo, banner: resolvedBanner });
+      setCreateForm({
+        name: resolvedName,
+        slug: resolvedSlug,
+        description: resolvedDescription,
+        websiteUrl: resolvedWebsite,
+      });
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : "Failed to load brand for editing.");
+    } finally {
+      setPendingKey("");
+    }
   }
 
   async function deleteBrand(id: string) {
