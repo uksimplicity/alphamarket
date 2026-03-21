@@ -66,6 +66,67 @@ function normalizeAuthHeader(value: string) {
   return trimmed.replace(/^Bearer\s+Bearer\s+/i, "Bearer ");
 }
 
+function pickFirstBrandId(payload: unknown): string {
+  const visited = new WeakSet<object>();
+  const queue: unknown[] = [payload];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (Array.isArray(current)) {
+      for (const item of current) queue.push(item);
+      continue;
+    }
+    if (!current || typeof current !== "object") continue;
+    const record = current as Record<string, unknown>;
+    if (visited.has(record)) continue;
+    visited.add(record);
+
+    const id = record.id ?? record.uuid ?? record.brand_id ?? record.brandId;
+    if (typeof id === "string" && id.trim()) return id.trim();
+    if (typeof id === "number") return String(id);
+    for (const value of Object.values(record)) queue.push(value);
+  }
+  return "";
+}
+
+async function resolveDefaultBrandId(headers: Record<string, string>): Promise<string> {
+  const candidateUrls = Array.from(
+    new Set(
+      API_BASE_CANDIDATES.flatMap((base) => [
+        `${base}/seller/brands?limit=20&offset=0`,
+        `${base}/auth/seller/brands?limit=20&offset=0`,
+        `${base}/brands?limit=20&offset=0`,
+      ])
+    )
+  );
+
+  for (const candidate of candidateUrls) {
+    try {
+      const response = await fetch(candidate, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          ...(headers.Authorization ? { Authorization: headers.Authorization } : {}),
+          ...(headers.Cookie ? { Cookie: headers.Cookie } : {}),
+        },
+        cache: "no-store",
+      });
+      if (!response.ok) continue;
+      const text = await response.text();
+      let payload: unknown = null;
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch {
+        payload = text;
+      }
+      const brandId = pickFirstBrandId(payload);
+      if (brandId) return brandId;
+    } catch {
+      // ignore and try the next candidate
+    }
+  }
+  return "";
+}
+
 async function proxySellerCollection(req: Request, method: "GET" | "POST") {
   const url = new URL(req.url);
   const params = new URLSearchParams(url.search);
@@ -103,9 +164,15 @@ async function proxySellerCollection(req: Request, method: "GET" | "POST") {
       payload = {};
     }
 
-    // Seller create: temporarily ignore brand fields to avoid backend FK constraint failure.
+    // Seller create: reset stale brand fields.
     if ("brandId" in payload) delete payload.brandId;
     if ("brand_id" in payload) delete payload.brand_id;
+
+    // Backend enforces fk_products_brand; attach a valid default brand when available.
+    const defaultBrandId = await resolveDefaultBrandId(headers);
+    if (defaultBrandId) {
+      payload.brandId = defaultBrandId;
+    }
     body = JSON.stringify(payload);
 
     const validationError = validateCreatePayload(payload);
