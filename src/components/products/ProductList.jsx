@@ -8,9 +8,15 @@ const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
 const REALTIME_POLL_INTERVAL_MS = 2000;
 
 export default function ProductList({
-  onView = () => {},
-  onEdit = () => {},
-  onDelete = () => {},
+  onView = (id) => {
+    void id;
+  },
+  onEdit = (id) => {
+    void id;
+  },
+  onDelete = (id) => {
+    void id;
+  },
   onCreate = () => {},
 }) {
   const [rows, setRows] = useState([]);
