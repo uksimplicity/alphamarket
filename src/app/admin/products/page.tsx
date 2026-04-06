@@ -254,7 +254,11 @@ export default function AdminProductsPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-products"],
     queryFn: async () => {
-      const productsPayload = await fetchOptionalAdminCollection("/products?limit=100", []);
+      const productsPayloadPrimary = await fetchOptionalAdminCollection("/products?limit=100", []);
+      const productsPayload =
+        asArray(productsPayloadPrimary).length > 0
+          ? productsPayloadPrimary
+          : await fetchOptionalAdminCollection("/products_v0?limit=100", []);
       const [attributesPayload, productTypesPayload, categoriesResult] = await Promise.all([
         fetchOptionalAdminCollection("/attributes?limit=100", []),
         (async () => {

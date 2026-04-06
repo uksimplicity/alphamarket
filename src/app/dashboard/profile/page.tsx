@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  changeCurrentUserPassword,
   type CurrentUserProfile,
   fetchCurrentUserProfile,
   resendPhoneVerification,
@@ -82,6 +83,14 @@ export default function ProfilePage() {
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterSaving, setNewsletterSaving] = useState(false);
   const [newsletterMessage, setNewsletterMessage] = useState("");
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [changePasswordForm, setChangePasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [changePasswordSaving, setChangePasswordSaving] = useState(false);
+  const [changePasswordMessage, setChangePasswordMessage] = useState("");
   const [failedProfilePictureSrc, setFailedProfilePictureSrc] = useState("");
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -336,6 +345,49 @@ export default function ProfilePage() {
     setNewsletterOpen(true);
   };
 
+  const openChangePassword = () => {
+    setChangePasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+    setChangePasswordMessage("");
+    setChangePasswordOpen(true);
+  };
+
+  const submitChangePassword = async () => {
+    const currentPassword = changePasswordForm.currentPassword.trim();
+    const newPassword = changePasswordForm.newPassword.trim();
+    const confirmPassword = changePasswordForm.confirmPassword.trim();
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setChangePasswordMessage("All fields are required.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setChangePasswordMessage("New password and confirmation do not match.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setChangePasswordMessage("New password must be at least 8 characters.");
+      return;
+    }
+
+    setChangePasswordSaving(true);
+    setChangePasswordMessage("");
+    try {
+      await changeCurrentUserPassword(currentPassword, newPassword);
+      setChangePasswordMessage("Password changed successfully.");
+      setChangePasswordOpen(false);
+    } catch (err) {
+      setChangePasswordMessage(
+        err instanceof Error ? err.message : "Failed to change password."
+      );
+    } finally {
+      setChangePasswordSaving(false);
+    }
+  };
+
   const saveNewsletterEmail = async () => {
     const email = newsletterEmail.trim();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -495,6 +547,15 @@ export default function ProfilePage() {
                     Verify
                   </button>
                 ) : null}
+              </div>
+              <div className="pt-1">
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                  onClick={openChangePassword}
+                >
+                  Change Password
+                </button>
               </div>
             </div>
           </div>
@@ -755,6 +816,75 @@ export default function ProfilePage() {
                   {changePhoneLoading ? "Saving..." : "Verify & Save"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {changePasswordOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/45 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+            <div className="mb-2 text-lg font-semibold text-slate-900">Change Password</div>
+            <p className="mb-4 text-sm text-slate-600">
+              Update your account password securely.
+            </p>
+            <div className="grid gap-3">
+              <input
+                type="password"
+                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-brand"
+                placeholder="Current password"
+                value={changePasswordForm.currentPassword}
+                onChange={(event) =>
+                  setChangePasswordForm((prev) => ({
+                    ...prev,
+                    currentPassword: event.target.value,
+                  }))
+                }
+              />
+              <input
+                type="password"
+                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-brand"
+                placeholder="New password"
+                value={changePasswordForm.newPassword}
+                onChange={(event) =>
+                  setChangePasswordForm((prev) => ({
+                    ...prev,
+                    newPassword: event.target.value,
+                  }))
+                }
+              />
+              <input
+                type="password"
+                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-brand"
+                placeholder="Confirm new password"
+                value={changePasswordForm.confirmPassword}
+                onChange={(event) =>
+                  setChangePasswordForm((prev) => ({
+                    ...prev,
+                    confirmPassword: event.target.value,
+                  }))
+                }
+              />
+              {changePasswordMessage ? (
+                <div className="text-sm text-slate-700">{changePasswordMessage}</div>
+              ) : null}
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="h-10 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-700"
+                onClick={() => setChangePasswordOpen(false)}
+                disabled={changePasswordSaving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="h-10 rounded-xl bg-brand px-4 text-sm font-semibold text-white disabled:opacity-60"
+                onClick={submitChangePassword}
+                disabled={changePasswordSaving}
+              >
+                {changePasswordSaving ? "Saving..." : "Change Password"}
+              </button>
             </div>
           </div>
         </div>

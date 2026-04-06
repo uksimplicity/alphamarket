@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
-import { getAuth, getDisplayName } from "@/components/auth/authStorage";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { clearAuth, getAuth, getDisplayName, getProfilePath } from "@/components/auth/authStorage";
 
 const navSections = [
   {
@@ -18,9 +18,9 @@ const navSections = [
     title: "Escrow Management",
     items: [
       { href: "/admin/orders", label: "Pending Escrows" },
-      { href: "/admin/orders", label: "Timed-out Escrows" },
+      { href: "/admin/orders#timed-out", label: "Timed-out Escrows" },
       { href: "/admin/finance", label: "Revenue Report" },
-      { href: "/admin/finance", label: "Escrow Totals" },
+      { href: "/admin/finance#escrow-totals", label: "Escrow Totals" },
       { href: "/admin/orders#release-escrow", label: "Release Escrow" },
       { href: "/admin/orders#reverse-escrow", label: "Reverse Escrow" },
     ],
@@ -37,35 +37,115 @@ const navSections = [
     title: "Reports & Analytics",
     items: [
       { href: "/admin/dashboard", label: "Dashboard Stats" },
-      { href: "/admin/dashboard", label: "Revenue Trends" },
-      { href: "/admin/dashboard", label: "Order Snapshot" },
+      { href: "/admin/dashboard#revenue-trends", label: "Revenue Trends" },
+      { href: "/admin/dashboard#order-snapshot", label: "Order Snapshot" },
     ],
   },
   {
     title: "Finance",
     items: [
       { href: "/admin/finance", label: "Revenue" },
-      { href: "/admin/finance", label: "Pending Amounts" },
-      { href: "/admin/finance", label: "Timed-out Amounts" },
+      { href: "/admin/commissions", label: "Commissions" },
+      { href: "/admin/wallet", label: "Admin Wallet" },
+      { href: "/admin/finance#pending-amounts", label: "Pending Amounts" },
+      { href: "/admin/finance#timed-out-amounts", label: "Timed-out Amounts" },
     ],
   },
   {
     title: "Operations",
     items: [
-      { href: "/admin/notifications", label: "Expired Uploads" },
+      { href: "/admin/deliveries", label: "Deliveries" },
+      { href: "/admin/notifications#expired-uploads", label: "Expired Uploads" },
       { href: "/admin/settings", label: "Admin Accounts" },
     ],
   },
   {
     title: "Settings",
-    items: [{ href: "/admin/settings", label: "Roles & Access" }],
+    items: [
+      { href: "/admin/settings", label: "Roles & Access" },
+      { href: "/admin/platform-settings", label: "Platform Settings" },
+    ],
   },
 ];
 
+const adminSearchAliases = [
+  { href: "/admin/dashboard", label: "Overview", keywords: ["home", "stats", "summary"] },
+  { href: "/admin/orders", label: "Escrows", keywords: ["escrow", "pending", "release", "reverse"] },
+  { href: "/admin/finance", label: "Finance", keywords: ["revenue", "payments", "totals"] },
+  {
+    href: "/admin/commissions",
+    label: "Commissions",
+    keywords: ["commission", "mark paid", "rider earnings"],
+  },
+  { href: "/admin/wallet", label: "Admin Wallet", keywords: ["wallet", "balance", "transactions"] },
+  { href: "/admin/deliveries", label: "Deliveries", keywords: ["delivery", "assign rider"] },
+  { href: "/admin/vendors", label: "Sellers", keywords: ["vendors", "merchant"] },
+  { href: "/admin/users", label: "Users", keywords: ["accounts", "customers"] },
+  { href: "/admin/settings", label: "Settings", keywords: ["admin accounts", "roles", "permissions"] },
+  {
+    href: "/admin/platform-settings",
+    label: "Platform Settings",
+    keywords: ["config", "upsert", "feature flags"],
+  },
+];
+
+function resolveAdminSearch(query: string) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const sectionMatch = navSections.flatMap((section) =>
+    section.items.map((item) => ({
+      href: item.href,
+      label: item.label,
+      section: section.title,
+      keywords: [section.title.toLowerCase(), item.href.toLowerCase()],
+    }))
+  );
+  const aliasMatch = adminSearchAliases.map((item) => ({
+    href: item.href,
+    label: item.label,
+    section: "Quick Access",
+    keywords: item.keywords,
+  }));
+  const allEntries = [...sectionMatch, ...aliasMatch];
+
+  const exact = allEntries.find((entry) => {
+    const section = entry.section.toLowerCase();
+    return (
+      entry.label.toLowerCase() === normalized ||
+      section === normalized ||
+      entry.href.toLowerCase() === normalized
+    );
+  });
+  if (exact) return exact.href;
+
+  const partial = allEntries.find((entry) => {
+    const haystacks = [entry.label.toLowerCase(), entry.section.toLowerCase(), entry.href.toLowerCase(), ...entry.keywords];
+    return haystacks.some((value) => value.includes(normalized));
+  });
+  if (partial) return partial.href;
+
+  return null;
+}
+
 export default function AdminShell({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const pathname = usePathname();
-  const [adminName, setAdminName] = useState("Admin");
-  const [adminRole, setAdminRole] = useState("Account");
+  const [currentHash, setCurrentHash] = useState(() =>
+    typeof window !== "undefined" ? window.location.hash : ""
+  );
+  const [authUser] = useState(() => getAuth()?.user ?? null);
+  const [{ adminName, adminRole }] = useState(() => {
+    const user = getAuth()?.user;
+    return {
+      adminName: getDisplayName(user),
+      adminRole: typeof user?.role === "string" && user.role ? user.role : "Account",
+    };
+  });
+  const [searchText, setSearchText] = useState("");
+  const [searchError, setSearchError] = useState("");
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [productsOpen, setProductsOpen] = useState(false);
   const [escrowOpen, setEscrowOpen] = useState(false);
@@ -75,75 +155,94 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const [operationsOpen, setOperationsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  const productsExpanded = productsOpen || pathname.startsWith("/admin/products");
+  const catalogExpanded =
+    catalogOpen ||
+    pathname.startsWith("/admin/promotions") ||
+    pathname.startsWith("/admin/categories") ||
+    pathname.startsWith("/admin/attributes") ||
+    pathname.startsWith("/admin/tags") ||
+    pathname.startsWith("/admin/brands");
+  const escrowExpanded =
+    escrowOpen || pathname.startsWith("/admin/orders") || pathname.startsWith("/admin/finance");
+  const accountsExpanded =
+    accountsOpen ||
+    pathname.startsWith("/admin/users") ||
+    pathname.startsWith("/admin/vendors") ||
+    pathname.startsWith("/admin/notifications");
+  const reportsExpanded = reportsOpen || pathname.startsWith("/admin/dashboard");
+  const financeExpanded =
+    financeOpen ||
+    pathname.startsWith("/admin/finance") ||
+    pathname.startsWith("/admin/commissions") ||
+    pathname.startsWith("/admin/wallet");
+  const operationsExpanded =
+    operationsOpen ||
+    pathname.startsWith("/admin/deliveries") ||
+    pathname.startsWith("/admin/notifications") ||
+    pathname.startsWith("/admin/settings");
+  const settingsExpanded =
+    settingsOpen || pathname.startsWith("/admin/settings") || pathname.startsWith("/admin/platform-settings");
+
+  const isItemActive = (href: string) => {
+    const [targetPath, targetHash = ""] = href.split("#");
+    if (pathname !== targetPath) {
+      return false;
+    }
+    if (!targetHash) {
+      return !currentHash;
+    }
+    return currentHash === `#${targetHash}`;
+  };
+
+  const searchOptions = Array.from(
+    new Set([
+      ...navSections.flatMap((section) => section.items.map((item) => item.label)),
+      ...adminSearchAliases.map((item) => item.label),
+    ])
+  );
+
+  const profilePath = getProfilePath(authUser);
+
+  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const destination = resolveAdminSearch(searchText);
+    if (!destination) {
+      setSearchError("No matching admin section found.");
+      return;
+    }
+    setSearchError("");
+    router.push(destination);
+  };
+
+  const handleLogout = () => {
+    clearAuth();
+    setShowLogoutConfirm(false);
+    router.push("/login");
+  };
+
   useEffect(() => {
-    const auth = getAuth();
-    const user = auth?.user;
-    setAdminName(getDisplayName(user));
-    setAdminRole(typeof user?.role === "string" && user.role ? user.role : "Account");
+    const handleHashChange = () => {
+      setCurrentHash(window.location.hash || "");
+    };
+    window.addEventListener("hashchange", handleHashChange);
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+    };
   }, []);
-
-  useEffect(() => {
-    if (pathname.startsWith("/admin/products")) {
-      setProductsOpen(true);
-    }
-  }, [pathname]);
-
-  useEffect(() => {
-    if (
-      pathname.startsWith("/admin/promotions") ||
-      pathname.startsWith("/admin/categories") ||
-      pathname.startsWith("/admin/attributes") ||
-      pathname.startsWith("/admin/tags") ||
-      pathname.startsWith("/admin/brands")
-    ) {
-      setCatalogOpen(true);
-    }
-  }, [pathname]);
-
-  useEffect(() => {
-    if (pathname.startsWith("/admin/orders") || pathname.startsWith("/admin/finance")) {
-      setEscrowOpen(true);
-    }
-  }, [pathname]);
-
-  useEffect(() => {
-    if (
-      pathname.startsWith("/admin/users") ||
-      pathname.startsWith("/admin/vendors") ||
-      pathname.startsWith("/admin/notifications")
-    ) {
-      setAccountsOpen(true);
-    }
-  }, [pathname]);
-
-  useEffect(() => {
-    if (pathname.startsWith("/admin/dashboard")) {
-      setReportsOpen(true);
-    }
-  }, [pathname]);
-
-  useEffect(() => {
-    if (pathname.startsWith("/admin/finance")) {
-      setFinanceOpen(true);
-    }
-  }, [pathname]);
-
-  useEffect(() => {
-    if (pathname.startsWith("/admin/notifications") || pathname.startsWith("/admin/settings")) {
-      setOperationsOpen(true);
-    }
-  }, [pathname]);
-
-  useEffect(() => {
-    if (pathname.startsWith("/admin/settings")) {
-      setSettingsOpen(true);
-    }
-  }, [pathname]);
 
   return (
     <div className="admin-theme min-h-screen bg-[radial-gradient(circle_at_top_left,_#e8efff_0%,_#f8fbff_35%,_#ffffff_75%)]">
-      <div className="grid grid-cols-1 gap-6 px-4 py-6 lg:grid-cols-[260px_1fr]">
-        <aside className="rounded-2xl border border-blue-100 bg-gradient-to-b from-blue-50/70 via-white to-white p-4 shadow-card">
+      <div
+        className={`grid grid-cols-1 gap-6 px-4 py-6 ${
+          sidebarCollapsed ? "lg:grid-cols-[0px_1fr]" : "lg:grid-cols-[260px_1fr]"
+        }`}
+      >
+        <aside
+          className={`rounded-2xl border border-blue-100 bg-gradient-to-b from-blue-50/70 via-white to-white p-4 shadow-card transition-all lg:overflow-hidden ${
+            sidebarCollapsed ? "pointer-events-none opacity-0 lg:w-0 lg:border-0 lg:p-0" : ""
+          }`}
+        >
           <div className="mb-6 flex items-center gap-2 font-semibold text-slate-900">
             <img className="h-8" src="/logo.png" alt="Alpha Marketplace" />
             Alpha Marketplace
@@ -151,7 +250,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           <Link
             href="/admin/dashboard"
             className={`mb-4 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ${
-              pathname === "/admin/dashboard"
+              isItemActive("/admin/dashboard")
                 ? "bg-brand text-white shadow-md shadow-blue-200/60"
                 : "text-slate-600 hover:bg-blue-50"
             }`}
@@ -176,15 +275,15 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                     <button
                       type="button"
                       onClick={() => setProductsOpen((prev) => !prev)}
-                      aria-expanded={productsOpen}
+                      aria-expanded={productsExpanded}
                       className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
                     >
                       Products
                     </button>
-                    {productsOpen ? (
+                    {productsExpanded ? (
                       <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
                         {section.items.map((item) => {
-                          const active = pathname === item.href.split("#")[0].split("?")[0];
+                          const active = isItemActive(item.href);
                           return (
                             <Link
                               key={`${section.title}-${item.label}`}
@@ -205,12 +304,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                     <button
                       type="button"
                       onClick={() => setCatalogOpen((prev) => !prev)}
-                      aria-expanded={catalogOpen}
+                      aria-expanded={catalogExpanded}
                       className="mt-1 w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
                     >
                       Categories &amp; Attributes
                     </button>
-                    {catalogOpen ? (
+                    {catalogExpanded ? (
                       <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
                         {[
                           { label: "Categories", href: "/admin/categories" },
@@ -218,7 +317,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                           { label: "Tags", href: "/admin/tags" },
                           { label: "Brand", href: "/admin/brands" },
                         ].map((item) => {
-                          const active = pathname === item.href.split("#")[0].split("?")[0];
+                          const active = isItemActive(item.href);
                           return (
                             <Link
                               key={`catalog-tree-${item.label}`}
@@ -242,15 +341,15 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                     <button
                       type="button"
                       onClick={() => setEscrowOpen((prev) => !prev)}
-                      aria-expanded={escrowOpen}
+                      aria-expanded={escrowExpanded}
                       className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
                     >
                       Escrow Management
                     </button>
-                    {escrowOpen ? (
+                    {escrowExpanded ? (
                       <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
                         {section.items.map((item) => {
-                          const active = pathname === item.href;
+                          const active = isItemActive(item.href);
                           return (
                             <Link
                               key={`${section.title}-${item.label}`}
@@ -274,15 +373,15 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                     <button
                       type="button"
                       onClick={() => setAccountsOpen((prev) => !prev)}
-                      aria-expanded={accountsOpen}
+                      aria-expanded={accountsExpanded}
                       className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
                     >
                       Accounts
                     </button>
-                    {accountsOpen ? (
+                    {accountsExpanded ? (
                       <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
                         {section.items.map((item) => {
-                          const active = pathname === item.href;
+                          const active = isItemActive(item.href);
                           return (
                             <Link
                               key={`${section.title}-${item.label}`}
@@ -306,15 +405,15 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                     <button
                       type="button"
                       onClick={() => setReportsOpen((prev) => !prev)}
-                      aria-expanded={reportsOpen}
+                      aria-expanded={reportsExpanded}
                       className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
                     >
                       Reports &amp; Analytics
                     </button>
-                    {reportsOpen ? (
+                    {reportsExpanded ? (
                       <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
                         {section.items.map((item) => {
-                          const active = pathname === item.href;
+                          const active = isItemActive(item.href);
                           return (
                             <Link
                               key={`${section.title}-${item.label}`}
@@ -338,15 +437,15 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                     <button
                       type="button"
                       onClick={() => setFinanceOpen((prev) => !prev)}
-                      aria-expanded={financeOpen}
+                      aria-expanded={financeExpanded}
                       className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
                     >
                       Finance
                     </button>
-                    {financeOpen ? (
+                    {financeExpanded ? (
                       <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
                         {section.items.map((item) => {
-                          const active = pathname === item.href;
+                          const active = isItemActive(item.href);
                           return (
                             <Link
                               key={`${section.title}-${item.label}`}
@@ -370,15 +469,15 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                     <button
                       type="button"
                       onClick={() => setOperationsOpen((prev) => !prev)}
-                      aria-expanded={operationsOpen}
+                      aria-expanded={operationsExpanded}
                       className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
                     >
                       Operations
                     </button>
-                    {operationsOpen ? (
+                    {operationsExpanded ? (
                       <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
                         {section.items.map((item) => {
-                          const active = pathname === item.href;
+                          const active = isItemActive(item.href);
                           return (
                             <Link
                               key={`${section.title}-${item.label}`}
@@ -402,15 +501,15 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                     <button
                       type="button"
                       onClick={() => setSettingsOpen((prev) => !prev)}
-                      aria-expanded={settingsOpen}
+                      aria-expanded={settingsExpanded}
                       className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
                     >
                       Settings
                     </button>
-                    {settingsOpen ? (
+                    {settingsExpanded ? (
                       <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
                         {section.items.map((item) => {
-                          const active = pathname === item.href;
+                          const active = isItemActive(item.href);
                           return (
                             <Link
                               key={`${section.title}-${item.label}`}
@@ -432,7 +531,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                 ) : (
                   <div className="mt-2 flex flex-col gap-1">
                     {section.items.map((item) => {
-                      const active = pathname === item.href;
+                      const active = isItemActive(item.href);
                       return (
                         <Link
                           key={`${section.title}-${item.label}`}
@@ -457,17 +556,48 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           <div className="rounded-2xl border border-blue-100 bg-gradient-to-b from-blue-50/70 via-white to-white p-4 shadow-card">
             <div className="flex flex-wrap items-center gap-4">
               <button
+                type="button"
+                onClick={() => setSidebarCollapsed((prev) => !prev)}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-[#1b3ea6]"
-                aria-label="Collapse sidebar"
+                aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                aria-expanded={!sidebarCollapsed}
               >
-                &lt;
+                {sidebarCollapsed ? ">" : "<"}
               </button>
-              <div className="flex flex-1 items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-2 text-sm text-slate-600">
-                <span aria-hidden="true">Search</span>
-                <input
-                  className="w-full bg-transparent outline-none"
-                  placeholder="Search..."
-                />
+              <div className="flex min-w-[260px] flex-1 flex-col gap-1">
+                <form
+                  onSubmit={handleSearchSubmit}
+                  className="flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50/40 px-4 py-2 text-sm text-slate-600"
+                >
+                  <span aria-hidden="true">Search</span>
+                  <input
+                    list="admin-search-options"
+                    className="w-full bg-transparent outline-none"
+                    placeholder="Search admin sections..."
+                    value={searchText}
+                    onChange={(event) => {
+                      setSearchText(event.target.value);
+                      if (searchError) {
+                        setSearchError("");
+                      }
+                    }}
+                    aria-label="Search admin sections"
+                  />
+                  <datalist id="admin-search-options">
+                    {searchOptions.map((option) => (
+                      <option key={option} value={option} />
+                    ))}
+                  </datalist>
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white"
+                  >
+                    Go
+                  </button>
+                </form>
+                {searchError ? (
+                  <div className="px-1 text-xs text-rose-600">{searchError}</div>
+                ) : null}
               </div>
               <div className="flex items-center gap-3 text-sm text-slate-500">
                 <span>EN</span>
@@ -486,21 +616,51 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                   </div>
                   <span className="text-slate-400">v</span>
                   <div className="absolute right-0 top-12 hidden min-w-[160px] rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-600 shadow-card group-hover:block">
-                    <button className="w-full rounded-lg px-3 py-2 text-left hover:bg-blue-50 hover:text-blue-600">
-                      Profile
-                    </button>
                     <Link
-                      href="/login"
+                      href={profilePath}
                       className="block w-full rounded-lg px-3 py-2 text-left hover:bg-blue-50 hover:text-blue-600"
                     >
-                      Logout
+                      Profile
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => setShowLogoutConfirm(true)}
+                      className="w-full rounded-lg px-3 py-2 text-left hover:bg-blue-50 hover:text-blue-600"
+                    >
+                      Logout
+                    </button>
                   </div>
                 </div>
               </div>
             </div>
           </div>
           {children}
+          {showLogoutConfirm ? (
+            <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 px-4">
+              <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
+                <h3 className="text-lg font-semibold text-slate-900">Confirm logout</h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  Are you sure you want to log out?
+                </p>
+                <div className="mt-6 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700"
+                    onClick={() => setShowLogoutConfirm(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white"
+                    onClick={handleLogout}
+                  >
+                    Logout
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </main>
       </div>
     </div>

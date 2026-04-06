@@ -88,6 +88,8 @@ type CachedPictureEntry = {
   userKey: string;
   profilePicture: string;
   fallbackDataUrl?: string;
+  fileId?: string;
+  uploadId?: string;
 };
 
 function getUserCacheKey() {
@@ -134,30 +136,36 @@ function writeCachedAddress(userKey: string, input: UpdateProfileInput) {
 function readCachedProfilePicture(userKey: string): {
   profilePicture: string;
   fallbackDataUrl: string;
+  fileId: string;
+  uploadId: string;
 } {
   if (typeof window === "undefined" || !userKey) {
-    return { profilePicture: "", fallbackDataUrl: "" };
+    return { profilePicture: "", fallbackDataUrl: "", fileId: "", uploadId: "" };
   }
   try {
     const raw = window.localStorage.getItem(PROFILE_PICTURE_CACHE_KEY);
-    if (!raw) return { profilePicture: "", fallbackDataUrl: "" };
+    if (!raw) return { profilePicture: "", fallbackDataUrl: "", fileId: "", uploadId: "" };
     const parsed = JSON.parse(raw) as CachedPictureEntry;
     if (!parsed || parsed.userKey !== userKey) {
-      return { profilePicture: "", fallbackDataUrl: "" };
+      return { profilePicture: "", fallbackDataUrl: "", fileId: "", uploadId: "" };
     }
     return {
       profilePicture: toText(parsed.profilePicture),
       fallbackDataUrl: toText(parsed.fallbackDataUrl),
+      fileId: toText(parsed.fileId),
+      uploadId: toText(parsed.uploadId),
     };
   } catch {
-    return { profilePicture: "", fallbackDataUrl: "" };
+    return { profilePicture: "", fallbackDataUrl: "", fileId: "", uploadId: "" };
   }
 }
 
 function writeCachedProfilePicture(
   userKey: string,
   profilePicture: string,
-  fallbackDataUrl = ""
+  fallbackDataUrl = "",
+  fileId = "",
+  uploadId = ""
 ) {
   if (typeof window === "undefined" || !userKey) return;
   try {
@@ -165,11 +173,132 @@ function writeCachedProfilePicture(
       userKey,
       profilePicture,
       fallbackDataUrl,
+      fileId,
+      uploadId,
     };
     window.localStorage.setItem(PROFILE_PICTURE_CACHE_KEY, JSON.stringify(payload));
   } catch {
     // ignore cache write errors
   }
+}
+
+async function safeJson(response: Response) {
+  const text = await response.text();
+  try {
+    return text ? (JSON.parse(text) as unknown) : null;
+  } catch {
+    return text;
+  }
+}
+
+async function createTemporaryUploadRecord(
+  key: string,
+  url: string,
+  token: string
+): Promise<string> {
+  const response = await fetch("/api/uploads/temporary", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ key, url }),
+  });
+  const payload = await safeJson(response);
+  if (!response.ok) return "";
+  const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const nested =
+    record.data && typeof record.data === "object"
+      ? (record.data as Record<string, unknown>)
+      : {};
+  return (
+    toText(record.id) ||
+    toText(record.upload_id) ||
+    toText(nested.id) ||
+    toText(nested.upload_id)
+  );
+}
+
+async function attachTemporaryUploads(uploadIds: string[], token: string): Promise<void> {
+  if (uploadIds.length === 0) return;
+  await fetch("/api/uploads/attach", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ upload_ids: uploadIds }),
+  });
+}
+
+async function deleteTemporaryUploadRecord(uploadId: string, token: string): Promise<void> {
+  if (!uploadId) return;
+  await fetch(`/api/uploads/${encodeURIComponent(uploadId)}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+async function deleteUploadedFileById(fileId: string, token: string): Promise<void> {
+  if (!fileId) return;
+  await fetch(`/api/upload/file/${encodeURIComponent(fileId)}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+export async function changeCurrentUserPassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const auth = getAuth();
+  const token = auth?.access_token;
+  if (!token) {
+    throw new Error("You must be logged in to change your password.");
+  }
+
+  const response = await fetch("/api/user/change-password", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      currentPassword,
+      newPassword,
+      userID: auth?.user?.id ?? "",
+    }),
+  });
+
+  const payload = await safeJson(response);
+  if (!response.ok) {
+    const message =
+      payload && typeof payload === "object" && "error" in payload
+        ? String((payload as { error: unknown }).error)
+        : `Failed to change password (${response.status}).`;
+    throw new Error(message);
+  }
+}
+
+export async function updateUserFcmToken(fcmToken: string): Promise<void> {
+  const auth = getAuth();
+  const token = auth?.access_token;
+  if (!token || !fcmToken.trim()) return;
+
+  await fetch("/api/user/update-fcm-token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      fcm_token: fcmToken.trim(),
+    }),
+  });
 }
 
 export async function fetchCurrentUserProfile(): Promise<CurrentUserProfile> {
@@ -322,7 +451,9 @@ export async function updateCurrentUserProfile(input: UpdateProfileInput): Promi
     writeCachedProfilePicture(
       userKey,
       input.profilePicture,
-      existing.fallbackDataUrl
+      existing.fallbackDataUrl,
+      existing.fileId,
+      existing.uploadId
     );
   }
 }
@@ -388,6 +519,17 @@ export async function uploadProfilePicture(file: File): Promise<string> {
   if (!uploadedUrl) {
     throw new Error("Upload succeeded but no file URL was returned.");
   }
+  const uploadedKey =
+    toText(record.key) ||
+    toText(record.object_key) ||
+    toText(nested.key) ||
+    toText(nested.object_key);
+  const fileId =
+    toText(record.id) ||
+    toText(record.file_id) ||
+    toText(nested.id) ||
+    toText(nested.file_id);
+  const cached = readCachedProfilePicture(userKey);
 
   let fallbackDataUrl = "";
   // Keep a local preview copy so avatar can render even if remote URL is private/unreachable.
@@ -400,7 +542,34 @@ export async function uploadProfilePicture(file: File): Promise<string> {
   }
 
   const resolvedUrl = resolveAssetUrl(uploadedUrl);
-  writeCachedProfilePicture(userKey, resolvedUrl, fallbackDataUrl);
+  let uploadId = "";
+  try {
+    if (uploadedKey && resolvedUrl) {
+      uploadId = await createTemporaryUploadRecord(uploadedKey, resolvedUrl, token);
+      if (uploadId) {
+        await attachTemporaryUploads([uploadId], token);
+      }
+    }
+  } catch {
+    // keep profile update flow resilient
+  }
+
+  try {
+    if (cached.uploadId) {
+      await deleteTemporaryUploadRecord(cached.uploadId, token);
+    }
+  } catch {
+    // best-effort cleanup
+  }
+  try {
+    if (cached.fileId) {
+      await deleteUploadedFileById(cached.fileId, token);
+    }
+  } catch {
+    // best-effort cleanup
+  }
+
+  writeCachedProfilePicture(userKey, resolvedUrl, fallbackDataUrl, fileId, uploadId);
   return resolvedUrl;
 }
 

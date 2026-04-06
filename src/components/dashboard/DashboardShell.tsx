@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { fetchCurrentUserProfile } from "@/components/auth/profileClient";
+import { fetchCurrentUserProfile, updateUserFcmToken } from "@/components/auth/profileClient";
 import { clearAuth, getDisplayName } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
 import { useCartCount } from "@/components/commerce/store";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import styles from "@/app/page.module.css";
 
@@ -178,6 +178,28 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
   const avatarUrl = profile?.profilePicture?.trim() ?? "";
   const showAvatarImage = Boolean(avatarUrl) && failedAvatarSrc !== avatarUrl;
   const fullName = profile?.name?.trim() || userName || "My Account";
+
+  useEffect(() => {
+    const tokenCandidates = [
+      "alpha.fcmToken",
+      "alpha.fcm_token",
+      "fcmToken",
+      "fcm_token",
+    ];
+    const token = tokenCandidates
+      .map((key) => {
+        try {
+          return localStorage.getItem(key) ?? "";
+        } catch {
+          return "";
+        }
+      })
+      .find(Boolean);
+    if (!token) return;
+    void updateUserFcmToken(token).catch(() => {
+      // non-blocking best-effort sync
+    });
+  }, []);
 
   if (pathname === "/dashboard/home") {
     return (
