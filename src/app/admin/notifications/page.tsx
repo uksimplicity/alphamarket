@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
+import { getAuth } from "@/components/auth/authStorage";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type NotificationTemplate = {
@@ -23,10 +24,31 @@ export default function AdminNotificationsPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-notifications"],
     queryFn: async () => {
-      const [ridersPayload, uploadsPayload] = await Promise.all([
-        adminFetcher<unknown>("/riders/unverified?limit=50"),
-        adminFetcher<unknown>("/uploads/expired?limit=50"),
-      ]);
+      const ridersPayload = await adminFetcher<unknown>("/riders/unverified?limit=50");
+
+      let uploadsPayload: unknown;
+      try {
+        uploadsPayload = await adminFetcher<unknown>("/uploads/expired?limit=50");
+      } catch {
+        const token = getAuth()?.access_token;
+        const response = await fetch("/api/upload/files?folder=expired", {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          cache: "no-store",
+        });
+        const text = await response.text();
+        if (!response.ok) {
+          throw new Error(text || `Failed to load expired uploads (${response.status}).`);
+        }
+        try {
+          uploadsPayload = text ? JSON.parse(text) : [];
+        } catch {
+          uploadsPayload = [];
+        }
+      }
 
       return {
         broadcasts: asArray(ridersPayload).map((row, index) => {

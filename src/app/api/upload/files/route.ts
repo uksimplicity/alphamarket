@@ -1,27 +1,30 @@
-export async function POST(req: Request) {
-  const rawApiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
-  const apiBase = rawApiBase.replace(/\/+$/, "");
-  const apiV1Base = apiBase.endsWith("/api/v1") ? apiBase : `${apiBase}/api/v1`;
+const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
+const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v1`;
 
-  if (!apiBase) {
+export async function GET(req: Request) {
+  if (!API_BASE) {
     return new Response(
       JSON.stringify({ error: "NEXT_PUBLIC_API_BASE_URL is not set" }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 
-  const formData = await req.formData();
   const authHeader = req.headers.get("authorization") ?? "";
+  const { search } = new URL(req.url);
+  const targets = Array.from(
+    new Set([`${API_V1_BASE}/upload/files${search}`, `${API_BASE}/upload/files${search}`])
+  );
 
-  const targets = Array.from(new Set([`${apiV1Base}/upload/file`, `${apiBase}/upload/file`]));
   let res: Response | null = null;
   for (const target of targets) {
     const attempt = await fetch(target, {
-      method: "POST",
+      method: "GET",
       headers: {
+        Accept: "application/json",
         ...(authHeader ? { Authorization: authHeader } : {}),
       },
-      body: formData,
+      cache: "no-store",
     });
     if (attempt.status === 404) continue;
     res = attempt;
@@ -30,7 +33,7 @@ export async function POST(req: Request) {
 
   if (!res) {
     return new Response(
-      JSON.stringify({ error: "Upload endpoint not found on upstream.", tried: targets }),
+      JSON.stringify({ error: "Upload files endpoint not found on upstream.", tried: targets }),
       { status: 502, headers: { "Content-Type": "application/json" } }
     );
   }
