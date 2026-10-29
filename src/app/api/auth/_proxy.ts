@@ -15,36 +15,46 @@ export async function proxyAuthRequest(
 
   const body = await req.text();
   const targets = Array.from(new Set([`${API_V1_BASE}${path}`, `${API_BASE}${path}`]));
+  const signal = AbortSignal.any([req.signal, AbortSignal.timeout(15_000)]);
 
-  let res: Response | null = null;
-  for (const target of targets) {
-    const candidate = await fetch(target, {
-      method: req.method,
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: body || undefined,
-      cache: "no-store",
-    });
-    if (candidate.status === 404) {
-      continue;
+  try {
+    let res: Response | null = null;
+    for (const target of targets) {
+      const candidate = await fetch(target, {
+        method: req.method,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: body || undefined,
+        cache: "no-store",
+        signal,
+      });
+      if (candidate.status === 404) {
+        continue;
+      }
+      res = candidate;
+      break;
     }
-    res = candidate;
-    break;
-  }
 
-  if (!res) {
-    return new Response(
-      JSON.stringify({ error: "Auth endpoint not found on upstream.", tried: targets }),
-      { status: 502, headers: { "Content-Type": "application/json" } }
+    if (!res) {
+      return new Response(
+        JSON.stringify({ error: "Auth endpoint not found on upstream.", tried: targets }),
+        { status: 502, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const text = await res.text();
+    return new Response(text, {
+      status: res.status,
+      headers: {
+        "Content-Type": res.headers.get("content-type") ?? "application/json",
+      },
+    });
+  } catch (error) {
+    const timedOut = signal.aborted || (error instanceof Error && error.name === "TimeoutError");
+    return Response.json(
+      { error: timedOut ? "Authentication is taking too long. Please try again." : "Unable to reach the authentication service. Please try again." },
+      { status: timedOut ? 504 : 502 }
     );
   }
-
-  const text = await res.text();
-  return new Response(text, {
-    status: res.status,
-    headers: {
-      "Content-Type": res.headers.get("content-type") ?? "application/json",
-    },
-  });
 }

@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import AuthLayout from "./AuthLayout";
 import styles from "./auth.module.css";
 import { setAuth } from "./authStorage";
 
 export default function UserLogin() {
   const navigate = useNavigate();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -16,6 +18,11 @@ export default function UserLogin() {
   const [showVerify, setShowVerify] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendInfo, setResendInfo] = useState("");
+
+  useEffect(() => {
+    router.prefetch("/admin/dashboard");
+    router.prefetch("/dashboard/home");
+  }, [router]);
 
   return (
     <AuthLayout
@@ -29,8 +36,11 @@ export default function UserLogin() {
     >
       <form
         className={styles.form}
+        aria-label="Sign in"
+        aria-busy={loading}
         onSubmit={async (event) => {
           event.preventDefault();
+          if (loading) return;
           setError("");
           setShowVerify(false);
           setResendInfo("");
@@ -40,12 +50,14 @@ export default function UserLogin() {
             return;
           }
 
+          let redirecting = false;
           try {
             setLoading(true);
             const response = await fetch(`/api/auth/login`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ email, password }),
+              signal: AbortSignal.timeout(20_000),
             });
 
             const text = await response.text();
@@ -101,14 +113,14 @@ export default function UserLogin() {
             const tokenType = String(data?.token_type ?? root?.token_type ?? "");
             const expiresIn = Number(data?.expires_in ?? root?.expires_in ?? 0);
 
-            let role = String(
+            const role = String(
               userCandidate?.role ??
                 userCandidate?.userRole ??
                 userCandidate?.account_role ??
                 data?.role ??
                 root?.role ??
                 ""
-            );
+            ).trim().toLowerCase();
 
             if (userCandidate && accessToken) {
               setAuth({
@@ -129,20 +141,23 @@ export default function UserLogin() {
               "super_admin",
             ]);
             if (role && adminRoles.has(role)) {
-              window.location.href = "/admin";
+              window.location.replace("/admin/dashboard");
             } else {
-              navigate("/dashboard/home");
+              window.location.replace("/dashboard/home");
             }
+            redirecting = true;
           } catch (err) {
-            setError(err instanceof Error ? err.message : "Login failed.");
+            setError(err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError") ? "Sign-in is taking too long. Please try again." : err instanceof Error ? err.message : "Login failed.");
           } finally {
-            setLoading(false);
+            if (!redirecting) setLoading(false);
           }
         }}
       >
         <input
           className={styles.input}
           type="email"
+          aria-label="Email"
+          autoComplete="username"
           placeholder="Email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
@@ -151,6 +166,8 @@ export default function UserLogin() {
           <input
             className={`${styles.input} ${styles.inputWithToggle}`}
             type={showPassword ? "text" : "password"}
+            aria-label="Password"
+            autoComplete="current-password"
             placeholder="Password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
@@ -197,7 +214,7 @@ export default function UserLogin() {
             Forgot Password?
           </Link>
         </div>
-        {error ? <div className={styles.errorText}>{error}</div> : null}
+        {error ? <div className={styles.errorText} role="alert">{error}</div> : null}
         {showVerify ? (
           <button
             type="button"
@@ -252,7 +269,7 @@ export default function UserLogin() {
           </button>
         ) : null}
         {resendInfo ? <div className={styles.successText}>{resendInfo}</div> : null}
-        <button className={styles.primaryBtn} type="submit">
+        <button className={styles.primaryBtn} type="submit" disabled={loading} aria-busy={loading}>
           {loading ? "Signing in..." : "Sign In"}
         </button>
       </form>

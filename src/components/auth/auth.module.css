@@ -12,6 +12,8 @@
   position: absolute;
   inset: 0;
   z-index: 0;
+  background: radial-gradient(ellipse at 15% 20%, #c4d5fb, transparent 55%),
+    radial-gradient(ellipse at 85% 80%, #d1dcf1, transparent 55%), #eef2f7;
   filter: blur(8px) brightness(0.9) saturate(0.95);
   transform: scale(1.02);
   pointer-events: none;

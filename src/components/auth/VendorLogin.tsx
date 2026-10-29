@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import AuthLayout from "./AuthLayout";
 import styles from "./auth.module.css";
 import { setAuth } from "./authStorage";
 
 export default function VendorLogin() {
   const navigate = useNavigate();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -16,6 +18,10 @@ export default function VendorLogin() {
   const [showVerify, setShowVerify] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendInfo, setResendInfo] = useState("");
+
+  useEffect(() => {
+    router.prefetch("/admin/dashboard");
+  }, [router]);
 
   return (
     <AuthLayout
@@ -29,8 +35,11 @@ export default function VendorLogin() {
     >
       <form
         className={styles.form}
+        aria-label="Vendor sign in"
+        aria-busy={loading}
         onSubmit={async (event) => {
           event.preventDefault();
+          if (loading) return;
           setError("");
           setShowVerify(false);
           setResendInfo("");
@@ -40,12 +49,14 @@ export default function VendorLogin() {
             return;
           }
 
+          let redirecting = false;
           try {
             setLoading(true);
             const response = await fetch(`/api/auth/login`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ email, password }),
+              signal: AbortSignal.timeout(20_000),
             });
 
             const text = await response.text();
@@ -108,7 +119,7 @@ export default function VendorLogin() {
                 data?.role ??
                 root?.role ??
                 ""
-            );
+            ).trim().toLowerCase();
 
             if (userCandidate && accessToken) {
               setAuth({
@@ -129,20 +140,23 @@ export default function VendorLogin() {
               "super_admin",
             ]);
             if (role && adminRoles.has(role)) {
-              navigate("/admin");
+              window.location.replace("/admin/dashboard");
             } else {
               navigate("/vendor");
             }
+            redirecting = true;
           } catch (err) {
-            setError(err instanceof Error ? err.message : "Login failed.");
+            setError(err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError") ? "Sign-in is taking too long. Please try again." : err instanceof Error ? err.message : "Login failed.");
           } finally {
-            setLoading(false);
+            if (!redirecting) setLoading(false);
           }
         }}
       >
         <input
           className={styles.input}
           type="email"
+          aria-label="Email"
+          autoComplete="username"
           placeholder="Email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
@@ -151,6 +165,8 @@ export default function VendorLogin() {
           <input
             className={`${styles.input} ${styles.inputWithToggle}`}
             type={showPassword ? "text" : "password"}
+            aria-label="Password"
+            autoComplete="current-password"
             placeholder="Password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
@@ -197,7 +213,7 @@ export default function VendorLogin() {
             Forgot Password?
           </Link>
         </div>
-        {error ? <div className={styles.errorText}>{error}</div> : null}
+        {error ? <div className={styles.errorText} role="alert">{error}</div> : null}
         {showVerify ? (
           <button
             type="button"
@@ -252,7 +268,7 @@ export default function VendorLogin() {
           </button>
         ) : null}
         {resendInfo ? <div className={styles.successText}>{resendInfo}</div> : null}
-        <button className={styles.primaryBtn} type="submit">
+        <button className={styles.primaryBtn} type="submit" disabled={loading} aria-busy={loading}>
           {loading ? "Signing in..." : "Sign In"}
         </button>
       </form>

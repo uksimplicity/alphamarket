@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import HomeView from "../HomeView";
 import styles from "./auth.module.css";
 
 type AuthLayoutProps = {
@@ -23,9 +22,7 @@ export default function AuthLayout({
   const navigate = useNavigate();
   return (
     <div className={styles.authPage}>
-      <div className={styles.homeBackdrop} aria-hidden="true">
-        <HomeView mode="background" />
-      </div>
+      <div className={styles.homeBackdrop} aria-hidden="true" />
       <div className={styles.backdrop} />
       <div className={styles.card}>
         <button

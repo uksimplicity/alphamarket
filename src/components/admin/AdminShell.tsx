@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { clearAuth, getAuth, getDisplayName, getProfilePath } from "@/components/auth/authStorage";
+import { clearAuth, getDisplayName, getProfilePath } from "@/components/auth/authStorage";
+import { useAuthUser } from "@/components/auth/useAuthUser";
 import AdminIcon, { type AdminIconName } from "./AdminIcon";
 import styles from "./admin.module.css";
 
@@ -59,13 +60,14 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [currentHash, setCurrentHash] = useState("");
-  const [authUser] = useState(() => getAuth()?.user ?? null);
+  const authUser = useAuthUser();
   const [searchText, setSearchText] = useState("");
   const [searchError, setSearchError] = useState("");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [showLogout, setShowLogout] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -81,6 +83,10 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const activeItem = allItems.find(item => isActive(item.href)) ?? allItems.find(item => item.href.split("#")[0] === pathname);
   const activeGroup = navigation.find(group => group.items.some(item => item === activeItem));
   const title = activeItem?.label ?? "Administration";
+
+  useEffect(() => {
+    router.prefetch("/login");
+  }, [router]);
 
   useEffect(() => {
     const updateHash = () => setCurrentHash(window.location.hash);
@@ -213,10 +219,9 @@ export default function AdminShell({ children }: { children: ReactNode }) {
 
         </main>
       </div>
-      <dialog ref={logoutDialog} className={styles.dialog} onCancel={() => setShowLogout(false)} onClick={event => { if (event.target === event.currentTarget) setShowLogout(false); }} aria-labelledby="logout-heading">
-        <div className={styles.dialogIcon}><AdminIcon name="logout" size={24} /></div><h2 id="logout-heading">Sign out of your workspace?</h2><p>You can sign back in whenever you need to manage your marketplace.</p><div className={styles.dialogActions}><button type="button" className={styles.secondaryButton} onClick={() => setShowLogout(false)}>Stay signed in</button><button type="button" className={styles.primaryButton} onClick={() => { clearAuth(); setShowLogout(false); router.push("/login"); }}>Sign out</button></div>
+      <dialog ref={logoutDialog} className={styles.dialog} onCancel={event => { if (signingOut) event.preventDefault(); else setShowLogout(false); }} onClick={event => { if (!signingOut && event.target === event.currentTarget) setShowLogout(false); }} aria-labelledby="logout-heading" aria-busy={signingOut}>
+        <div className={styles.dialogIcon}><AdminIcon name="logout" size={24} /></div><h2 id="logout-heading">Sign out of your workspace?</h2><p aria-live="polite">{signingOut ? "Signing you out…" : "You can sign back in whenever you need to manage your marketplace."}</p><div className={styles.dialogActions}><button type="button" className={styles.secondaryButton} disabled={signingOut} onClick={() => setShowLogout(false)}>Stay signed in</button><button type="button" className={styles.primaryButton} disabled={signingOut} onClick={() => { if (signingOut) return; setSigningOut(true); clearAuth(); window.location.replace("/login"); }}>{signingOut ? "Signing out…" : "Sign out"}</button></div>
       </dialog>
     </div>
   );
 }
-
