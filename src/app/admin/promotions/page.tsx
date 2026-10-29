@@ -470,7 +470,7 @@ export default function AdminPromotionsPage() {
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
-                        className="text-slate-500 hover:text-brand"
+                        className="action-icon-edit"
                         disabled={pendingKey === `put-categories-${item.id}`}
                         onClick={() => updateEntity("categories", item.id, item.name)}
                         aria-label={`Edit category ${item.name}`}
@@ -487,7 +487,7 @@ export default function AdminPromotionsPage() {
                       </button>
                       <button
                         type="button"
-                        className="text-slate-500 hover:text-rose-500"
+                        className="action-icon-delete"
                         disabled={pendingKey === `delete-categories-${item.id}`}
                         onClick={() => deleteEntity("categories", item.id)}
                         aria-label={`Delete category ${item.name}`}

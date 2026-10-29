@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { getAuth, type AuthUser } from "@/components/auth/authStorage";
+import { AUTH_UPDATED_EVENT, getAuth, type AuthUser } from "@/components/auth/authStorage";
 
 let lastRawAuth = "";
 let lastUserSnapshot: AuthUser | null = null;
@@ -12,13 +12,17 @@ function subscribe(onStoreChange: () => void) {
   }
 
   function onStorage(event: StorageEvent) {
-    if (event.key === "alpha.auth") {
+    if (event.key === "alpha.auth" || event.key === null) {
       onStoreChange();
     }
   }
 
   window.addEventListener("storage", onStorage);
-  return () => window.removeEventListener("storage", onStorage);
+  window.addEventListener(AUTH_UPDATED_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(AUTH_UPDATED_EVENT, onStoreChange);
+  };
 }
 
 function getSnapshot(): AuthUser | null {
@@ -26,7 +30,12 @@ function getSnapshot(): AuthUser | null {
     return null;
   }
 
-  const raw = window.localStorage.getItem("alpha.auth") ?? "";
+  let raw = "";
+  try {
+    raw = window.localStorage.getItem("alpha.auth") ?? "";
+  } catch {
+    return null;
+  }
   if (raw === lastRawAuth) {
     return lastUserSnapshot;
   }

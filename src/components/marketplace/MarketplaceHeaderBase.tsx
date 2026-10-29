@@ -2,7 +2,8 @@
 
 import type { ReactElement, ReactNode } from "react";
 import styles from "@/app/page.module.css";
-import { useState } from "react";
+import MarketplaceSearch from "@/components/marketplace/MarketplaceSearch";
+import { useEffect, useRef, useState } from "react";
 import { useCartCount } from "@/components/commerce/store";
 import {
   clearAuth,
@@ -29,11 +30,26 @@ export default function MarketplaceHeaderBase({
 }) {
   const cartCount = useCartCount();
   const authUser = useAuthUser();
-  const [signedOutOverride, setSignedOutOverride] = useState(false);
-  const user = signedOutOverride ? null : authUser;
+  const user = authUser;
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
   const userName = getDisplayName(user);
   const adminCategoryNames = useAdminCategoryNames();
+
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !accountRef.current?.contains(event.target)) setUserMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setUserMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
 
   return (
     <header className={styles.header}>
@@ -42,14 +58,11 @@ export default function MarketplaceHeaderBase({
           <img className={styles.logoImage} src="/logo.png" alt="Alpha Marketplace" />
         </LinkComponent>
 
-        <div className={styles.search}>
-          <input placeholder="Search products, brands, and categories" />
-          <button>Search</button>
-        </div>
+        <MarketplaceSearch />
 
         <div className={styles.actions}>
           <div className={styles.iconLabel}>
-            <button className={styles.iconBtn} aria-label="Alerts">
+            <LinkComponent className={styles.iconBtn} aria-label="Alerts" href="/dashboard/notifications">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"
@@ -66,7 +79,7 @@ export default function MarketplaceHeaderBase({
                   strokeLinecap="round"
                 />
               </svg>
-            </button>
+            </LinkComponent>
             Alerts
           </div>
           <div className={styles.iconLabel}>
@@ -108,7 +121,7 @@ export default function MarketplaceHeaderBase({
             <LinkComponent href="/dashboard/cart">Cart</LinkComponent>
           </div>
           {userName ? (
-            <div className={styles.iconLabel}>
+            <div className={styles.iconLabel} ref={accountRef}>
               <button
                 type="button"
                 className={styles.userMenuTrigger}
@@ -136,7 +149,6 @@ export default function MarketplaceHeaderBase({
                   className={styles.accountItem}
                   onClick={() => {
                     clearAuth();
-                    setSignedOutOverride(true);
                     setUserMenuOpen(false);
                   }}
                 >
@@ -195,9 +207,9 @@ export default function MarketplaceHeaderBase({
       </div>
 
       <nav className={styles.categories}>
-        <a href="#">All Categories</a>
+        <a href="/#browse-listings">All Categories</a>
         {adminCategoryNames.map((name) => (
-          <a key={name} href="#">
+          <a key={name} href={`/?category=${encodeURIComponent(name.toLowerCase())}#browse-listings`}>
             {name}
           </a>
         ))}

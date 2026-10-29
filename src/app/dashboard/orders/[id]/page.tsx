@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import {
   formatCurrency,
   useOrder,
 } from "@/components/commerce/store";
 import { Badge, Button, Card, ErrorState, SectionTitle } from "@/components/dashboard/ui";
 
-export default function OrderDetailPage({ params }: { params: { id: string } }) {
+export default function OrderDetailPage() {
+  const params = useParams<{ id: string }>();
   const order = useOrder(params.id);
 
   if (!order) {

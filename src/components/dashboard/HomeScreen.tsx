@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import styles from "@/app/page.module.css";
+import MarketplaceHeaderNext from "@/components/marketplace/MarketplaceHeaderNext";
 import { addToCart, parsePrice, useCartCount, formatCurrency } from "@/components/commerce/store";
 import CartAddedModal from "@/components/commerce/CartAddedModal";
 import { getAuth } from "@/components/auth/authStorage";
@@ -12,6 +13,7 @@ import {
   newArrivalProducts,
 } from "@/components/products/catalog";
 import { useAdminCategoryNames } from "@/components/marketplace/useAdminCategoryNames";
+import { productImage } from "@/components/products/productMedia";
 
 const weeklyPromotions = [
   {
@@ -38,7 +40,7 @@ const acrossBorders = [
   {
     label: "Products from South Korea",
     image:
-      "https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=900&q=80",
   },
   {
     label: "Products from Berlin",
@@ -73,19 +75,7 @@ function normalizeLiveProduct(input: LiveProductRecord, index: number): Product 
   const status = String(input.status ?? "");
   const isDraft = status.toLowerCase().includes("draft");
 
-  const media =
-    input.media && typeof input.media === "object"
-      ? (input.media as Record<string, unknown>)
-      : null;
-  const images = Array.isArray(media?.images) ? media?.images : [];
-  const image = String(
-    media?.cover ??
-      media?.coverUrl ??
-      images[0] ??
-      input.cover ??
-      input.image ??
-      "https://images.unsplash.com/photo-1557821552-17105176677c?auto=format&fit=crop&w=900&q=80"
-  );
+  const image = productImage(input);
 
   return {
     id,
@@ -120,7 +110,7 @@ function ProductCard({ product, onAddToCart }: ProductCardProps) {
             aria-label="Add to cart"
             onClick={() => {
               addToCart({
-                id: product.title,
+                id: product.id,
                 name: product.title,
                 price: parsePrice(product.price),
                 image: product.image,
@@ -220,166 +210,7 @@ export default function HomeScreen({ userName }: { userName: string }) {
   return (
     <div className={styles.page}>
       <div className={styles.container}>
-        <header className={styles.header}>
-          <div className={styles.headerTop}>
-            <Link className={styles.logo} href="/">
-              <img
-                className={styles.logoImage}
-                src="/logo.png"
-                alt="Alpha Marketplace"
-              />
-            </Link>
-
-            <div className={styles.search}>
-              <input placeholder="Search products, brands, and categories" />
-              <button>Search</button>
-            </div>
-
-            <div className={styles.actions}>
-              <div className={styles.iconLabel}>
-                <button className={styles.iconBtn} aria-label="Alerts">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M9.5 19a2.5 2.5 0 005 0"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </button>
-                Alerts
-              </div>
-              <div className={styles.iconLabel}>
-                <Link
-                  className={styles.iconBtn}
-                  aria-label="Orders"
-                  href="/dashboard/orders"
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      d="M4 6h16M4 12h16M4 18h10"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </Link>
-                Orders
-              </div>
-              <div className={styles.iconLabel}>
-                <button
-                  className={styles.userMenuTrigger}
-                  onClick={() => setMenuOpen((prev) => !prev)}
-                  type="button"
-                >
-                  <span className={styles.iconBtn} aria-label="Account">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <circle
-                        cx="12"
-                        cy="8"
-                        r="4"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      />
-                      <path
-                        d="M4 20c1.8-4 13.2-4 16 0"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </span>
-                  <span className={styles.userName}>
-                    {userName}
-                    <span className={styles.userCaret}>▾</span>
-                  </span>
-                </button>
-                <div
-                  className={`${styles.userDropdown} ${
-                    menuOpen ? styles.userDropdownOpen : ""
-                  }`}
-                >
-                  <Link href="/dashboard/profile">
-                    <span className={styles.dropdownIcon}>👤</span>
-                    My Account
-                  </Link>
-                  <Link href="/dashboard/orders">
-                    <span className={styles.dropdownIcon}>🧾</span>
-                    My Orders
-                  </Link>
-                  <Link href="/login">
-                    <span className={styles.dropdownIcon}>⏏</span>
-                    Logout
-                  </Link>
-                </div>
-              </div>
-              <div className={styles.iconLabel}>
-                <Link
-                  className={styles.iconBtn}
-                  aria-label="Cart"
-                  href="/dashboard/cart"
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      d="M6 6h15l-2 9H7L5 3H2"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                    <circle cx="9" cy="20" r="1.5" />
-                    <circle cx="17" cy="20" r="1.5" />
-                  </svg>
-                  {cartCount > 0 ? (
-                    <span className={styles.cartBadge}>{cartCount}</span>
-                  ) : null}
-                </Link>
-                Cart
-              </div>
-            </div>
-
-            <Link className={styles.mobileCartButton} aria-label="Cart" href="/dashboard/cart">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M6 6h15l-2 9H7L5 3H2"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle cx="9" cy="20" r="1.5" />
-                <circle cx="17" cy="20" r="1.5" />
-              </svg>
-              {cartCount > 0 ? (
-                <span className={styles.cartBadge}>{cartCount}</span>
-              ) : null}
-            </Link>
-          </div>
-
-          <nav className={styles.categories}>
-            <a href="#">All Categories</a>
-            {adminCategoryNames.map((name) => (
-              <a key={name} href="#">
-                {name}
-              </a>
-            ))}
-          </nav>
-
-          <div className={styles.mobileSearchTrigger} aria-hidden="true" />
-        </header>
+        <MarketplaceHeaderNext />
 
         <section
           className={styles.hero}
@@ -390,18 +221,18 @@ export default function HomeScreen({ userName }: { userName: string }) {
         >
           <div className={styles.heroOverlay} />
           <div className={styles.heroContent}>
-            <h1 className={styles.heroTitle}>Prices you'll love, daily</h1>
+            <h1 className={styles.heroTitle}>Good finds for everyday life.</h1>
             <p className={styles.heroText}>
-              Up to 50% off on top electronic brands this week.
+              Shop electronics, fashion and home essentials, all in one place.
             </p>
-            <button className={styles.heroButton}>Shop Deals</button>
+            <a className={styles.heroButton} href="#popular-products">Explore the marketplace <span aria-hidden="true">&#8594;</span></a>
           </div>
         </section>
 
         <section>
           <div className={styles.sectionHeader}>
-            <h2>Weekly Promotions</h2>
-            <button className={styles.sectionAction}>View Design System</button>
+            <h2>Featured collections</h2>
+            <a href="#popular-products">Explore products <span aria-hidden="true">&#8594;</span></a>
           </div>
           <div className={styles.promoGrid}>
             {weeklyPromotions.map((promo) => (
@@ -419,7 +250,7 @@ export default function HomeScreen({ userName }: { userName: string }) {
 
         <section>
           <div className={styles.sectionHeader}>
-            <h2>The Populars</h2>
+            <h2 id="popular-products">Popular products</h2>
             <a href="#">View All</a>
           </div>
           <div className={styles.productsGrid}>

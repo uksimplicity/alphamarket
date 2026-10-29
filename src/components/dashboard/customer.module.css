@@ -1,0 +1,52 @@
+.root { min-height: 100dvh; background: #f6f8fc; font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif; color: #28354b; }
+.root > header { width: 100%; margin: 0; padding-left: max(24px, calc((100% - 1260px) / 2)); padding-right: max(24px, calc((100% - 1260px) / 2)); }
+.root :is(a, button, summary):focus-visible { outline: 2px solid #3366ff; outline-offset: 3px; }
+.layout { display: grid; grid-template-columns: 224px minmax(0, 1fr); align-items: start; gap: 28px; max-width: 1308px; margin: 0 auto; padding: 30px 24px 60px; }
+.sidebar { background: #fff; border: 1px solid #e3e8f1; border-radius: 9px; padding: 18px 10px 12px; position: sticky; top: 140px; }
+.profile { display: flex; align-items: center; gap: 10px; padding: 0 6px 18px; margin: 0 6px 14px; border-bottom: 1px solid #edf0f5; }
+.avatar { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; background: #edf2ff; color: #3366ff; font-size: 12px; font-weight: 600; overflow: hidden; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.profile > div:last-child { min-width: 0; }
+.profile strong { display: block; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile span:not(.avatar) { font-size: 11px; color: #8995a9; }
+.nav { display: grid; gap: 3px; }
+.nav a, .signout { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 6px; color: #6c7890; font-size: 13px; }
+.nav a:hover, .signout:hover { background: #f6f8fc; color: #3366ff; }
+.nav a svg { color: #929eb2; }
+.nav a.active { background: #edf2ff; color: #2858d8; font-weight: 600; }
+.nav a.active svg { color: #3366ff; }
+.count { margin-left: auto; min-width: 20px; height: 20px; text-align: center; border-radius: 4px; background: #edf2ff; color: #3366ff; font-size: 11px; padding: 2px 4px; }
+.signout { width: calc(100% - 12px); margin: 20px 6px 0; padding-top: 16px; border: 0; border-top: 1px solid #edf0f5; border-radius: 0; background: transparent; text-align: left; cursor: pointer; }
+.main { min-width: 0; }
+.breadcrumbs { display: flex; gap: 9px; align-items: center; color: #a2abba; font-size: 11px; margin-bottom: 20px; }
+.breadcrumbs a { color: #8b97ab; }
+.breadcrumbs strong { font-weight: 500; color: #536480; }
+.mobileNav { display: none; }
+.home { padding-bottom: 0; }
+.dialog { max-width: 420px; width: calc(100% - 32px); border: 1px solid #e0e6ef; border-radius: 10px; padding: 28px; color: #28354b; box-shadow: 0 16px 60px #16294d25; }
+.dialog::backdrop { background: #18294655; }
+.dialog > svg { color: #3366ff; margin-bottom: 16px; }
+.dialog h2 { font-size: 20px; font-weight: 600; letter-spacing: -.5px; }
+.dialog p { font-size: 13px; color: #7d899f; margin: 10px 0 24px; }
+.dialogActions { display: flex; justify-content: flex-end; gap: 10px; }
+.dialogActions button { padding: 9px 15px; border: 1px solid #e0e6ef; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.dialogActions .primary { background: #3366ff; color: white; border-color: #3366ff; }
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: 190px minmax(0, 1fr); gap: 18px; padding: 24px 18px 80px; }
+}
+@media (max-width: 768px) {
+  .root > header { padding-left: 16px; padding-right: 16px; }
+  .layout { display: flex; flex-direction: column; gap: 16px; padding: 18px 14px 100px; }
+  .sidebar { position: static; width: 100%; padding: 4px; border-radius: 7px; }
+  .profile, .signout { display: none; }
+  .nav { display: flex; overflow-x: auto; scrollbar-width: none; }
+  .nav a { flex-shrink: 0; font-size: 12px; gap: 7px; padding: 10px; }
+  .nav a svg { width: 16px; }
+  .nav .count { display: none; }
+  .main { width: 100%; }
+  .breadcrumbs { margin-bottom: 14px; }
+  .mobileNav { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; bottom: 0; left: 0; right: 0; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); z-index: 30; border-top: 1px solid #e3e8f1; background: #fff; }
+  .mobileNav a { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; color: #8a96aa; padding: 3px 0; }
+  .mobileNav a.active { color: #3366ff; font-weight: 600; }
+  .home { padding-bottom: 70px; }
+}

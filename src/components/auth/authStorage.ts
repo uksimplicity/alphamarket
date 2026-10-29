@@ -19,11 +19,13 @@ export type AuthPayload = {
 };
 
 const STORAGE_KEY = "alpha.auth";
+export const AUTH_UPDATED_EVENT = "alpha-auth-updated";
 
 export function setAuth(payload: AuthPayload) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    window.dispatchEvent(new Event(AUTH_UPDATED_EVENT));
   } catch {
     // ignore storage errors
   }
@@ -43,6 +45,7 @@ export function clearAuth() {
   if (typeof window === "undefined") return;
   try {
     localStorage.removeItem(STORAGE_KEY);
+    window.dispatchEvent(new Event(AUTH_UPDATED_EVENT));
   } catch {
     // ignore storage errors
   }

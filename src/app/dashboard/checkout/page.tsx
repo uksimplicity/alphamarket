@@ -148,7 +148,7 @@ export default function CheckoutPage() {
           <div className={styles.summaryCard}>
             <div className={styles.summaryHeader}>
               <h3>Cart Summary</h3>
-              <button className={styles.summaryEdit} type="button">
+              <button className={`${styles.summaryEdit} action-icon-edit`} type="button" aria-label="Edit cart summary">
                 ✎
               </button>
             </div>

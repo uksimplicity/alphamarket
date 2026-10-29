@@ -315,7 +315,7 @@ export default function AdminCategoriesPage() {
   );
 
   function formatDate(value: string) {
-    if (!value) return "â€”";
+    if (!value) return "—";
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     return date.toLocaleDateString("en-GB", {
@@ -427,7 +427,7 @@ export default function AdminCategoriesPage() {
               setCurrentPage(1);
             }}
             className="w-full bg-transparent text-sm outline-none"
-            placeholder="Search categoriesâ€¦"
+            placeholder="Search categories…"
           />
         </div>
         <select
@@ -499,7 +499,7 @@ export default function AdminCategoriesPage() {
                     <div className="flex items-center gap-3">
                       <button
                       type="button"
-                      className="text-slate-500 hover:text-brand"
+                      className="action-icon-edit"
                       disabled={pendingKey === `put-categories-${item.id}`}
                       onClick={() => updateCategory(item.id, item.name)}
                         aria-label={`Edit category ${item.name}`}
@@ -516,7 +516,7 @@ export default function AdminCategoriesPage() {
                       </button>
                       <button
                         type="button"
-                      className="text-slate-500 hover:text-rose-500"
+                      className="action-icon-delete"
                       disabled={pendingKey === `delete-categories-${item.id}`}
                       onClick={() => deleteCategory(item.id)}
                         aria-label={`Delete category ${item.name}`}
@@ -593,5 +593,4 @@ export default function AdminCategoriesPage() {
     </Card>
   );
 }
-
 

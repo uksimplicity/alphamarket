@@ -55,7 +55,16 @@
 .sidebarFooter { padding: 12px; border-top: 1px solid #edf0f5; }
 .workspaceLabel { padding: 16px 12px 5px; color: #929aab; font-size: 10px; display: flex; gap: 7px; align-items: center; }
 .workspaceLabel > span { display: none; }
-.main { min-width: 0; }
+.main { min-width: 0; position: relative; isolation: isolate; }
+.main::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: url("/logo.png") no-repeat center 32vh / min(70%, 560px) auto;
+  opacity: .04;
+  pointer-events: none;
+}
 .topbar { display: flex; align-items: center; gap: 16px; position: sticky; top: 0; min-height: 76px; padding: 0 30px; border-bottom: 1px solid #e2e7f0; background: #fff; z-index: 30; }
 .iconButton { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 34px; height: 34px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #71809b; }
 .iconButton:hover { background: #f2f5fb; color: #3366ff; }
@@ -140,4 +149,3 @@
   .dialog { padding: 22px; }
 }
 @media (prefers-reduced-motion: reduce) { .workspace *, .workspace *::before { transition: none !important; scroll-behavior: auto !important; } }
-

@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import styles from "@/app/page.module.css";
+import MarketplaceHeaderRouter from "@/components/marketplace/MarketplaceHeaderRouter";
 import { addToCart, parsePrice, useCartCount, formatCurrency } from "@/components/commerce/store";
 import CartAddedModal from "@/components/commerce/CartAddedModal";
 import { clearAuth, getAuth, getDisplayName } from "@/components/auth/authStorage";
@@ -12,7 +13,8 @@ import {
   popularProducts,
   newArrivalProducts,
 } from "@/components/products/catalog";
-import { useAdminCategoryNames } from "@/components/marketplace/useAdminCategoryNames";
+import { productImage } from "@/components/products/productMedia";
+import { useAuthUser } from "@/components/auth/useAuthUser";
 
 const weeklyPromotions = [
   {
@@ -39,7 +41,7 @@ const acrossBorders = [
   {
     label: "Products from South Korea",
     image:
-      "https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=900&q=80",
+      "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=900&q=80",
   },
   {
     label: "Products from Berlin",
@@ -74,46 +76,6 @@ type DiscoverableProduct = Product & {
 const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
 const PAGE_SIZE = 12;
 const FALLBACK_BASE_CREATED_AT = 1735689600000;
-const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
-const API_ROOT_BASE = RAW_API_BASE
-  ? RAW_API_BASE.replace(/\/+$/, "").replace(/\/api\/v1$/i, "")
-  : "";
-
-function resolveMediaUrl(value: unknown) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "";
-  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
-  if (raw.startsWith("//")) return `https:${raw}`;
-  const normalized = encodeURI(raw.replace(/\\/g, "/"));
-  if (!API_ROOT_BASE) return normalized;
-  if (normalized.startsWith("/")) return `${API_ROOT_BASE}${normalized}`;
-  return `${API_ROOT_BASE}/${normalized}`;
-}
-
-function pickMediaValue(value: unknown): string {
-  if (typeof value === "string" || typeof value === "number") {
-    return String(value).trim();
-  }
-  if (!value || typeof value !== "object") return "";
-  const record = value as Record<string, unknown>;
-  const candidates = [
-    record.url,
-    record.file_url,
-    record.fileUrl,
-    record.path,
-    record.src,
-    record.location,
-    record.value,
-  ];
-  for (const candidate of candidates) {
-    if (typeof candidate === "string" || typeof candidate === "number") {
-      const text = String(candidate).trim();
-      if (text) return text;
-    }
-  }
-  return "";
-}
-
 function inferLocation(seed: string) {
   const options = ["Lagos", "Abuja", "Port Harcourt", "Kano", "Enugu", "Ibadan"];
   let hash = 0;
@@ -155,22 +117,7 @@ function normalizeLiveProduct(input: LiveProductRecord, index: number): Discover
   const status = String(input.status ?? "");
   const isDraft = status.toLowerCase().includes("draft");
 
-  const media =
-    input.media && typeof input.media === "object"
-      ? (input.media as Record<string, unknown>)
-      : null;
-  const images = Array.isArray(media?.images) ? media.images : [];
-  const firstImage = images.find((item) => pickMediaValue(item));
-  const imageRaw =
-    pickMediaValue(media?.cover) ||
-    pickMediaValue(media?.coverUrl) ||
-    pickMediaValue(firstImage) ||
-    pickMediaValue(input.cover) ||
-    pickMediaValue(input.image) ||
-    "https://images.unsplash.com/photo-1557821552-17105176677c?auto=format&fit=crop&w=900&q=80";
-  const image =
-    resolveMediaUrl(imageRaw) ||
-    "https://images.unsplash.com/photo-1557821552-17105176677c?auto=format&fit=crop&w=900&q=80";
+  const image = productImage(input);
 
   return {
     id,
@@ -196,223 +143,17 @@ function normalizeLiveProduct(input: LiveProductRecord, index: number): Discover
   };
 }
 
-type HeaderProps = {
-  cartCount: number;
-};
-
-function Header({ cartCount }: HeaderProps) {
-  const [userName, setUserName] = useState(() => getDisplayName(getAuth()?.user));
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const adminCategoryNames = useAdminCategoryNames();
-
-  useEffect(() => {
-    function onStorage(e: StorageEvent) {
-      if (e.key === "alpha.auth") {
-        const nextAuth = getAuth();
-        setUserName(getDisplayName(nextAuth?.user));
-      }
-    }
-
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  return (
-    <header className={styles.header}>
-      <div className={styles.headerTop}>
-        <Link className={styles.logo} to="/">
-          <img
-            className={styles.logoImage}
-            src="/logo.png"
-            alt="Alpha Marketplace"
-          />
-        </Link>
-
-        <div className={styles.search}>
-          <input placeholder="Search products, brands, and categories" />
-          <button>Search</button>
-        </div>
-
-        <div className={styles.actions}>
-          <div className={styles.iconLabel}>
-            <button className={styles.iconBtn} aria-label="Alerts">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M9.5 19a2.5 2.5 0 005 0"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </button>
-            Alerts
-          </div>
-          <div className={styles.iconLabel}>
-            <a className={styles.iconBtn} aria-label="Orders" href="/dashboard/orders">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M4 6h16M4 12h16M4 18h10"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </a>
-            Orders
-          </div>
-          <div className={styles.iconLabel}>
-            <a className={styles.iconBtn} aria-label="Cart" href="/dashboard/cart">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M6 6h15l-2 9H7L5 3H2"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle cx="9" cy="20" r="1.5" />
-                <circle cx="17" cy="20" r="1.5" />
-              </svg>
-              {cartCount > 0 ? (
-                <span className={styles.cartBadge}>{cartCount}</span>
-              ) : null}
-            </a>
-            Cart
-          </div>
-          {userName ? (
-            <div className={styles.iconLabel}>
-              <button
-                type="button"
-                className={styles.userMenuTrigger}
-                onClick={() => setUserMenuOpen((prev) => !prev)}
-                aria-expanded={userMenuOpen}
-              >
-                <span className={styles.userName}>{userName}</span>
-                <span className={styles.userCaret}>˅</span>
-              </button>
-              <div
-                className={`${styles.userDropdown} ${
-                  userMenuOpen ? styles.userDropdownOpen : ""
-                }`}
-              >
-                <a href="/dashboard/home">
-                  <span className={styles.dropdownIcon}>•</span>
-                  Dashboard
-                </a>
-                <a href="/dashboard/profile">
-                  <span className={styles.dropdownIcon}>•</span>
-                  Profile
-                </a>
-                <button
-                  type="button"
-                  className={styles.accountItem}
-                  onClick={() => {
-                    clearAuth();
-                    setUserName("");
-                    setUserMenuOpen(false);
-                  }}
-                >
-                  Logout
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className={styles.iconLabel}>
-              <Link className={styles.iconBtn} aria-label="Login" to="/login">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <circle
-                    cx="12"
-                    cy="8"
-                    r="4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                  />
-                  <path
-                    d="M4 20c1.8-4 13.2-4 16 0"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </Link>
-              <Link to="/login">Login</Link>
-            </div>
-          )}
-          {userName ? null : (
-            <Link className={styles.signupButton} to="/signup">
-              Sign Up
-            </Link>
-          )}
-        </div>
-
-        <a className={styles.mobileCartButton} aria-label="Cart" href="/dashboard/cart">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M6 6h15l-2 9H7L5 3H2"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <circle cx="9" cy="20" r="1.5" />
-            <circle cx="17" cy="20" r="1.5" />
-          </svg>
-          {cartCount > 0 ? (
-            <span className={styles.cartBadge}>{cartCount}</span>
-          ) : null}
-        </a>
-      </div>
-
-      <nav className={styles.categories}>
-        <a href="#">All Categories</a>
-        {adminCategoryNames.map((name) => (
-          <a key={name} href="#">
-            {name}
-          </a>
-        ))}
-      </nav>
-
-      <div className={styles.mobileSearchTrigger} aria-hidden="true" />
-    </header>
-  );
-}
-
 type BottomNavProps = {
   onOpenSearch: () => void;
 };
 
 function BottomNav({ onOpenSearch }: BottomNavProps) {
   const [accountOpen, setAccountOpen] = useState(false);
-  const [userName, setUserName] = useState(() => getDisplayName(getAuth()?.user));
-
-  useEffect(() => {
-    function onStorage(e: StorageEvent) {
-      if (e.key === "alpha.auth") {
-        const nextAuth = getAuth();
-        setUserName(getDisplayName(nextAuth?.user));
-      }
-    }
-
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  const userName = getDisplayName(useAuthUser());
 
   return (
     <nav className={styles.bottomNav} aria-label="Primary">
-      <button className={`${styles.navItem} ${styles.navActive}`}>
+      <a href="/" className={`${styles.navItem} ${styles.navActive}`} aria-current="page">
         <span className={styles.navIcon}>
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -425,8 +166,8 @@ function BottomNav({ onOpenSearch }: BottomNavProps) {
           </svg>
         </span>
         <span className={styles.navLabel}>Home</span>
-      </button>
-      <button className={styles.navItem}>
+      </a>
+      <a href="/#browse-listings" className={styles.navItem}>
         <span className={styles.navIcon}>
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -439,7 +180,7 @@ function BottomNav({ onOpenSearch }: BottomNavProps) {
           </svg>
         </span>
         <span className={styles.navLabel}>Categories</span>
-      </button>
+      </a>
       <button className={styles.navItem} onClick={onOpenSearch}>
         <span className={styles.navIcon}>
           <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -462,7 +203,7 @@ function BottomNav({ onOpenSearch }: BottomNavProps) {
         </span>
         <span className={styles.navLabel}>Search</span>
       </button>
-      <button className={styles.navItem}>
+      <a href="/dashboard/orders" className={styles.navItem}>
         <span className={styles.navIcon}>
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -473,10 +214,9 @@ function BottomNav({ onOpenSearch }: BottomNavProps) {
               strokeLinecap="round"
             />
           </svg>
-          <span className={styles.navBadge}>2</span>
         </span>
         <span className={styles.navLabel}>Orders</span>
-      </button>
+      </a>
       <button
         className={styles.navItem}
         onClick={() => setAccountOpen((prev) => !prev)}
@@ -520,7 +260,6 @@ function BottomNav({ onOpenSearch }: BottomNavProps) {
               className={styles.accountItem}
               onClick={() => {
                 clearAuth();
-                setUserName("");
                 setAccountOpen(false);
               }}
             >
@@ -535,7 +274,7 @@ function BottomNav({ onOpenSearch }: BottomNavProps) {
             <Link className={styles.accountItem} to="/signup">
               Sign Up
             </Link>
-            <button className={styles.accountItem}>Alerts</button>
+            <a className={styles.accountItem} href="/dashboard/notifications">Alerts</a>
           </>
         )}
       </div>
@@ -559,7 +298,7 @@ function ProductCard({ product, onAddToCart }: ProductCardProps) {
             aria-label="Add to cart"
             onClick={() => {
               addToCart({
-                id: product.title,
+                id: product.id,
                 name: product.title,
                 price: parsePrice(product.price),
                 image: product.image,
@@ -595,8 +334,8 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
   const [cartModalName, setCartModalName] = useState("");
   const [liveProducts, setLiveProducts] = useState<DiscoverableProduct[]>([]);
   const [localProducts, setLocalProducts] = useState<DiscoverableProduct[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("q") || "");
+  const [categoryFilter, setCategoryFilter] = useState(() => typeof window === "undefined" ? "all" : new URLSearchParams(window.location.search).get("category")?.toLowerCase() || "all");
   const [locationFilter, setLocationFilter] = useState("all");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
@@ -752,7 +491,7 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
   return (
     <div className={styles.page}>
       <div className={styles.container}>
-        <Header cartCount={cartCount} />
+        <MarketplaceHeaderRouter />
 
         <section
           className={styles.hero}
@@ -763,18 +502,18 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
         >
           <div className={styles.heroOverlay} />
           <div className={styles.heroContent}>
-            <h1 className={styles.heroTitle}>Prices you'll love, daily</h1>
+            <h1 className={styles.heroTitle}>Good finds for everyday life.</h1>
             <p className={styles.heroText}>
-              Up to 50% off on top electronic brands this week.
+              Shop electronics, fashion and home essentials, all in one place.
             </p>
-            <button className={styles.heroButton}>Shop Deals</button>
+            <a className={styles.heroButton} href="#browse-listings">Explore the marketplace <span aria-hidden="true">&#8594;</span></a>
           </div>
         </section>
 
         <section>
           <div className={styles.sectionHeader}>
-            <h2>Weekly Promotions</h2>
-            <button className={styles.sectionAction}>View Design System</button>
+            <h2>Featured collections</h2>
+            <a href="#browse-listings">Explore products <span aria-hidden="true">&#8594;</span></a>
           </div>
           <div className={styles.promoGrid}>
             {weeklyPromotions.map((promo) => (
@@ -792,23 +531,25 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
 
         <section>
           <div className={styles.sectionHeader}>
-            <h2>Browse All Listings</h2>
+            <h2 id="browse-listings">Browse the marketplace</h2>
             <a href="#">All Products</a>
           </div>
           <div className="mb-4 grid gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-6">
             <input
               className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-brand md:col-span-2"
               placeholder="Search by keyword"
+              aria-label="Filter products by keyword"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
             />
             <select
               className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-brand"
+              aria-label="Filter products by category"
               value={categoryFilter}
               onChange={(event) => setCategoryFilter(event.target.value)}
             >
               <option value="all">All Categories</option>
-              {categoryOptions.map((option) => (
+              {Array.from(new Set([...categoryOptions, ...(categoryFilter !== "all" && !categoryOptions.some(option => option.toLowerCase() === categoryFilter) ? [categoryFilter] : [])])).map((option) => (
                 <option key={option} value={option.toLowerCase()}>
                   {option}
                 </option>
@@ -816,6 +557,7 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
             </select>
             <select
               className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-brand"
+              aria-label="Filter products by location"
               value={locationFilter}
               onChange={(event) => setLocationFilter(event.target.value)}
             >
@@ -829,6 +571,7 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
             <input
               className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-brand"
               placeholder="Min price"
+              aria-label="Minimum price"
               type="number"
               min="0"
               value={minPrice}
@@ -837,6 +580,7 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
             <input
               className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-brand"
               placeholder="Max price"
+              aria-label="Maximum price"
               type="number"
               min="0"
               value={maxPrice}
@@ -844,6 +588,7 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
             />
             <select
               className="h-10 rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-brand"
+              aria-label="Sort products"
               value={sortBy}
               onChange={(event) => setSortBy(event.target.value)}
             >
@@ -1001,16 +746,27 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
 
       {!isBackground ? (
         <div
+          aria-hidden={!mobileSearchOpen}
+          inert={!mobileSearchOpen}
           className={`${styles.mobileSearch} ${
             mobileSearchOpen ? styles.mobileSearchOpen : ""
           }`}
         >
-          <div className={styles.mobileSearchBar}>
+          <form className={styles.mobileSearchBar} role="search" onSubmit={event => {
+            event.preventDefault();
+            setPage(1);
+            setMobileSearchOpen(false);
+            document.getElementById("browse-listings")?.scrollIntoView({ behavior: "smooth" });
+          }}>
             <input
               placeholder="Search products, brands, and categories"
-              autoFocus
+              aria-label="Search products on mobile"
+              value={searchTerm}
+              onChange={event => setSearchTerm(event.target.value)}
             />
+            <button type="submit">Search</button>
             <button
+              type="button"
               className={styles.mobileSearchClose}
               aria-label="Close search"
               onClick={() => setMobileSearchOpen(false)}
@@ -1025,7 +781,7 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
                 />
               </svg>
             </button>
-          </div>
+          </form>
         </div>
       ) : null}
 

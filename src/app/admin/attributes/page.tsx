@@ -503,7 +503,7 @@ export default function AdminAttributesPage() {
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
-                      className="text-slate-500 hover:text-brand"
+                      className="action-icon-edit"
                       disabled={pendingKey === `edit-${item.id}` || pendingKey === `get-${item.id}`}
                       onClick={() => startEditAttribute(item)}
                       aria-label={`Edit attribute ${item.name}`}
@@ -520,7 +520,7 @@ export default function AdminAttributesPage() {
                     </button>
                     <button
                       type="button"
-                      className="text-slate-500 hover:text-rose-500"
+                      className="action-icon-delete"
                       disabled={pendingKey === `delete-${item.id}`}
                       onClick={() => deleteAttribute(item.id)}
                       aria-label={`Delete attribute ${item.name}`}

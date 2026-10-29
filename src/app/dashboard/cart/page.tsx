@@ -90,7 +90,7 @@ export default function CartPage() {
                       {formatCurrency(item.price * item.qty)}
                     </div>
                     <button
-                      className={styles.cartItemRemove}
+                      className={`${styles.cartItemRemove} action-icon-delete`}
                       onClick={() => removeFromCart(item.id)}
                       aria-label="Remove item"
                     >
