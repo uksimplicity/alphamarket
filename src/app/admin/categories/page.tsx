@@ -16,24 +16,6 @@ type CategoryDeleteTarget = {
   slug?: string;
 };
 
-function toSlug(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
-function buildDynamicSlug(name: string) {
-  const base = toSlug(name) || "category";
-  const time = Date.now().toString(36);
-  const random =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID().replace(/-/g, "").slice(0, 6)
-      : Math.random().toString(36).slice(2, 8);
-  return `${base}-${time}-${random}`;
-}
-
 export default function AdminCategoriesPage() {
   const queryClient = useQueryClient();
   const PAGE_SIZE = 20;
@@ -157,7 +139,7 @@ export default function AdminCategoriesPage() {
       const basePayload = {
         description: categoryForm.description.trim(),
         name,
-        slug: buildDynamicSlug(name),
+        image_url: "",
         parent_category:
           selectedParent?.id
             ? [
@@ -166,7 +148,7 @@ export default function AdminCategoriesPage() {
                   name: selectedParent.name,
                 },
               ]
-            : null,
+            : [],
       };
 
       const createdPayload = await callCategoryEndpoint<unknown>("/categories", {
@@ -609,4 +591,5 @@ export default function AdminCategoriesPage() {
     </Card>
   );
 }
+
 
