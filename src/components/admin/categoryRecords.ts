@@ -11,8 +11,8 @@ export function isBackendCategoryId(id: string) {
   return Boolean(id.trim()) && !id.startsWith("local-") && !/^category-\d+$/.test(id);
 }
 
-// Only traverse response envelopes, so unrelated nested objects aren't categories.
-export function extractCategoryRecords(payload: unknown): Record<string, unknown>[] {
+// Traverse category relations when listing, but never mistake a parent for a create response.
+export function extractCategoryRecords(payload: unknown, includeRelations = true): Record<string, unknown>[] {
   const records: Record<string, unknown>[] = [];
   const visited = new WeakSet<object>();
   function walk(value: unknown) {
@@ -28,6 +28,11 @@ export function extractCategoryRecords(payload: unknown): Record<string, unknown
     for (const key of ["data", "category", "categories", "items", "results", "result", "payload", "record", "response"]) {
       walk(record[key]);
     }
+    if (includeRelations) {
+      for (const key of ["children", "subcategories", "sub_categories", "parent_category", "parentCategory"]) {
+        walk(record[key]);
+      }
+    }
   }
   walk(payload);
   return records;
@@ -35,10 +40,11 @@ export function extractCategoryRecords(payload: unknown): Record<string, unknown
 
 export function normalizeCategories(payload: unknown, fallbackName = ""): Category[] {
   const categories = new Map<string, Category>();
-  for (const record of extractCategoryRecords(payload)) {
+  for (const record of extractCategoryRecords(payload, !fallbackName)) {
     const id = pickString(record, ["id", "uuid", "category_id", "categoryId"]).trim();
     const name = pickString(record, ["name", "title", "category_name", "categoryName"], fallbackName).trim();
     if (!name) continue;
+    if (categories.has(id)) continue;
     categories.set(id, {
       id,
       name,

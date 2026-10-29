@@ -4,12 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   adminFetcher,
-  authAdminFetcher,
   asArray,
   asRecord,
   pickString,
 } from "@/components/admin/api";
-import { getAuth } from "@/components/auth/authStorage";
 import { Card, ErrorState, Skeleton } from "@/components/dashboard/ui";
 import { extractCategoryRecords, normalizeCategories, type Category } from "@/components/admin/categoryRecords";
 
@@ -56,19 +54,7 @@ export default function AdminCategoriesPage() {
   });
 
   async function callCategoryEndpoint<T>(path: string, init?: RequestInit): Promise<T> {
-    const candidates = [
-      () => adminFetcher<T>(path, init),
-      () => authAdminFetcher<T>(path, init),
-    ];
-    let lastError: unknown = null;
-    for (const candidate of candidates) {
-      try {
-        return await candidate();
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw lastError instanceof Error ? lastError : new Error("Category endpoint request failed.");
+    return adminFetcher<T>(path, init);
   }
 
   async function hardDeleteCategory(target: CategoryDeleteTarget): Promise<void> {
@@ -94,125 +80,7 @@ export default function AdminCategoriesPage() {
   }
 
   async function fetchCategoriesPayload(): Promise<unknown> {
-    const probeCategoryRoute = async () => {
-      const auth = getAuth();
-      const token = auth?.access_token;
-      const response = await fetch("/api/admin/categories/raw", {
-        headers: {
-          Accept: "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        throw new Error(`Category probe failed (${response.status}).`);
-      }
-      const data = await response.json();
-      return data?.categories ?? data?.payload ?? data;
-    };
-
-    const sellerCatalogFallback = async () => {
-      const auth = getAuth();
-      const token = auth?.access_token;
-      const response = await fetch("/api/seller/catalog?resource=categories&limit=200&offset=0", {
-        headers: {
-          Accept: "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        throw new Error(`Seller catalog categories failed (${response.status}).`);
-      }
-      return response.json();
-    };
-
-    const attempts = [
-      probeCategoryRoute,
-      () => callCategoryEndpoint<unknown>("/categories?limit=100&offset=0"),
-      () => callCategoryEndpoint<unknown>("/categories"),
-      () => callCategoryEndpoint<unknown>("/categories?limit=100"),
-      sellerCatalogFallback,
-    ];
-
-    let lastError: unknown = null;
-    for (const attempt of attempts) {
-      try {
-        return await attempt();
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw lastError instanceof Error ? lastError : new Error("Unable to fetch categories.");
-  }
-
-  async function fetchCategoriesPayloadForSlugConflict(name: string): Promise<unknown[]> {
-    const slug = toSlug(name);
-    const encodedName = encodeURIComponent(name);
-    const encodedSlug = encodeURIComponent(slug);
-    const queries = [
-      `/categories?include_deleted=true&limit=200&offset=0`,
-      `/categories?deleted=true&limit=200&offset=0`,
-      `/categories?with_deleted=true&limit=200&offset=0`,
-      `/categories?search=${encodedName}&include_deleted=true&limit=200&offset=0`,
-      `/categories?name=${encodedName}&include_deleted=true&limit=200&offset=0`,
-      `/categories?slug=${encodedSlug}&include_deleted=true&limit=200&offset=0`,
-    ];
-
-    const results: unknown[] = [];
-    for (const query of queries) {
-      try {
-        results.push(await callCategoryEndpoint<unknown>(query));
-      } catch {
-        // best-effort probing for soft-deleted rows
-      }
-    }
-    return results;
-  }
-
-  async function purgeConflictingCategoriesByName(name: string): Promise<number> {
-    const slug = toSlug(name);
-    const payloads = await fetchCategoriesPayloadForSlugConflict(name);
-    const targetsById = new Map<string, CategoryDeleteTarget>();
-
-    for (const payload of payloads) {
-      const records = extractCategoryRecords(payload);
-      const fallbackRows = asArray(payload).flatMap((row) =>
-        Array.isArray(row) ? row : [row]
-      );
-      const allRecords = records.length
-        ? records
-        : (fallbackRows
-            .map((row) => asRecord(row))
-            .filter(Boolean) as Record<string, unknown>[]);
-
-      for (const record of allRecords) {
-        const id = pickString(record, ["id", "uuid", "category_id", "categoryId"], "").trim();
-        if (!id) continue;
-        const recordName = pickString(
-          record,
-          ["name", "title", "category_name", "categoryName"],
-          ""
-        )
-          .trim()
-          .toLowerCase();
-        const recordSlug = pickString(record, ["slug"], "").trim().toLowerCase();
-        if (recordName === name.trim().toLowerCase() || recordSlug === slug) {
-          targetsById.set(id, { id, slug: recordSlug || undefined });
-        }
-      }
-    }
-
-    let deletedCount = 0;
-    for (const target of targetsById.values()) {
-      try {
-        await hardDeleteCategory(target);
-        deletedCount += 1;
-      } catch {
-        // ignore individual failures
-      }
-    }
-    return deletedCount;
+    return callCategoryEndpoint<unknown>("/categories?limit=200&offset=0");
   }
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -301,53 +169,11 @@ export default function AdminCategoriesPage() {
             : null,
       };
 
-      let createdPayload: unknown = null;
-      try {
-        createdPayload = await callCategoryEndpoint("/categories", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(basePayload),
-        });
-      } catch (firstError) {
-        const firstMessage =
-          firstError instanceof Error ? firstError.message : String(firstError);
-        if (
-          firstMessage.includes("idx_categories_slug") ||
-          firstMessage.includes("SQLSTATE 23505") ||
-          firstMessage.toLowerCase().includes("duplicate slug")
-        ) {
-          await purgeConflictingCategoriesByName(name);
-          try {
-            createdPayload = await callCategoryEndpoint("/categories", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(basePayload),
-            });
-          } catch (retryError) {
-            const retryMessage =
-              retryError instanceof Error ? retryError.message : String(retryError);
-            if (
-              retryMessage.includes("idx_categories_slug") ||
-              retryMessage.includes("SQLSTATE 23505") ||
-              retryMessage.toLowerCase().includes("duplicate slug")
-            ) {
-              const uniqueSlug = buildDynamicSlug(name);
-              createdPayload = await callCategoryEndpoint("/categories", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  ...basePayload,
-                  slug: uniqueSlug,
-                }),
-              });
-            } else {
-              throw retryError;
-            }
-          }
-        } else {
-          throw firstError;
-        }
-      }
+      const createdPayload = await callCategoryEndpoint<unknown>("/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(basePayload),
+      });
 
       const responseRecord = asRecord(createdPayload);
       if (responseRecord?.success === false) {

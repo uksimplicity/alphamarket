@@ -37,7 +37,9 @@ async function forwardRequest(
   const headers = buildHeaders(req, hasBody);
   const joinedPath = pathParts.join("/");
 
-  const candidateUrls = Array.from(
+  const candidateUrls = joinedPath === "categories" && method === "POST"
+    ? [`${API_BASE}/admin/categories${search}`]
+    : Array.from(
     new Set(
       API_BASE_CANDIDATES.flatMap((base) => [
         `${base}/admin/${joinedPath}${search}`,
@@ -47,8 +49,6 @@ async function forwardRequest(
   );
 
   let res: Response | null = null;
-  let upstreamErrorRes: Response | null = null;
-  let upstreamErrorText = "";
   const attempts: Array<{ url: string; status: number }> = [];
 
   for (const url of candidateUrls) {
@@ -60,17 +60,8 @@ async function forwardRequest(
     });
     attempts.push({ url, status: attempt.status });
     if (attempt.status === 404) continue;
-    if (attempt.status >= 500) {
-      upstreamErrorRes = attempt;
-      upstreamErrorText = await attempt.clone().text();
-      continue;
-    }
     res = attempt;
     break;
-  }
-
-  if (!res) {
-    res = upstreamErrorRes;
   }
 
   if ((!res || res.status === 404) && joinedPath === "dashboard") {
@@ -96,7 +87,6 @@ async function forwardRequest(
       JSON.stringify({
         error: "Admin endpoint unavailable.",
         tried: attempts,
-        details: upstreamErrorText.slice(0, 1000),
       }),
       { status: 502, headers: { "Content-Type": "application/json" } }
     );
