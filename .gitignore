@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local admin layout previews
+.admin-preview-browser/
+.admin-preview-*.png
+

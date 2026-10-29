@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 export function Card({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
+    <div className="dashboard-card rounded-2xl border border-slate-200 bg-white p-4 shadow-card">
       {children}
     </div>
   );
@@ -22,7 +22,7 @@ export function SectionTitle({
   return (
     <div className="flex items-center justify-between gap-4">
       <div>
-        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        <h2 className="dashboard-section-title text-base font-semibold text-slate-900">{title}</h2>
         {subtitle ? (
           <p className="text-sm text-slate-500">{subtitle}</p>
         ) : null}
@@ -69,7 +69,7 @@ export function Button({
   return (
     <button
       {...rest}
-      className={`inline-flex cursor-pointer items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${variants[variant]}`}
+      className={`dashboard-button inline-flex cursor-pointer items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${variants[variant]}`}
       type={rest.type ?? "button"}
     >
       {children}
@@ -92,18 +92,21 @@ export function ErrorState({
   message: string;
   onRetry?: () => void;
 }) {
+  const technical = /sql:|SQLSTATE|Scan error|Admin request failed|\{"|Request failed \(5/i.test(message);
   return (
-    <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-      <div className="font-semibold">Something went wrong</div>
-      <div className="mt-1">{message}</div>
+    <div role="alert" className="dashboard-error rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+      <div className="dashboard-error-title font-semibold">Unable to load this section</div>
+      <div className="dashboard-error-message mt-1">{technical ? "The server could not complete this request. Please try again in a moment." : message}</div>
       {onRetry ? (
         <button
           className="mt-3 rounded-lg border border-rose-200 bg-white px-3 py-1 text-xs font-semibold text-rose-600"
           onClick={onRetry}
         >
-          Retry
+          Try again
         </button>
       ) : null}
+      {technical ? <details className="dashboard-error-details mt-3 text-xs"><summary>View error details</summary><pre className="mt-2 whitespace-pre-wrap break-words">{message}</pre></details> : null}
     </div>
   );
 }
+

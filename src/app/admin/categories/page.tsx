@@ -315,7 +315,7 @@ export default function AdminCategoriesPage() {
   );
 
   function formatDate(value: string) {
-    if (!value) return "01 Jul, 2022";
+    if (!value) return "â€”";
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     return date.toLocaleDateString("en-GB", {
@@ -333,9 +333,7 @@ export default function AdminCategoriesPage() {
         </div>
       ) : null}
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-[34px] font-semibold leading-none text-slate-900">
-          Categories List
-        </h2>
+        <div><h2 className="text-xl font-semibold tracking-tight text-slate-900">Categories</h2><p className="mt-1 text-xs text-slate-500">Organize your catalog and parent categories.</p></div>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -343,14 +341,14 @@ export default function AdminCategoriesPage() {
             disabled={pendingKey === "clear-all-categories"}
             className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 disabled:opacity-60"
           >
-            {pendingKey === "clear-all-categories" ? "Clearing..." : "Clear All"}
+            {pendingKey === "clear-all-categories" ? "Clearing..." : "Clear all"}
           </button>
           <button
             type="button"
             onClick={() => setShowCategoryForm((prev) => !prev)}
             className="rounded-xl bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#2952cc]"
           >
-            {showCategoryForm ? "Close" : "Create Categories"}
+            {showCategoryForm ? "Close form" : "Add category"}
           </button>
         </div>
       </div>
@@ -365,6 +363,7 @@ export default function AdminCategoriesPage() {
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
             <input
+              aria-label="Category name"
               value={categoryForm.name}
               onChange={(event) =>
                 setCategoryForm((prev) => ({ ...prev, name: event.target.value }))
@@ -373,6 +372,7 @@ export default function AdminCategoriesPage() {
               placeholder="Category Name"
             />
             <input
+              aria-label="Description"
               value={categoryForm.description}
               onChange={(event) =>
                 setCategoryForm((prev) => ({ ...prev, description: event.target.value }))
@@ -381,6 +381,7 @@ export default function AdminCategoriesPage() {
               placeholder="Description"
             />
             <select
+              aria-label="Parent category"
               value={categoryForm.parentCategoryId}
               onChange={(event) =>
                 setCategoryForm((prev) => ({ ...prev, parentCategoryId: event.target.value }))
@@ -419,16 +420,18 @@ export default function AdminCategoriesPage() {
             />
           </svg>
           <input
+            aria-label="Search categories"
             value={categorySearch}
             onChange={(event) => {
               setCategorySearch(event.target.value);
               setCurrentPage(1);
             }}
             className="w-full bg-transparent text-sm outline-none"
-            placeholder="Search..."
+            placeholder="Search categoriesâ€¦"
           />
         </div>
         <select
+          aria-label="Filter by creator"
           value={createdByFilter}
           onChange={(event) => {
             setCreatedByFilter(event.target.value);
@@ -436,10 +439,11 @@ export default function AdminCategoriesPage() {
           }}
           className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none"
         >
-          <option value="all">Create by</option>
+          <option value="all">All creators</option>
           <option value="admin">Admin</option>
         </select>
         <select
+          aria-label="Filter by year"
           value={dateFilter}
           onChange={(event) => {
             setDateFilter(event.target.value);
@@ -447,10 +451,8 @@ export default function AdminCategoriesPage() {
           }}
           className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none"
         >
-          <option value="all">Date</option>
-          <option value="2022">2022</option>
-          <option value="2023">2023</option>
-          <option value="2024">2024</option>
+          <option value="all">All dates</option>
+          {Array.from(new Set(categories.map(item => item.date.slice(0, 4)).filter(year => /^\d{4}$/.test(year)))).sort().reverse().map(year => <option key={year} value={year}>{year}</option>)}
         </select>
       </div>
 
@@ -462,9 +464,9 @@ export default function AdminCategoriesPage() {
                 <input type="checkbox" aria-label="Select all categories" />
               </th>
               <th className="px-4 py-3">ID</th>
-              <th className="px-4 py-3">Icon/ image</th>
-              <th className="px-4 py-3">Category Name</th>
-              <th className="px-4 py-3">Create by</th>
+              <th className="px-4 py-3">Image</th>
+              <th className="px-4 py-3">Category name</th>
+              <th className="px-4 py-3">Created by</th>
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Action</th>
             </tr>
@@ -475,7 +477,7 @@ export default function AdminCategoriesPage() {
                   <td className="px-4 py-3">
                     <input type="checkbox" aria-label={`Select category ${item.name}`} />
                   </td>
-                  <td className="px-4 py-3">#{item.id.slice(0, 5)}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-400" title={item.id}>#{item.id.slice(0, 5)}</td>
                   <td className="px-4 py-3">
                     <span className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200">
                       <svg viewBox="0 0 24 24" className="h-4 w-4 text-slate-500" aria-hidden="true">
@@ -537,7 +539,7 @@ export default function AdminCategoriesPage() {
               {filteredCategories.length === 0 ? (
                 <tr>
                   <td className="px-4 py-6 text-slate-500" colSpan={7}>
-                    No categories returned from backend yet.
+                    {categorySearch || createdByFilter !== "all" || dateFilter !== "all" ? "No categories match your filters." : "No categories yet. Add a category to organize your catalog."}
                   </td>
                 </tr>
               ) : null}
