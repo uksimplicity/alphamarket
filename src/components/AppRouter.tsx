@@ -23,6 +23,7 @@ import VendorOrders from "./vendor/pages/VendorOrders";
 import VendorOrderDetail from "./vendor/pages/VendorOrderDetail";
 import VendorProfile from "./vendor/pages/VendorProfile";
 import VendorStore from "./vendor/pages/VendorStore";
+import VendorPayments from "./vendor/pages/VendorPayments";
 import ProductDetailRoute from "./products/ProductDetailRoute";
 import SellerStoreRoute from "./store/SellerStoreRoute";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
@@ -58,6 +59,7 @@ export default function AppRouter() {
           <Route path="orders/:orderId" element={<VendorOrderDetail />} />
           <Route path="store" element={<VendorStore />} />
           <Route path="profile" element={<VendorProfile />} />
+          <Route path="payments" element={<VendorPayments />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

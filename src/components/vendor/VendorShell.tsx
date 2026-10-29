@@ -20,7 +20,7 @@ const mainLinks: Item[] = [
   { label: "Overview", href: "/vendor", icon: "overview" },
   { label: "Orders", href: "/vendor/orders", icon: "orders" },
   { label: "Performance", href: "/vendor#performance", icon: "chart" },
-  { label: "Payments & escrow", href: "/vendor#payments", icon: "wallet" },
+  { label: "Payments & payouts", href: "/vendor/payments", icon: "wallet" },
 ];
 
 export default function VendorShell() {

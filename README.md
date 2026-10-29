@@ -34,7 +34,9 @@ The integration follows the deployed [Swagger contract](https://marketplace.arch
 4. The return page at `/dashboard/checkout/payment` sends the reference to the backend's `/payments/callback` and polls `/user/orders/{id}`. Only `payment_status: "paid"` confirms success. A redirect or reference alone never confirms payment.
 5. Saved order IDs allow payment initialization to be retried without recreating orders. After an uncertain order submission, check My Orders and use **Pay with Paystack** on the existing pending order. The original cart is cleared only after every saved order is confirmed paid and the cart has not changed.
 
-The callback URL must be reachable by the customer's browser and accepted by the backend configuration. The backend must retain its Paystack webhook and verification setup. Seller payout/bank account screens are not part of this checkout integration.
+The callback URL must be reachable by the customer's browser and accepted by the backend configuration. The backend must retain its Paystack webhook and verification setup. Seller bank accounts and withdrawals are connected in the `/vendor/payments` workspace.
+
+Order creation and payment initialization forward authentication to the documented `/api/v1` endpoints once, with a 20-second timeout. They do not follow redirects or try alternative URLs after a failure. After an uncertain response, review the existing order before submitting again. Delivery confirmation and admin escrow actions use their separate documented endpoints; payment success alone does not establish that funds have been released.
 
 Run `npm run test:payments` for the focused payment tests and `npm run build` for the production build. Before release, use a buyer account and the backend's Paystack test mode to exercise successful payment, cancellation, delayed confirmation, and resuming a pending order.
 
@@ -42,10 +44,30 @@ Run `npm run test:payments` for the focused payment tests and `npm run build` fo
 
 The `/vendor` workspace includes responsive navigation, product search, paid-sales reporting for 7/30/90 days, CSV order exports, fulfillment filters, and inventory alerts. Data comes from the seller product and order APIs; the overview labels its limit of 200 records per resource. Unknown stock and payment values are kept distinct from zero.
 
-Paid sales represent confirmed customer payments, not released escrow or withdrawable funds. Escrow release and payout reporting remain pending as recorded in [ESCROW-NOTES.md](ESCROW-NOTES.md).
+Paid sales represent confirmed customer payments, not released escrow or withdrawable funds. Admin escrow queues, release/reversal confirmations, and customer receipt confirmation are connected to the documented APIs. Order details show escrow status only when reported by the backend. Seller payouts use the dedicated payout summary, bank and withdrawal APIs; verification of backend accounting rules remains pending as recorded in [ESCROW-NOTES.md](ESCROW-NOTES.md).
 
 Run `npm run test:seller` for the reporting checks. `tests/seller-dashboard.browser.cjs` provides local Chrome checks using synthetic data, with Next.js on port 3011 and a dedicated Chrome debugging session on port 9228. Synthetic data is used only by the test script and is never sent to the backend.
 
+## Escrow management
+
+Escrow applies across all user categories. Admin queues retain every category returned by the backend, while release/reversal controls remain restricted to admin accounts and backend authorization. See the [admin API reference](https://marketplace.archintell.com/admin-docs/index.html#/) and [integration notes](ESCROW-NOTES.md) for contract details and verification limits.
+
+Run `npm run test:escrow` for the contract and proxy tests. `tests/escrow.browser.cjs` exercises the admin and order screens with synthetic records using the same local preview ports as the seller browser checks. These tests do not move real funds.
+
+## Seller payouts
+
+Open **Payments & payouts** in the seller menu (`/vendor/payments`). The frontend uses the configured marketplace `/api/v1` base with the signed-in account's token:
+
+- `GET /payouts/banks` and `GET /payouts/resolve?account_number=...&bank_code=...` populate bank selection and verify the account holder before saving.
+- `GET /payouts/account` and `PUT /payouts/account` read/save the payout destination. The update sends only `bank_code` and `account_number`; the backend verifies ownership and the bank result.
+- `GET /payouts/summary` supplies the available balance and pending withdrawals. Paid sales, total wallet balance and held escrow are never substituted for an explicit withdrawable balance.
+- `GET /payouts/withdrawals?limit=20&offset=...`, `GET /payouts/withdrawals/{id}`, `POST /payouts/withdrawals` and `POST /payouts/withdrawals/{id}/cancel` support paginated history, details, new requests and pending cancellation. Request amounts are in naira, with no kobo conversion.
+
+Bank updates, withdrawals and cancellations require review dialogs, forward once without redirects/fallback URLs, and reload authoritative data after acceptance. An uncertain financial response blocks more actions in that tab (including after reload) until the seller explicitly refreshes account, balance and history. The backend remains responsible for authorization, current balance enforcement, concurrency, approval and avoiding duplicate transfers. No financial request is automatically replayed.
+
+The documented response schemas are generic. Missing amount/status fields remain unknown, unrecognized lists show errors, and withdrawals stay disabled without an explicit available balance. Authenticated response shapes and real fund movement still need a controlled Paystack/backend test; no funds were moved during implementation.
+
+Run `npm run test:payouts` for payout contract/proxy checks. `tests/payouts.browser.cjs` tests the seller flow using synthetic data with Next.js on port 3011 and Chrome CDP on port 9228.
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

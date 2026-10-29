@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getAuth } from "@/components/auth/authStorage";
+import { escrowStatusFromOrder } from "@/components/commerce/escrow";
+import { orderPaymentStatus } from "@/components/commerce/payments";
+import EscrowStatus from "@/components/commerce/EscrowStatus";
 import styles from "@/components/vendor/vendor.module.css";
 
 function formatNaira(value: unknown) {
@@ -90,6 +93,8 @@ export default function VendorOrderDetail() {
         order.dropoff_address ?? order.delivery_address ?? order.address ?? "-"
       ),
       notes: String(order.notes ?? order.note ?? "-"),
+      escrowStatus: escrowStatusFromOrder(order),
+      paymentStatus: orderPaymentStatus(order),
     };
   }, [order, orderId]);
 
@@ -135,6 +140,8 @@ export default function VendorOrderDetail() {
       </div>
 
       <div className={styles.progressList}>
+        <EscrowStatus status={summary.escrowStatus} />
+        <div className={styles.progressRow}><span>Payment status</span><span className={styles.pill}>{summary.paymentStatus}</span></div>
         <div className={styles.progressRow}>
           <span>Status</span>
           <span className={styles.pill}>{summary.status}</span>

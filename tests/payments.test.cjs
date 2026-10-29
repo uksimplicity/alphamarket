@@ -58,6 +58,7 @@ test('initialization forwards the authenticated order IDs and never retries an u
     assert.deepEqual(JSON.parse(init.body), body);
     assert.equal(init.headers.Authorization, 'Bearer buyer-token');
     assert.equal(init.cache, 'no-store');
+    assert.equal(init.redirect, 'manual');
     return Response.json({ data: { checkout_url: 'https://checkout.paystack.com/session', reference: 'ref' } });
   };
   const request = () => new Request('https://app.test/api/payments/initialize', { method: 'POST', headers: { Authorization: 'Bearer buyer-token', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -69,6 +70,55 @@ test('initialization forwards the authenticated order IDs and never retries an u
     global.fetch = async () => { calls += 1; throw new Error('connection lost'); };
     assert.equal((await initialize.POST(request())).status, 502);
     assert.equal(calls, 2);
+  } finally {
+    global.fetch = originalFetch;
+    if (previousBase === undefined) delete process.env.NEXT_PUBLIC_API_BASE_URL;
+    else process.env.NEXT_PUBLIC_API_BASE_URL = previousBase;
+  }
+});
+
+test('checkout forwards created order IDs to payment initialization using the documented API base', async () => {
+  const previousBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const originalFetch = global.fetch;
+  process.env.NEXT_PUBLIC_API_BASE_URL = 'https://backend.test/';
+  const orders = loadTypeScript('src/app/api/buyer/orders/route.ts');
+  const initialize = loadTypeScript('src/app/api/payments/initialize/route.ts');
+  const orderBody = { buyer_id: 'buyer', payment_method: 'gateway', items: [{ product_id: 'product', quantity: 2 }], dropoff_address: 'Delivery address', dropoff_lat: 6.5, dropoff_lng: 3.4 };
+  const requests = [];
+  const request = (body, authenticated = true) => new Request('https://app.test/api/checkout', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...(authenticated ? { Authorization: 'Bearer buyer-token' } : {}) }, body: JSON.stringify(body),
+  });
+  global.fetch = async (url, init) => {
+    requests.push(url);
+    assert.equal(init.headers.Authorization, 'Bearer buyer-token');
+    assert.equal(init.redirect, 'manual');
+    assert.equal(init.cache, 'no-store');
+    if (url.endsWith('/buyer/orders')) {
+      assert.deepEqual(JSON.parse(init.body), orderBody);
+      return Response.json({ data: { orders: [{ id: 'one' }, { id: 'two' }] } });
+    }
+    assert.deepEqual(JSON.parse(init.body).order_ids, ['one', 'two']);
+    return Response.json({ data: { checkout_url: 'https://checkout.paystack.com/session' } });
+  };
+  try {
+    const created = await orders.POST(request(orderBody));
+    const orderIds = payments.createdOrderIds(await created.json());
+    const started = await initialize.POST(request({ buyer_id: 'buyer', order_ids: orderIds, callback_url: 'https://app.test/dashboard/checkout/payment' }));
+    assert.equal(payments.checkoutUrl(await started.json()), 'https://checkout.paystack.com/session');
+    assert.deepEqual(requests, ['https://backend.test/api/v1/buyer/orders', 'https://backend.test/api/v1/payments/initialize']);
+    for (const route of [orders, initialize]) {
+      assert.equal((await route.POST(request({}, false))).status, 401);
+      for (const status of [404, 307]) {
+        let calls = 0;
+        global.fetch = async () => { calls += 1; return new Response(null, { status, headers: { Location: 'https://other.test' } }); };
+        assert.equal((await route.POST(request({}))).status, status === 307 ? 502 : 404);
+        assert.equal(calls, 1, 'must not replay at an alternative endpoint or redirect');
+      }
+      let calls = 0;
+      global.fetch = async () => { calls += 1; throw new Error('lost response'); };
+      assert.equal((await route.POST(request({}))).status, 502);
+      assert.equal(calls, 1);
+    }
   } finally {
     global.fetch = originalFetch;
     if (previousBase === undefined) delete process.env.NEXT_PUBLIC_API_BASE_URL;

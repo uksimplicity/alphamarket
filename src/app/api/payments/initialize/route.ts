@@ -1,61 +1,33 @@
-const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
-const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "");
 const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v1`;
 
 export async function POST(req: Request) {
-  if (!API_BASE) {
-    return new Response(
-      JSON.stringify({ error: "NEXT_PUBLIC_API_BASE_URL is not set" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
+  if (!API_BASE) return Response.json({ error: "Payment backend is not configured." }, { status: 503 });
   const body = await req.text();
-  const authHeader = req.headers.get("authorization") ?? "";
-  const cookieHeader = req.headers.get("cookie") ?? "";
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/json",
-    ...(authHeader ? { Authorization: authHeader } : {}),
-    ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-  };
+  const authorization = req.headers.get("authorization");
+  const cookie = req.headers.get("cookie");
+  if (!authorization && !cookie) return Response.json({ error: "Please sign in to pay for your order." }, { status: 401 });
 
-  const urls = Array.from(
-    new Set([`${API_V1_BASE}/payments/initialize`, `${API_BASE}/payments/initialize`])
-  );
-
-  let res: Response | null = null;
-  for (const target of urls) {
-    let candidate: Response;
-    try {
-      candidate = await fetch(target, {
-        method: "POST",
-        headers,
-        body: body || undefined,
-        cache: "no-store",
-        signal: AbortSignal.timeout(20000),
-      });
-    } catch {
-      // Do not replay an initialization whose response may have been lost.
-      return Response.json({ error: "Could not reach the payment service. Your order is saved; check its status before trying again." }, { status: 502 });
+  try {
+    // One documented endpoint only: never replay a financial request at a fallback URL.
+    const response = await fetch(`${API_V1_BASE}/payments/initialize`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json", "Content-Type": "application/json",
+        ...(authorization ? { Authorization: authorization } : {}),
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+      body, cache: "no-store", redirect: "manual", signal: AbortSignal.timeout(20000),
+    });
+    if (response.status >= 300 && response.status < 400) {
+      return Response.json({ error: "Unexpected payment service redirect. Check your order status before trying again." }, { status: 502 });
     }
-    if (candidate.status === 404) continue;
-    res = candidate;
-    break;
+    const text = await response.text();
+    return new Response(response.status === 204 ? null : text, {
+      status: response.status,
+      headers: { "Content-Type": response.headers.get("content-type") ?? "application/json", "Cache-Control": "no-store" },
+    });
+  } catch {
+    return Response.json({ error: "Could not reach the payment service. Your order is saved; check its status before trying again." }, { status: 502 });
   }
-
-  if (!res) {
-    return new Response(
-      JSON.stringify({ error: "Payments initialize endpoint not found on upstream.", tried: urls }),
-      { status: 502, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  const text = await res.text();
-  return new Response(text, {
-    status: res.status,
-    headers: {
-      "Content-Type": res.headers.get("content-type") ?? "application/json",
-    },
-  });
 }

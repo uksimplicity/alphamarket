@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
 import { paymentError, responseData, orderPaymentStatus } from "./payments";
+import { escrowStatusFromOrder } from "./escrow";
 
 type Row = Record<string, unknown>;
 function record(value: unknown): Row { return value && typeof value === "object" && !Array.isArray(value) ? value as Row : {}; }
@@ -14,7 +15,7 @@ function amount(value: unknown): number | null {
 }
 
 export type BuyerOrder = {
-  id: string; status: string; paymentStatus: string; vendor: string;
+  id: string; buyerId: string; status: string; paymentStatus: string; escrowStatus: string; vendor: string;
   total: number | null; address: string; createdAt: string;
   items: Array<{ id: string; name: string; qty: number; price: number | null }>;
 };
@@ -26,7 +27,8 @@ export function parseBuyerOrder(payload: unknown): BuyerOrder | null {
   if (!id) return null;
   const items = row.items ?? row.order_items ?? row.orderItems;
   return {
-    id, status: text(row.status) || "pending", paymentStatus: orderPaymentStatus(row),
+    id, buyerId: text(row.buyer_id ?? row.buyerId ?? record(row.buyer).id),
+    status: text(row.status).toLowerCase() || "pending", paymentStatus: orderPaymentStatus(row), escrowStatus: escrowStatusFromOrder(row),
     vendor: text(row.seller_name ?? row.vendor_name ?? record(row.seller).name) || "Seller",
     total: amount(row.total_amount ?? row.totalAmount ?? row.total ?? row.amount),
     address: text(row.dropoff_address ?? row.dropoffAddress ?? row.address),

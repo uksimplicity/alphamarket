@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { adminFetcher, asArray, asRecord, pickNumber, pickString } from "@/components/admin/api";
+import { adminFetcher, asRecord, pickNumber, pickString } from "@/components/admin/api";
+import { parseEscrows } from "@/components/commerce/escrow";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type FinanceData = {
   revenueReport: Array<{ label: string; value: string }>;
-  payouts: Array<{ id: string; vendor: string; amount: string; status: string }>;
-  transactions: Array<{ id: string; type: string; amount: string; date: string }>;
+  pendingEscrows: Array<{ id: string; recipient: string; amount: string; status: string; category: string }>;
+  timedOutEscrows: Array<{ id: string; type: string; amount: string; date: string }>;
 };
 
 export default function AdminFinancePage() {
@@ -38,8 +39,8 @@ export default function AdminFinancePage() {
       ]);
 
       const revenue = asRecord(revenuePayload);
-      const pending = asArray(pendingPayload);
-      const timedOut = asArray(timedOutPayload);
+      const pending = parseEscrows(pendingPayload, "pending");
+      const timedOut = parseEscrows(timedOutPayload, "timed-out");
 
       return {
         revenueReport: [
@@ -64,26 +65,21 @@ export default function AdminFinancePage() {
             value: String(pickNumber(revenue, ["total_orders"])),
           },
         ],
-        payouts: pending.map((row, index) => {
-          const record = asRecord(row);
+        pendingEscrows: pending.map((row, index) => {
           return {
-            id: pickString(record, ["id", "escrow_id", "order_id"], `pending-${index}`),
-            vendor: pickString(
-              record,
-              ["vendor", "vendor_name", "seller_name", "seller_id"],
-              "Pending escrow"
-            ),
-            amount: String(pickNumber(record, ["amount", "value", "total"], 0)),
-            status: pickString(record, ["status", "state"], "pending"),
+            id: row.id || `pending-${index}`,
+            recipient: row.recipient,
+            amount: row.amount === null ? "Not reported" : `${row.amount.toLocaleString()} ${row.currency}`,
+            status: row.status,
+            category: row.category,
           };
         }),
-        transactions: timedOut.map((row, index) => {
-          const record = asRecord(row);
+        timedOutEscrows: timedOut.map((row, index) => {
           return {
-            id: pickString(record, ["id", "escrow_id", "order_id"], `timed-out-${index}`),
-            type: pickString(record, ["status", "state"], "timed_out"),
-            amount: String(pickNumber(record, ["amount", "value", "total"], 0)),
-            date: pickString(record, ["created_at", "updated_at", "date"], "No date"),
+            id: row.id || `timed-out-${index}`,
+            type: row.status,
+            amount: row.amount === null ? "Not reported" : `${row.amount.toLocaleString()} ${row.currency}`,
+            date: row.createdAt || "Not reported",
           };
         }),
       } satisfies FinanceData;
@@ -155,15 +151,16 @@ export default function AdminFinancePage() {
       </Card>
 
       <Card>
-        <SectionTitle title="Payouts" subtitle="Vendor payouts and statuses." />
+        <SectionTitle title="Pending escrows" subtitle="Held-fund records across all categories, up to 20 loaded. These are not completed payouts." />
         <div className="mt-4 space-y-3 text-sm">
-          {data.payouts.map((payout) => (
+          {data.pendingEscrows.map((payout) => (
             <div
               key={payout.id}
               className="flex items-center justify-between rounded-xl border border-slate-200 p-4"
             >
               <div>
-                <div className="font-semibold text-slate-800">{payout.vendor}</div>
+                <div className="font-semibold text-slate-800">{payout.recipient}</div>
+                <div className="text-xs text-slate-500">{payout.category}</div>
                 <div className="text-xs text-slate-500">{payout.status}</div>
               </div>
               <div className="text-sm font-semibold text-slate-800">
@@ -175,9 +172,9 @@ export default function AdminFinancePage() {
       </Card>
 
       <Card>
-        <SectionTitle title="Transactions" subtitle="Latest financial logs." />
+        <SectionTitle title="Timed-out escrows" subtitle="Records requiring resolution, up to 20 loaded. A timeout does not confirm a refund or release." />
         <div className="mt-4 space-y-3 text-sm">
-          {data.transactions.map((tx) => (
+          {data.timedOutEscrows.map((tx) => (
             <div
               key={tx.id}
               className="flex items-center justify-between rounded-xl border border-slate-200 p-4"
