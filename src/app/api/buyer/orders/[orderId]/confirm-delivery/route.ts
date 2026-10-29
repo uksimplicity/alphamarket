@@ -6,7 +6,7 @@ const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v
 
 export async function POST(
   req: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  context: { params: Promise<{ orderId: string }> }
 ) {
   if (!API_BASE) {
     return new Response(
@@ -15,8 +15,8 @@ export async function POST(
     );
   }
 
-  const { id } = await context.params;
-  const safeId = encodeURIComponent(id);
+  const { orderId } = await context.params;
+  const safeId = encodeURIComponent(orderId);
   const body = await req.text();
 
   const authHeader = req.headers.get("authorization") ?? "";
