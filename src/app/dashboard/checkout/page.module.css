@@ -3,6 +3,15 @@
   gap: 20px;
 }
 
+.addressForm { display: grid; gap: 14px; margin: 16px 0 0; padding: 0; border: 0; }
+.addressForm label { display: grid; gap: 6px; color: #475569; font-size: 0.9rem; }
+.addressForm input, .addressForm textarea { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #0f172a; }
+.coordinateFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.errorMessage, .notice { padding: 14px 18px; border-radius: 10px; }
+.errorMessage { background: #fef2f2; color: #991b1b; }
+.notice { background: #eff6ff; color: #1e40af; }
+.notice a { text-decoration: underline; }
+
 .breadcrumbs {
   display: flex;
   align-items: center;

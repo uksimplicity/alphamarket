@@ -26,12 +26,19 @@ export async function POST(req: Request) {
 
   let res: Response | null = null;
   for (const target of urls) {
-    const candidate = await fetch(target, {
-      method: "POST",
-      headers,
-      body: body || undefined,
-      cache: "no-store",
-    });
+    let candidate: Response;
+    try {
+      candidate = await fetch(target, {
+        method: "POST",
+        headers,
+        body: body || undefined,
+        cache: "no-store",
+        signal: AbortSignal.timeout(20000),
+      });
+    } catch {
+      // Do not replay an initialization whose response may have been lost.
+      return Response.json({ error: "Could not reach the payment service. Your order is saved; check its status before trying again." }, { status: 502 });
+    }
     if (candidate.status === 404) continue;
     res = candidate;
     break;

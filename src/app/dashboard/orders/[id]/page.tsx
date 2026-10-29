@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useBuyerOrders } from "@/components/commerce/buyerOrders";
 import {
   formatCurrency,
-  useOrder,
 } from "@/components/commerce/store";
-import { Badge, Button, Card, ErrorState, SectionTitle } from "@/components/dashboard/ui";
+import { Badge, Card, ErrorState, SectionTitle } from "@/components/dashboard/ui";
 
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
-  const order = useOrder(params.id);
+  const { orders, loading, error, reload } = useBuyerOrders(params.id);
+  const order = orders[0];
+  if (loading) return <p>Loading order...</p>;
+  if (error) return <ErrorState message={error} onRetry={reload} />;
 
   if (!order) {
     return (
@@ -33,9 +36,10 @@ export default function OrderDetailPage() {
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
           <Badge>{order.status}</Badge>
           <span className="font-semibold text-slate-800">
-            Total {formatCurrency(order.total)}
+            {order.total === null ? "Total unavailable" : `Total ${formatCurrency(order.total)}`}
           </span>
           <span className="text-xs text-slate-500">Placed {order.createdAt}</span>
+          <Badge>Payment: {order.paymentStatus}</Badge>
         </div>
       </Card>
 
@@ -47,7 +51,7 @@ export default function OrderDetailPage() {
               <span>
                 {product.name} x{product.qty}
               </span>
-              <span>{formatCurrency(product.price * product.qty)}</span>
+              <span>{product.price === null ? "" : formatCurrency(product.price * product.qty)}</span>
             </div>
           ))}
         </div>
@@ -58,26 +62,7 @@ export default function OrderDetailPage() {
         <p className="mt-3 text-sm text-slate-600">{order.address}</p>
       </Card>
 
-      <Card>
-        <SectionTitle title="Status Timeline" />
-        <div className="mt-4 space-y-3">
-          {order.timeline.map((step, index) => (
-            <div key={step.label} className="flex items-start gap-3 text-sm">
-              <div className="flex flex-col items-center">
-                <span className="h-2.5 w-2.5 rounded-full bg-brand" />
-                {index !== order.timeline.length - 1 ? (
-                  <span className="h-6 w-px bg-slate-200" />
-                ) : null}
-              </div>
-              <div className="flex-1">
-                <div className="font-medium text-slate-800">{step.label}</div>
-                <div className="text-xs text-slate-500">{step.time}</div>
-              </div>
-              <Button variant="ghost">Reorder</Button>
-            </div>
-          ))}
-        </div>
-      </Card>
+      <Link href="/dashboard/orders" className="text-sm font-semibold text-brand">Back to orders</Link>
     </div>
   );
 }

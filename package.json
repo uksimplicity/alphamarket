@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:payments": "node --test tests/payments.test.cjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.13",

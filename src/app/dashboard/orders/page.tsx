@@ -1,21 +1,33 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { getAuth } from "@/components/auth/authStorage";
+import { useBuyerOrders, type BuyerOrder } from "@/components/commerce/buyerOrders";
+import { PENDING_CHECKOUT_KEY } from "@/components/commerce/payments";
 import {
   formatCurrency,
-  useOrders,
 } from "@/components/commerce/store";
 import { Button, Card, SectionTitle } from "@/components/dashboard/ui";
 
 export default function OrdersPage() {
-  const orders = useOrders();
+  const { orders, loading, error, reload } = useBuyerOrders();
+  const router = useRouter();
+  function payOrder(order: BuyerOrder) {
+    const buyerId = getAuth()?.user?.id;
+    if (!buyerId) return;
+    sessionStorage.setItem(PENDING_CHECKOUT_KEY, JSON.stringify({ buyerId, orderIds: [order.id], cartKey: "", submitted: true }));
+    router.push("/dashboard/checkout");
+  }
 
   return (
     <div className="grid gap-6">
       <Card>
-        <SectionTitle title="Orders Timeline" subtitle="Follow your order progress." />
+        <SectionTitle title="My Orders" subtitle="Follow your order and payment progress." />
+        {loading ? <p className="mt-4 text-sm">Loading orders...</p> : null}
+        {error ? <div role="alert" className="mt-4 text-red-700">{error} <Button onClick={reload}>Retry</Button></div> : null}
         <div className="mt-4 space-y-4">
-          {orders.length === 0 ? (
+          {!loading && !error && orders.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
               You have no orders yet. Place your first order to see updates here.
             </div>
@@ -36,7 +48,7 @@ export default function OrdersPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-sm font-semibold text-slate-800">
-                      {formatCurrency(order.total)}
+                      {order.total === null ? "Total unavailable" : formatCurrency(order.total)}
                     </div>
                     <Link
                       href={`/dashboard/orders/${order.id}`}
@@ -47,27 +59,15 @@ export default function OrdersPage() {
                   </div>
                 </div>
                 <div className="mt-4 space-y-3">
-                  {order.timeline.map((step, index) => (
-                    <div key={step.label} className="flex items-start gap-3 text-sm">
-                      <div className="flex flex-col items-center">
-                        <span className="h-2.5 w-2.5 rounded-full bg-brand" />
-                        {index !== order.timeline.length - 1 ? (
-                          <span className="h-6 w-px bg-slate-200" />
-                        ) : null}
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-medium text-slate-800">{step.label}</div>
-                        <div className="text-xs text-slate-500">{step.time}</div>
-                      </div>
-                      <Button variant="ghost">Reorder</Button>
-                    </div>
-                  ))}
+                  <p className="text-sm capitalize">Order: {order.status.replaceAll("_", " ")}</p>
+                  <p className="text-sm capitalize">Payment: {order.paymentStatus.replaceAll("_", " ")}</p>
+                  {order.paymentStatus === "pending" && order.status !== "cancelled" ? <Button onClick={() => payOrder(order)}>Pay with Paystack</Button> : null}
                 </div>
               </div>
             ))
           )}
         </div>
-        {orders.length === 0 ? (
+        {!loading && !error && orders.length === 0 ? (
           <div className="mt-4">
             <Link
               href="/dashboard/home"
