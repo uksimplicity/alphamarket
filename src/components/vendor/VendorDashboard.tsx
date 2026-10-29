@@ -1,709 +1,155 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import { getAuth } from "@/components/auth/authStorage";
-import styles from "./vendor.module.css";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { getAuth, getDisplayName } from "@/components/auth/authStorage";
+import { useAuthUser } from "@/components/auth/useAuthUser";
+import Icon, { type AdminIconName } from "@/components/admin/AdminIcon";
+import { asRow, humanize, isPaid, money, needsFulfillment, orderTone, parseSellerOrders, parseSellerProducts, salesSeries, scopedOrders, type SellerOrder, type SellerProduct } from "./sellerData";
+import styles from "./sellerDashboard.module.css";
 
-type SellerProduct = {
-  id: string;
-  name: string;
-  category: string;
-  stock: number;
-  price: number | null;
-  status: string;
-  createdAt: string;
-};
-
-type SellerOrder = {
-  id: string;
-  amount: number;
-  status: string;
-  customer: string;
-  createdAt: string;
-};
-
-type DateRangeValue = "all" | "7d" | "30d" | "90d";
-
-const dateRangeOptions: Array<{ value: DateRangeValue; label: string }> = [
-  { value: "all", label: "All time" },
-  { value: "7d", label: "Last 7 days" },
-  { value: "30d", label: "Last 30 days" },
-  { value: "90d", label: "Last 90 days" },
-];
-const DASHBOARD_REALTIME_POLL_MS = 2000;
-const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
-
-function normalizeList(payload: unknown): unknown[] {
-  if (Array.isArray(payload)) return payload;
-  if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>;
-    const candidates = [record.data, record.products, record.items, record.rows];
-    for (const candidate of candidates) {
-      if (Array.isArray(candidate)) return candidate;
-    }
-  }
-  return [];
-}
-
-function toNumber(value: unknown, fallback = 0) {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value);
-    if (!Number.isNaN(parsed)) return parsed;
-  }
-  return fallback;
-}
-
-function toText(value: unknown) {
-  if (typeof value === "string") return value.trim();
-  if (typeof value === "number") return String(value);
-  return "";
-}
-
-function buildAuthorizationHeader(token?: string) {
-  const raw = String(token ?? "").trim();
-  if (!raw) return "";
-  return /^bearer\s+/i.test(raw) ? raw : `Bearer ${raw}`;
-}
-
-function getOwnerKeys(record: Record<string, unknown>) {
-  return [
-    record.seller_id,
-    record.sellerId,
-    record.vendor_id,
-    record.vendorId,
-    record.owner_id,
-    record.ownerId,
-    record.user_id,
-    record.userId,
-  ]
-    .map((value) => toText(value))
-    .filter(Boolean);
-}
-
-function matchesCurrentSeller(
-  record: Record<string, unknown>,
-  currentUserId: string,
-  currentUserEmail: string
-) {
-  const keys = getOwnerKeys(record);
-  if (keys.length === 0) return true;
-  return keys.some(
-    (value) =>
-      value === currentUserId ||
-      (currentUserEmail && value.toLowerCase() === currentUserEmail.toLowerCase())
-  );
-}
-
-const nairaFormatter = new Intl.NumberFormat("en-NG", {
-  style: "currency",
-  currency: "NGN",
-  maximumFractionDigits: 0,
-});
-
-function formatNaira(value: number) {
-  return nairaFormatter.format(value);
-}
-
-function formatDate(value: string) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString("en-NG", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function getOrderStatusTone(status: string): "success" | "danger" | "warning" | "neutral" {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("deliver") || normalized.includes("complete")) return "success";
-  if (normalized.includes("cancel") || normalized.includes("fail")) return "danger";
-  if (normalized.includes("pend") || normalized.includes("process")) return "warning";
-  return "neutral";
-}
-
-function getDateRangeCutoff(value: DateRangeValue) {
-  if (value === "all") return null;
-  const days = value === "7d" ? 7 : value === "30d" ? 30 : 90;
-  return Date.now() - days * 24 * 60 * 60 * 1000;
-}
-
-function isWithinDateRange(value: string, cutoff: number | null) {
-  if (cutoff === null) return true;
-  if (!value) return true;
-  const timestamp = new Date(value).getTime();
-  if (Number.isNaN(timestamp)) return true;
-  return timestamp >= cutoff;
-}
+type Snapshot = { owner: string; products: SellerProduct[] | null; orders: SellerOrder[] | null; errors: string[]; updatedAt: Date | null };
+const empty: Snapshot = { owner: "", products: null, orders: null, errors: [], updatedAt: null };
+const statusLabel = (status: string) => ["publish", "published"].includes(status) ? "Live" : humanize(status);
 
 export default function VendorDashboard() {
-  const [products, setProducts] = useState<SellerProduct[]>([]);
-  const [orders, setOrders] = useState<SellerOrder[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [dateRange, setDateRange] = useState<DateRangeValue>("30d");
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
-  const isRequestInFlight = useRef(false);
+  const user = useAuthUser();
+  const [params, setParams] = useSearchParams();
+  const [snapshot, setSnapshot] = useState<Snapshot>(empty);
+  const [refreshing, setRefreshing] = useState(true);
+  const [revision, setRevision] = useState(0);
+  const [range, setRange] = useState(30);
+  const [orderTab, setOrderTab] = useState("all");
+  const [productFilter, setProductFilter] = useState("all");
+  const query = params.get("search") ?? "";
+  const current = snapshot.owner === user?.id ? snapshot : empty;
+  const products = current.products ?? [];
+  const orders = current.orders ?? [];
 
-  const loadProducts = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
-    if (isRequestInFlight.current) return;
-    isRequestInFlight.current = true;
-    if (!silent) {
-      setLoading(true);
-    }
-    setError("");
-    try {
+  useEffect(() => {
+    const controller = new AbortController();
+    let inFlight = false;
+    async function load() {
+      if (inFlight || controller.signal.aborted) return;
       const auth = getAuth();
-      const token = buildAuthorizationHeader(auth?.access_token);
-      const currentUserId = toText(auth?.user?.id);
-      const currentUserEmail = toText(auth?.user?.email);
-      const commonHeaders: Record<string, string> = {};
-      if (token) commonHeaders.Authorization = token;
-
-      const [productsResponse, ordersResponse] = await Promise.all([
-        fetch("/api/seller/products", {
-          headers: commonHeaders,
-          cache: "no-store",
-        }),
-        fetch("/api/seller/orders?limit=200&offset=0", {
-          headers: commonHeaders,
-          cache: "no-store",
-        }),
+      if (!auth?.access_token || !auth.user.id) {
+        setSnapshot({ ...empty, errors: ["Sign in with your seller account to see your store activity."] });
+        setRefreshing(false); return;
+      }
+      inFlight = true; setRefreshing(true);
+      const owner = auth.user.id;
+      const headers = { Authorization: `Bearer ${auth.access_token.replace(/^Bearer\s+/i, "").trim()}`, Accept: "application/json" };
+      async function request(path: string) {
+        const response = await fetch(path, { headers, cache: "no-store", signal: controller.signal });
+        const payload: unknown = await response.json();
+        const row = asRow(payload);
+        if (!response.ok || row.success === false) throw new Error(typeof row.error === "string" ? row.error : `Request failed (${response.status}).`);
+        return payload;
+      }
+      const results = await Promise.allSettled([
+        request("/api/seller/products?limit=200&offset=0"), request("/api/seller/orders?limit=200&offset=0"),
       ]);
-
-      const [productsText, ordersText] = await Promise.all([
-        productsResponse.text(),
-        ordersResponse.text(),
-      ]);
-
-      let productsPayload: unknown = null;
-      let ordersPayload: unknown = null;
-      try {
-        productsPayload = productsText ? JSON.parse(productsText) : null;
-      } catch {
-        productsPayload = productsText;
-      }
-      try {
-        ordersPayload = ordersText ? JSON.parse(ordersText) : null;
-      } catch {
-        ordersPayload = ordersText;
-      }
-
-      if (!productsResponse.ok) {
-        const message =
-          productsPayload && typeof productsPayload === "object" && "error" in productsPayload
-            ? String((productsPayload as { error: unknown }).error)
-            : `Failed to load seller products (${productsResponse.status}).`;
-        throw new Error(message);
-      }
-
-      const rows = normalizeList(productsPayload);
-      const normalized = rows
-        .map((row, index) => {
-        const record =
-          row && typeof row === "object" ? (row as Record<string, unknown>) : {};
-        return {
-          id: String(record.id ?? record.product_id ?? record.uuid ?? `product-${index}`),
-          name: String(record.name ?? record.title ?? "Product"),
-          category: String(
-            (record.category && typeof record.category === "object"
-              ? (record.category as Record<string, unknown>).name
-              : null) ??
-              record.category ??
-              record.categoryName ??
-              "Uncategorized"
-          ),
-          stock: toNumber(record.stock ?? record.quantity, 0),
-          price:
-            record.basePrice ?? record.price
-              ? toNumber(record.basePrice ?? record.price, 0)
-              : null,
-          status: String(record.status ?? "unknown"),
-          createdAt: toText(record.created_at ?? record.createdAt ?? record.updated_at ?? record.updatedAt),
-        } satisfies SellerProduct;
-      })
-        .filter((row, index) => {
-          const source =
-            rows[index] && typeof rows[index] === "object"
-              ? (rows[index] as Record<string, unknown>)
-              : null;
-          if (!source) return true;
-          return matchesCurrentSeller(source, currentUserId, currentUserEmail);
-        });
-
-      const orderRows = normalizeList(ordersPayload);
-      const normalizedOrders = orderRows
-        .map((row, index) => {
-          const record =
-            row && typeof row === "object" ? (row as Record<string, unknown>) : {};
-          const customerName = toText(
-            record.customer_name ??
-              record.customerName ??
-              (record.customer && typeof record.customer === "object"
-                ? (record.customer as Record<string, unknown>).name
-                : "")
-          );
-          const createdAt = toText(
-            record.created_at ??
-              record.createdAt ??
-              record.ordered_at ??
-              record.orderedAt
-          );
-          return {
-            id: toText(record.id ?? record.order_id ?? record.uuid ?? `order-${index}`),
-            amount: toNumber(record.amount ?? record.total_amount ?? record.total ?? 0, 0),
-            status: toText(record.status ?? "unknown") || "unknown",
-            customer: customerName || "Customer",
-            createdAt,
-          } satisfies SellerOrder;
-        })
-        .filter((order) => order.id);
-
-      setProducts(normalized);
-      setOrders(normalizedOrders);
-      setLastUpdatedAt(new Date());
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load seller dashboard data."
-      );
-    } finally {
-      isRequestInFlight.current = false;
-      if (!silent) {
-        setLoading(false);
-      }
+      if (controller.signal.aborted) return;
+      setSnapshot(previous => {
+        const next = previous.owner === owner ? { ...previous } : { ...empty, owner };
+        const errors: string[] = [];
+        if (results[0].status === "fulfilled") next.products = parseSellerProducts(results[0].value, owner);
+        else errors.push("Products could not be refreshed. " + (results[0].reason instanceof Error ? results[0].reason.message : "Please try again."));
+        if (results[1].status === "fulfilled") next.orders = parseSellerOrders(results[1].value, owner);
+        else errors.push("Orders could not be refreshed. " + (results[1].reason instanceof Error ? results[1].reason.message : "Please try again."));
+        next.errors = errors;
+        if (!errors.length) next.updatedAt = new Date();
+        return next;
+      });
+      inFlight = false; setRefreshing(false);
     }
-  }, []);
+    void load();
+    const visibleRefresh = () => { if (document.visibilityState === "visible") void load(); };
+    const timer = window.setInterval(visibleRefresh, 60000);
+    window.addEventListener("focus", visibleRefresh);
+    document.addEventListener("visibilitychange", visibleRefresh);
+    window.addEventListener("alpha-products-updated", visibleRefresh);
+    return () => { controller.abort(); clearInterval(timer); window.removeEventListener("focus", visibleRefresh); document.removeEventListener("visibilitychange", visibleRefresh); window.removeEventListener("alpha-products-updated", visibleRefresh); };
+  }, [user?.id, revision]);
 
-  useEffect(() => {
-    void loadProducts();
-  }, [loadProducts]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const intervalId = window.setInterval(() => {
-      void loadProducts({ silent: true });
-    }, DASHBOARD_REALTIME_POLL_MS);
-
-    const handleFocus = () => {
-      void loadProducts({ silent: true });
+  const periodOrders = useMemo(() => scopedOrders(orders, range), [orders, range]);
+  const paidOrders = periodOrders.filter(isPaid);
+  const paidValue = paidOrders.reduce((sum, order) => sum + (order.amount ?? 0), 0);
+  const amountMissing = paidOrders.some(order => order.amount === null);
+  const chart = useMemo(() => salesSeries(orders, range), [orders, range]);
+  const fulfillment = orders.filter(needsFulfillment);
+  const stockAlerts = products.filter(product => product.stock !== null && product.stock <= 10);
+  const live = products.filter(product => ["publish", "published", "active"].includes(product.status));
+  const drafts = products.filter(product => product.status === "draft");
+  const inventoryKnown = products.filter(product => product.stock !== null);
+  const outOfStock = inventoryKnown.filter(product => product.stock === 0);
+  const stockGroups = [
+    { label: "Healthy stock", count: inventoryKnown.filter(product => (product.stock ?? 0) > 10).length, tone: "healthy" },
+    { label: "Running low", count: inventoryKnown.filter(product => (product.stock ?? 0) > 0 && (product.stock ?? 0) <= 10).length, tone: "low" },
+    { label: "Out of stock", count: outOfStock.length, tone: "out" },
+  ];
+  const recentOrders = [...orders].filter(order => orderTab === "all" || (orderTab === "action" ? needsFulfillment(order) : ["delivered", "confirmed", "completed"].includes(order.status)))
+    .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0)).slice(0, 5);
+  const filteredProducts = products.filter(product => {
+    const matches = `${product.name} ${product.category}`.toLowerCase().includes(query.toLowerCase());
+    return matches && (productFilter === "all" || (productFilter === "low" ? product.stock !== null && product.stock <= 10 : product.status === "draft"));
+  }).slice(0, 5);
+  const firstName = user?.first_name?.trim() || getDisplayName(user).split(" ")[0] || "seller";
+  function searchProducts(value: string) {
+    const next = new URLSearchParams(params);
+    if (value) next.set("search", value); else next.delete("search");
+    setParams(next, { replace: true });
+  }
+  function exportOrders() {
+    const cell = (value: string | number | null) => {
+      let text = String(value ?? "");
+      if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+      return `"${text.replaceAll('"', '""')}"`;
     };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void loadProducts({ silent: true });
-      }
-    };
-    const handleProductsUpdated = () => {
-      void loadProducts({ silent: true });
-    };
+    const rows = [["Order ID", "Customer", "Order status", "Payment status", "Amount (NGN)", "Created"], ...periodOrders.map(order => [order.id, order.customer, order.status, order.paymentStatus, order.amount, order.createdAt])];
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + rows.map(row => row.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a"); link.href = url; link.download = `alpha-orders-${range}-days.csv`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  const metrics: Array<{ title: string; value: string; note: string; icon: AdminIconName; href: string; color: string }> = [
+    { title: "Paid sales", value: current.orders === null ? "—" : money(amountMissing ? null : paidValue), note: amountMissing ? "Some paid orders have no reported amount" : `Confirmed payments · last ${range} days`, icon: "chart", href: "#performance", color: "blue" },
+    { title: "Orders to fulfill", value: current.orders === null ? "—" : String(fulfillment.length), note: "Paid orders awaiting dispatch", icon: "orders", href: "/vendor/orders", color: "amber" },
+    { title: "Live products", value: current.products === null ? "—" : String(live.length), note: current.products === null ? "Your published storefront listings" : `${drafts.length} drafts ready for your attention`, icon: "catalog", href: "/vendor/products", color: "violet" },
+    { title: "Stock alerts", value: current.products === null ? "—" : String(stockAlerts.length), note: current.products === null ? "Review stock availability" : `${outOfStock.length} out of stock · restock to keep selling`, icon: "alert", href: "/vendor/products/stock", color: "rose" },
+  ];
 
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener(LOCAL_PRODUCTS_UPDATED_EVENT, handleProductsUpdated);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener(LOCAL_PRODUCTS_UPDATED_EVENT, handleProductsUpdated);
-    };
-  }, [loadProducts]);
-
-  const dateRangeCutoff = useMemo(() => getDateRangeCutoff(dateRange), [dateRange]);
-  const dateRangeLabel = useMemo(
-    () => dateRangeOptions.find((option) => option.value === dateRange)?.label ?? "All time",
-    [dateRange]
-  );
-
-  const dateScopedProducts = useMemo(
-    () => products.filter((product) => isWithinDateRange(product.createdAt, dateRangeCutoff)),
-    [products, dateRangeCutoff]
-  );
-  const dateScopedOrders = useMemo(
-    () => orders.filter((order) => isWithinDateRange(order.createdAt, dateRangeCutoff)),
-    [orders, dateRangeCutoff]
-  );
-
-  const metrics = useMemo(() => {
-    const totalProducts = dateScopedProducts.length;
-    const published = dateScopedProducts.filter((product) => product.status.toLowerCase().includes("publish")).length;
-    const draft = dateScopedProducts.filter((product) => product.status.toLowerCase().includes("draft")).length;
-    const lowStock = dateScopedProducts.filter((product) => product.stock > 0 && product.stock <= 10).length;
-    const outOfStock = dateScopedProducts.filter((product) => product.stock <= 0).length;
-    const inventoryValue = dateScopedProducts.reduce((sum, product) => {
-      if (product.price === null) return sum;
-      return sum + product.price * Math.max(product.stock, 0);
-    }, 0);
-    const totalOrders = dateScopedOrders.length;
-    const fulfilledOrders = dateScopedOrders.filter((order) =>
-      order.status.toLowerCase().includes("deliver") || order.status.toLowerCase().includes("complete")
-    ).length;
-    const orderRevenue = dateScopedOrders.reduce((sum, order) => sum + Math.max(order.amount, 0), 0);
-
-    return {
-      totalProducts,
-      published,
-      draft,
-      lowStock,
-      outOfStock,
-      inventoryValue,
-      totalOrders,
-      fulfilledOrders,
-      orderRevenue,
-    };
-  }, [dateScopedOrders, dateScopedProducts]);
-
-  const statusOptions = useMemo(() => {
-    const entries = new Set<string>();
-    dateScopedProducts.forEach((product) => {
-      entries.add(product.status.toLowerCase());
-    });
-    return Array.from(entries).sort();
-  }, [dateScopedProducts]);
-
-  const filteredProducts = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return dateScopedProducts.filter((product) => {
-      const statusPass =
-        statusFilter === "all" || product.status.toLowerCase() === statusFilter;
-      const queryPass =
-        !query ||
-        product.name.toLowerCase().includes(query) ||
-        product.category.toLowerCase().includes(query);
-      return statusPass && queryPass;
-    });
-  }, [dateScopedProducts, searchQuery, statusFilter]);
-
-  const recentProducts = useMemo(() => filteredProducts.slice(0, 8), [filteredProducts]);
-  const recentOrders = useMemo(
-    () =>
-      [...dateScopedOrders]
-        .sort((a, b) => {
-          const left = new Date(a.createdAt).getTime();
-          const right = new Date(b.createdAt).getTime();
-          if (Number.isNaN(left) && Number.isNaN(right)) return 0;
-          if (Number.isNaN(left)) return 1;
-          if (Number.isNaN(right)) return -1;
-          return right - left;
-        })
-        .slice(0, 8),
-    [dateScopedOrders]
-  );
-  const lowStockProducts = useMemo(
-    () =>
-      [...dateScopedProducts]
-        .filter((product) => product.stock > 0 && product.stock <= 10)
-        .sort((a, b) => a.stock - b.stock)
-        .slice(0, 5),
-    [dateScopedProducts]
-  );
-
-  const hasProducts = dateScopedProducts.length > 0;
-  const stockTracked = dateScopedProducts.filter((product) => product.stock > 0).length;
-  const safeStock = Math.max(stockTracked - metrics.lowStock, 0);
-
-  return (
-    <>
-      <section className={styles.card}>
-        <div className={styles.cardHeader}>
-          <div>
-            <div className={styles.cardTitle}>Seller Overview</div>
-            <div className={styles.cardSubtitle}>
-              Live inventory snapshot for your storefront.
-              {lastUpdatedAt ? ` Updated ${lastUpdatedAt.toLocaleTimeString()}.` : ""}
-            </div>
-          </div>
-          <div className={styles.tableFilters}>
-            <select
-              className={styles.filterInput}
-              value={dateRange}
-              onChange={(event) => setDateRange(event.target.value as DateRangeValue)}
-              aria-label="Filter dashboard by date range"
-            >
-              {dateRangeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className={styles.actionBtn}
-              onClick={() => void loadProducts()}
-              disabled={loading}
-            >
-              {loading ? "Refreshing..." : "Refresh"}
-            </button>
-          </div>
-        </div>
-        {error ? <div className={styles.cardSubtitle}>{error}</div> : null}
+  return <div className={styles.dashboard}>
+    <section className={styles.heading}>
+      <div><div className={styles.eyebrow}>YOUR BUSINESS, AT A GLANCE</div><h1>Let’s make today a good one, {firstName}.</h1><p>Everything you need to keep your store moving.</p></div>
+      <div className={styles.headingActions}><button className={styles.outlineButton} onClick={exportOrders} disabled={current.orders === null || !periodOrders.length}><Icon name="external" size={15} />Export report</button><button className={styles.refreshButton} onClick={() => setRevision(value => value + 1)} disabled={refreshing} aria-label="Refresh dashboard"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1" /></svg></button></div>
+    </section>
+    {current.errors.length || snapshot.errors.length && !snapshot.owner ? <div className={styles.errorBanner} role="alert"><Icon name="alert" size={19} /><div>{(current.errors.length ? current.errors : snapshot.errors).map(message => <p key={message}>{message}</p>)}{current.updatedAt ? <small>Showing the last available snapshot.</small> : null}</div><button onClick={() => setRevision(value => value + 1)} disabled={refreshing}>Try again</button></div> : null}
+    <div className={styles.toolbar}><span className={styles.syncStatus}><i className={refreshing ? styles.syncing : ""} />{refreshing ? "Updating your workspace..." : current.updatedAt ? `Last synced ${current.updatedAt.toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" })}` : "Waiting for store data"}</span><label className={styles.rangeSelect}><Icon name="orders" size={15} /><select aria-label="Sales reporting period" value={range} onChange={event => setRange(Number(event.target.value))}><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={90}>Last 90 days</option></select></label></div>
+    <section className={styles.metrics} aria-label="Store performance">{metrics.map(metric => <Link to={metric.href} key={metric.title} className={styles.metric}><div className={styles.metricTop}><span>{metric.title}</span><span className={`${styles.metricIcon} ${styles[metric.color]}`}><Icon name={metric.icon} size={18} /></span></div><strong className={refreshing && !current.updatedAt ? styles.loadingValue : ""}>{metric.value}</strong><p>{metric.note}</p><Icon name="chevron" size={14} className={styles.metricArrow} /></Link>)}</section>
+    <div className={styles.topGrid}>
+      <section id="performance" className={styles.panel}>
+        <div className={styles.panelHeader}><div><h2>Sales performance</h2><p>A clearer view of your paid orders.</p></div><span className={styles.legend}><i />Paid sales</span></div>
+        <div className={styles.chartSummary}><strong>{current.orders === null ? "—" : money(amountMissing ? null : paidValue)}</strong><span>{paidOrders.length} paid {paidOrders.length === 1 ? "order" : "orders"} in this period</span></div>
+        {current.orders === null || amountMissing ? <div className={styles.chartEmpty}><Icon name="chart" size={32} /><strong>{amountMissing ? "Some paid order amounts are unavailable" : refreshing ? "Loading your sales activity" : "Sales activity is unavailable"}</strong><span>Your sales trend appears when confirmed payment amounts are available.</span></div> : paidOrders.length ? <div className={styles.chart} role="img" aria-label={`Paid sales over the last ${range} days: ${money(amountMissing ? null : paidValue)}`}><ResponsiveContainer width="100%" height="100%"><AreaChart data={chart} margin={{ top: 15, right: 12, left: -14, bottom: 0 }}><defs><linearGradient id="sellerSalesFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4475ff" stopOpacity={0.17} /><stop offset="100%" stopColor="#4475ff" stopOpacity={0.01} /></linearGradient></defs><CartesianGrid vertical={false} stroke="#edf0f6" strokeDasharray="3 4" /><XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={45} tick={{ fill: "#99a4b9", fontSize: 10 }} dy={12} /><YAxis tickLine={false} axisLine={false} tick={{ fill: "#99a4b9", fontSize: 10 }} tickFormatter={value => value >= 1000000 ? `₦${value / 1000000}m` : value >= 1000 ? `₦${value / 1000}k` : `₦${value}`} /><Tooltip formatter={value => [money(Number(value)), "Paid sales"]} contentStyle={{ border: "1px solid #e5eaf3", borderRadius: 8, fontSize: 12 }} /><Area type="monotone" dataKey="sales" stroke="#4475ff" strokeWidth={2.5} fill="url(#sellerSalesFill)" isAnimationActive={false} /></AreaChart></ResponsiveContainer></div> : <div className={styles.chartEmpty}><span className={styles.emptyIcon}><Icon name="chart" size={25} /></span><strong>Your next chapter starts with a sale.</strong><span>No paid orders in this period. Keep your listings fresh and ready.</span><Link to="/vendor/products/create">Add a product <Icon name="chevron" size={13} /></Link></div>}
+        <div className={styles.chartFooter}><span>NGN · Paid order value, before fees or refunds</span><span>Not a withdrawable balance</span></div>
       </section>
-
-      <section className={styles.gridStats}>
-        <div className={styles.statCard}>
-          <div className={styles.statLabel}>Total Products</div>
-          <div className={styles.statValue}>{metrics.totalProducts}</div>
-          <div className={styles.statDelta}>Catalog size</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statLabel}>Published</div>
-          <div className={styles.statValue}>{metrics.published}</div>
-          <div className={styles.statDelta}>Live listings</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statLabel}>Draft</div>
-          <div className={styles.statValue}>{metrics.draft}</div>
-          <div className={styles.statDelta}>Needs completion</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statLabel}>Low Stock</div>
-          <div className={styles.statValue}>{metrics.lowStock}</div>
-          <div className={styles.statDelta}>Needs restock soon</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statLabel}>Out of Stock</div>
-          <div className={styles.statValue}>{metrics.outOfStock}</div>
-          <div className={styles.statDelta}>No units left</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statLabel}>Inventory Value</div>
-          <div className={styles.statValue}>{formatNaira(metrics.inventoryValue)}</div>
-          <div className={styles.statDelta}>Estimated stock value</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statLabel}>Total Orders</div>
-          <div className={styles.statValue}>{metrics.totalOrders}</div>
-          <div className={styles.statDelta}>Buyer activity</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statLabel}>Delivered Orders</div>
-          <div className={styles.statValue}>{metrics.fulfilledOrders}</div>
-          <div className={styles.statDelta}>Completed deliveries</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statLabel}>Order Revenue</div>
-          <div className={styles.statValue}>{formatNaira(metrics.orderRevenue)}</div>
-          <div className={styles.statDelta}>From seller orders</div>
-        </div>
+      <aside className={styles.attentionPanel}><div className={styles.panelHeader}><div><span className={styles.attentionEyebrow}>MAKE YOUR NEXT MOVE</span><h2>Needs your attention</h2></div><Icon name="overview" size={19} /></div>
+        <Link to="/vendor/orders" className={styles.attentionRow}><span className={`${styles.attentionIcon} ${styles.blue}`}><Icon name="orders" size={19} /></span><span><strong>Keep orders moving</strong><small>{current.orders === null ? "Check your latest orders" : `${fulfillment.length} paid orders waiting for fulfillment`}</small></span><Icon name="chevron" size={15} /></Link>
+        <Link to="/vendor/products/stock" className={styles.attentionRow}><span className={`${styles.attentionIcon} ${styles.amber}`}><Icon name="catalog" size={19} /></span><span><strong>Give your shelves a refill</strong><small>{current.products === null ? "Review your stock levels" : `${stockAlerts.length} listings need a stock check`}</small></span><Icon name="chevron" size={15} /></Link>
+        <Link to="/vendor/products/draft" className={styles.attentionRow}><span className={`${styles.attentionIcon} ${styles.violet}`}><Icon name="orders" size={19} /></span><span><strong>Bring your drafts to life</strong><small>{current.products === null ? "Finish your next listing" : `${drafts.length} unfinished product listings`}</small></span><Icon name="chevron" size={15} /></Link>
+        <div className={styles.storeTip}><span>SELLER NOTE</span><p>Great photos. Clear details.<br />A little care goes a long way.</p><Link to="/vendor/products/create">Create your next listing <Icon name="chevron" size={13} /></Link></div>
+      </aside>
+    </div>
+    <section className={styles.panel} id="orders"><div className={styles.panelHeader}><div><h2>Recent orders</h2><p>Your customers’ next great experience starts here.</p></div><Link className={styles.textLink} to="/vendor/orders">View all orders <Icon name="chevron" size={13} /></Link></div><div className={styles.tabs} role="group" aria-label="Filter recent orders">{[{ key: "all", label: "All orders" }, { key: "action", label: "To fulfill" }, { key: "delivered", label: "Delivered" }].map(tab => <button aria-pressed={orderTab === tab.key} className={orderTab === tab.key ? styles.tabActive : ""} key={tab.key} onClick={() => setOrderTab(tab.key)}>{tab.label}{tab.key === "action" && current.orders !== null ? <span>{fulfillment.length}</span> : null}</button>)}</div>
+      {recentOrders.length ? <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Payment</th><th>Fulfillment</th><th className={styles.alignRight}>Amount</th><th><span className={styles.srOnly}>Details</span></th></tr></thead><tbody>{recentOrders.map(order => <tr key={order.id}><td><Link className={styles.orderId} to={`/vendor/orders/${encodeURIComponent(order.id)}`}>#{order.id.slice(-8).toUpperCase()}</Link></td><td><span className={styles.customer}><i>{order.customer[0]?.toUpperCase()}</i>{order.customer}</span></td><td>{order.createdAt && Number.isFinite(Date.parse(order.createdAt)) ? new Date(order.createdAt).toLocaleDateString("en-NG", { month: "short", day: "numeric" }) : "—"}</td><td><span className={`${styles.pill} ${styles[orderTone(order.paymentStatus)]}`}>{humanize(order.paymentStatus)}</span></td><td><span className={`${styles.pill} ${styles[orderTone(order.status)]}`}>{humanize(order.status)}</span></td><td className={styles.alignRight}><strong>{money(order.amount)}</strong></td><td><Link className={styles.rowArrow} to={`/vendor/orders/${encodeURIComponent(order.id)}`} aria-label={`View order ${order.id}`}><Icon name="chevron" size={15} /></Link></td></tr>)}</tbody></table></div> : <div className={styles.tableEmpty}><Icon name="orders" size={26} /><strong>{current.orders === null ? refreshing ? "Loading your orders..." : "Orders are unavailable" : orderTab === "action" ? "You’re all caught up." : "No orders to show yet."}</strong><p>{orderTab === "action" ? "Paid orders waiting for fulfillment will appear here." : "New orders will appear here as customers shop your store."}</p></div>}
+    </section>
+    <div className={styles.bottomGrid}>
+      <section className={styles.panel} id="products"><div className={styles.panelHeader}><div><h2>Your products</h2><p>A little upkeep. A better storefront.</p></div><Link className={styles.textLink} to="/vendor/products">Manage products <Icon name="chevron" size={13} /></Link></div><div className={styles.productFilters}><label><Icon name="search" size={15} /><input value={query} onChange={event => searchProducts(event.target.value)} aria-label="Filter dashboard products" placeholder="Find a product..." /></label><select aria-label="Product view" value={productFilter} onChange={event => setProductFilter(event.target.value)}><option value="all">All products</option><option value="low">Stock alerts</option><option value="draft">Drafts</option></select></div>
+        {filteredProducts.length ? <div className={styles.productList}>{filteredProducts.map(product => <Link to={`/vendor/products/${encodeURIComponent(product.id)}`} key={product.id} className={styles.productRow}><span className={styles.productThumb}>{product.image ? <img src={product.image} alt="" onError={event => { event.currentTarget.style.display = "none"; }} /> : <Icon name="catalog" size={22} />}</span><span className={styles.productName}><strong>{product.name}</strong><small>{product.category}</small></span><span className={styles.productStock}>{product.stock === null ? "Stock unreported" : `${product.stock} in stock`}</span><span className={`${styles.pill} ${styles[orderTone(product.status)]}`}>{statusLabel(product.status)}</span><Icon name="chevron" size={14} /></Link>)}</div> : <div className={styles.tableEmpty}><Icon name="catalog" size={27} /><strong>{query || productFilter !== "all" ? "No matching products" : current.products === null ? refreshing ? "Loading your products..." : "Products are unavailable" : "Give your store something to show."}</strong><p>{query || productFilter !== "all" ? "Try a different search or product view." : "Add your first product and make your store your own."}</p><Link className={styles.textLink} to="/vendor/products/create"><Icon name="plus" size={14} />Add product</Link></div>}
       </section>
-
-      <section className={styles.gridWide}>
-        <section className={styles.card}>
-          <div className={styles.cardTitle}>Stock Health</div>
-          <div className={styles.cardSubtitle}>
-            Products grouped by inventory state for {dateRangeLabel.toLowerCase()}.
-          </div>
-          <div className={styles.progressList}>
-            <div className={styles.progressRow}>
-              <span>Healthy stock</span>
-              <span>{safeStock}</span>
-            </div>
-            <div className={styles.progressBar}>
-              <div
-                className={styles.progressFill}
-                style={{
-                  width: hasProducts ? `${(safeStock / Math.max(dateScopedProducts.length, 1)) * 100}%` : "0%",
-                }}
-              />
-            </div>
-
-            <div className={styles.progressRow}>
-              <span>Low stock</span>
-              <span>{metrics.lowStock}</span>
-            </div>
-            <div className={styles.progressBar}>
-              <div
-                className={styles.progressFill}
-                style={{
-                  width: hasProducts ? `${(metrics.lowStock / Math.max(dateScopedProducts.length, 1)) * 100}%` : "0%",
-                }}
-              />
-            </div>
-
-            <div className={styles.progressRow}>
-              <span>Out of stock</span>
-              <span>{metrics.outOfStock}</span>
-            </div>
-            <div className={styles.progressBar}>
-              <div
-                className={styles.progressFill}
-                style={{
-                  width: hasProducts ? `${(metrics.outOfStock / Math.max(dateScopedProducts.length, 1)) * 100}%` : "0%",
-                }}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className={styles.card}>
-          <div className={styles.cardTitle}>Quick Actions</div>
-          <div className={styles.cardSubtitle}>Common seller tasks in one place.</div>
-          <div className={styles.quickActions}>
-            <Link to="/vendor/products/create" className={styles.actionBtn}>
-              Add Product
-            </Link>
-            <Link to="/vendor/products/stock/add" className={styles.actionBtn}>
-              Update Stock
-            </Link>
-            <Link to="/vendor/products/review" className={styles.actionBtn}>
-              Review Queue
-            </Link>
-            <Link to="/vendor/products/draft" className={styles.actionBtn}>
-              Finish Drafts
-            </Link>
-          </div>
-          <div className={styles.cardSubtitle}>
-            {lowStockProducts.length > 0
-              ? `Priority restocks: ${lowStockProducts.map((item) => item.name).join(", ")}.`
-              : "No urgent restocks at the moment."}
-          </div>
-        </section>
-      </section>
-
-      <section className={styles.card}>
-        <div className={styles.cardHeader}>
-          <div>
-            <div className={styles.cardTitle}>Products</div>
-            <div className={styles.cardSubtitle}>
-              Showing {recentProducts.length} of {filteredProducts.length} matching products in{" "}
-              {dateRangeLabel.toLowerCase()}.
-            </div>
-          </div>
-          <div className={styles.tableFilters}>
-            <input
-              className={styles.filterInput}
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search name or category"
-              aria-label="Search products"
-            />
-            <select
-              className={styles.filterInput}
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              aria-label="Filter by status"
-            >
-              <option value="all">All statuses</option>
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        {loading ? <div className={styles.cardSubtitle}>Loading seller data...</div> : null}
-        {!loading && !hasProducts ? (
-          <div className={styles.cardSubtitle}>No seller products found for this date range.</div>
-        ) : null}
-        {!loading && hasProducts && filteredProducts.length === 0 ? (
-          <div className={styles.cardSubtitle}>
-            No products match your filters. Try a different search or status.
-          </div>
-        ) : null}
-        {recentProducts.length > 0 ? (
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Category</th>
-                  <th>Price</th>
-                  <th>Stock</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentProducts.map((product) => (
-                  <tr key={product.id}>
-                    <td>{product.name}</td>
-                    <td>{product.category}</td>
-                    <td>{product.price === null ? "-" : formatNaira(product.price)}</td>
-                    <td>{product.stock}</td>
-                    <td>
-                      <span className={styles.pill}>{product.status}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </section>
-
-      <section className={styles.card}>
-        <div className={styles.cardHeader}>
-          <div>
-            <div className={styles.cardTitle}>Recent Orders</div>
-            <div className={styles.cardSubtitle}>
-              Latest {recentOrders.length} of {dateScopedOrders.length} seller orders in{" "}
-              {dateRangeLabel.toLowerCase()}.
-            </div>
-          </div>
-          <Link to="/vendor/orders" className={styles.actionBtn}>
-            View all orders
-          </Link>
-        </div>
-        {loading ? <div className={styles.cardSubtitle}>Loading order activity...</div> : null}
-        {!loading && dateScopedOrders.length === 0 ? (
-          <div className={styles.cardSubtitle}>No orders found for this date range.</div>
-        ) : null}
-        {!loading && recentOrders.length > 0 ? (
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Order ID</th>
-                  <th>Customer</th>
-                  <th>Date</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentOrders.map((order) => {
-                  const tone = getOrderStatusTone(order.status);
-                  const toneClass =
-                    tone === "success"
-                      ? styles.pillSuccess
-                      : tone === "danger"
-                      ? styles.pillDanger
-                      : tone === "warning"
-                      ? styles.pillWarning
-                      : "";
-
-                  return (
-                    <tr key={order.id}>
-                      <td>{order.id}</td>
-                      <td>{order.customer}</td>
-                      <td>{formatDate(order.createdAt)}</td>
-                      <td>{formatNaira(order.amount)}</td>
-                      <td>
-                        <span className={`${styles.pill} ${toneClass}`}>
-                          {order.status}
-                        </span>
-                      </td>
-                      <td>
-                        <Link to={`/vendor/orders/${order.id}`} className={styles.actionBtn}>
-                          Open
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </section>
-    </>
-  );
+      <div className={styles.sideStack}><section className={styles.panel}><div className={styles.panelHeader}><div><h2>Inventory health</h2><p>Keep your best sellers in stock.</p></div><Icon name="catalog" size={19} /></div><div className={styles.stockHeadline}><strong>{current.products === null ? "—" : inventoryKnown.length}</strong><span>listings with stock reported</span></div><div className={styles.stockBar} aria-hidden="true">{stockGroups.map(group => <span key={group.tone} className={styles[group.tone]} style={{ width: `${inventoryKnown.length ? group.count / inventoryKnown.length * 100 : 0}%` }} />)}</div><div className={styles.stockLegend}>{stockGroups.map(group => <div key={group.tone}><span><i className={styles[group.tone]} />{group.label}</span><strong>{current.products === null ? "—" : group.count}</strong></div>)}</div><Link to="/vendor/products/stock" className={styles.stockLink}>Manage your inventory <Icon name="chevron" size={14} /></Link></section>
+      <section className={styles.escrowCard} id="payments"><span className={styles.escrowMark}><svg width="21" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 2 3 6v6c0 5 9 10 9 10s9-5 9-10V6l-9-4Z" /><path d="m8 12 3 3 5-6" /></svg></span><div><span className={styles.escrowEyebrow}>PAYMENTS & ESCROW</span><h2>Paid isn’t the same as released.</h2><p>Customer payment and the release of funds are separate steps. Review each order’s payment and delivery status.</p><Link to="/vendor/orders">Review your orders <Icon name="chevron" size={13} /></Link><small>Escrow balance and withdrawal reporting will appear when available.</small></div></section></div>
+    </div>
+    <p className={styles.dataNote}>Overview uses up to 200 recent orders and 200 product records. Sales dates follow your device’s local time. Unknown payment or stock values are not counted as confirmed sales or stock alerts.</p>
+  </div>;
 }

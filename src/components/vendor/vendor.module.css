@@ -286,13 +286,13 @@
 
 .statCard {
   background: #ffffff;
-  border: 1px solid #dce8ff;
-  border-radius: 14px;
-  padding: 14px 16px;
+  border: 1px solid #e5eaf3;
+  border-radius: 9px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  box-shadow: 0 14px 30px rgba(51, 102, 255, 0.12);
+  box-shadow: none;
 }
 
 .statLabel {
@@ -322,10 +322,10 @@
 
 .card {
   background: #ffffff;
-  border: 1px solid #dce8ff;
-  border-radius: 14px;
-  padding: 16px 18px;
-  box-shadow: 0 16px 34px rgba(51, 102, 255, 0.1);
+  border: 1px solid #e5eaf3;
+  border-radius: 9px;
+  padding: 20px 22px;
+  box-shadow: none;
 }
 
 .cardTitle {

@@ -38,6 +38,14 @@ The callback URL must be reachable by the customer's browser and accepted by the
 
 Run `npm run test:payments` for the focused payment tests and `npm run build` for the production build. Before release, use a buyer account and the backend's Paystack test mode to exercise successful payment, cancellation, delayed confirmation, and resuming a pending order.
 
+## Seller workspace
+
+The `/vendor` workspace includes responsive navigation, product search, paid-sales reporting for 7/30/90 days, CSV order exports, fulfillment filters, and inventory alerts. Data comes from the seller product and order APIs; the overview labels its limit of 200 records per resource. Unknown stock and payment values are kept distinct from zero.
+
+Paid sales represent confirmed customer payments, not released escrow or withdrawable funds. Escrow release and payout reporting remain pending as recorded in [ESCROW-NOTES.md](ESCROW-NOTES.md).
+
+Run `npm run test:seller` for the reporting checks. `tests/seller-dashboard.browser.cjs` provides local Chrome checks using synthetic data, with Next.js on port 3011 and a dedicated Chrome debugging session on port 9228. Synthetic data is used only by the test script and is never sent to the backend.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

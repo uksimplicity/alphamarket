@@ -1,480 +1,141 @@
 "use client";
 
-import { Link, Outlet, useLocation } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
-import styles from "./vendor.module.css";
-import { getAuth, getDisplayName } from "@/components/auth/authStorage";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { clearAuth, getDisplayName } from "@/components/auth/authStorage";
+import { useAuthUser } from "@/components/auth/useAuthUser";
+import Icon, { type AdminIconName } from "@/components/admin/AdminIcon";
+import { getCurrentSellerStoreProfile } from "@/components/store/storeProfileClient";
+import styles from "./sellerShell.module.css";
 
-type NavItem = {
-  label: string;
-  href: string;
-};
-
-type VendorProfile = {
-  id?: string;
-  email?: string;
-  phone?: string;
-  role?: string;
-  first_name?: string;
-  last_name?: string;
-};
-
-const sellerSections: Array<{ title: string; items: NavItem[] }> = [
-  {
-      title: "Products",
-      items: [
-        { label: "All Products", href: "/vendor/products" },
-        { label: "Create Product", href: "/vendor/products/create" },
-        { label: "Draft Products", href: "/vendor/products/draft" },
-        { label: "Stock Products", href: "/vendor/products/stock" },
-        { label: "Add Stock", href: "/vendor/products/stock/add" },
-      { label: "Review Queue", href: "/vendor/products/review" },
-      { label: "Boost Product", href: "#" },
-    ],
-  },
-  {
-    title: "Order Management",
-    items: [
-      { label: "Orders", href: "/vendor/orders" },
-      { label: "Transactions", href: "#" },
-    ],
-  },
-  {
-    title: "Reports & Analytics",
-    items: [{ label: "Sales Reports", href: "#" }],
-  },
-  {
-    title: "Wallet",
-    items: [
-      { label: "Earning", href: "#" },
-      { label: "Withdraws", href: "#" },
-      { label: "Refunds", href: "#" },
-      { label: "Escrow", href: "#" },
-    ],
-  },
-  {
-    title: "Promotional Deals",
-    items: [{ label: "Coupon", href: "#" }],
-  },
-  {
-    title: "Help & Support",
-    items: [{ label: "Inbox", href: "#" }],
-  },
+type Item = { label: string; href: string; icon: AdminIconName };
+const catalog: Item[] = [
+  { label: "All products", href: "/vendor/products", icon: "catalog" },
+  { label: "Drafts", href: "/vendor/products/draft", icon: "orders" },
+  { label: "Inventory", href: "/vendor/products/stock", icon: "catalog" },
+  { label: "Review queue", href: "/vendor/products/review", icon: "alert" },
+  { label: "Product types", href: "/vendor/products/types", icon: "settings" },
+];
+const mainLinks: Item[] = [
+  { label: "Overview", href: "/vendor", icon: "overview" },
+  { label: "Orders", href: "/vendor/orders", icon: "orders" },
+  { label: "Performance", href: "/vendor#performance", icon: "chart" },
+  { label: "Payments & escrow", href: "/vendor#payments", icon: "wallet" },
 ];
 
-function formatRole(role?: string) {
-  if (!role) return "Vendor";
-  return role
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 export default function VendorShell() {
-  const { pathname } = useLocation();
-  const isDashboard = pathname === "/vendor" || pathname === "/vendor/";
-  const [vendorDetails, setVendorDetails] = useState<VendorProfile | null>(() => getAuth()?.user ?? null);
-  const [vendorName, setVendorName] = useState(() =>
-    getDisplayName(getAuth()?.user)
-  );
-  const [showSettings, setShowSettings] = useState(false);
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [profileError, setProfileError] = useState("");
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [productsOpen, setProductsOpen] = useState(pathname.startsWith("/vendor/products"));
-  const [ordersOpen, setOrdersOpen] = useState(false);
-  const [reportsOpen, setReportsOpen] = useState(false);
-  const [walletOpen, setWalletOpen] = useState(false);
-  const [promoOpen, setPromoOpen] = useState(false);
-  const [supportOpen, setSupportOpen] = useState(false);
-
-  const roleLabel = useMemo(
-    () => formatRole(vendorDetails?.role),
-    [vendorDetails?.role]
-  );
-  const sectionState: Record<string, [boolean, (value: boolean | ((prev: boolean) => boolean)) => void]> = {
-    Products: [productsOpen, setProductsOpen],
-    "Order Management": [ordersOpen, setOrdersOpen],
-    "Reports & Analytics": [reportsOpen, setReportsOpen],
-    Wallet: [walletOpen, setWalletOpen],
-    "Promotional Deals": [promoOpen, setPromoOpen],
-    "Help & Support": [supportOpen, setSupportOpen],
-  };
+  const location = useLocation();
+  const navigate = useNavigate();
+  const user = useAuthUser();
+  const name = getDisplayName(user) || "Seller";
+  const initials = name.split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase();
+  const [collapsed, setCollapsed] = useState(false);
+  const [catalogOpen, setCatalogOpen] = useState(true);
+  const [search, setSearch] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
+  const [store, setStore] = useState<ReturnType<typeof getCurrentSellerStoreProfile>>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const drawer = useRef<HTMLDialogElement>(null);
+  const logout = useRef<HTMLDialogElement>(null);
+  const account = useRef<HTMLDetailsElement>(null);
+  const active = (href: string) => `${location.pathname.replace(/\/$/, "")}${location.hash}` === href;
+  const productRoute = location.pathname.startsWith("/vendor/products");
+  const title = [...mainLinks, ...catalog, { label: "Add product", href: "/vendor/products/create" }, { label: "Store settings", href: "/vendor/store" }, { label: "Your account", href: "/vendor/profile" }]
+    .find(item => active(item.href))?.label ?? (location.pathname.includes("orders/") ? "Order details" : productRoute ? "Products" : "Seller workspace");
 
   useEffect(() => {
-    function onStorage(e: StorageEvent) {
-      if (e.key === "alpha.auth") {
-        const nextAuth = getAuth();
-        setVendorName(getDisplayName(nextAuth?.user));
-        setVendorDetails(nextAuth?.user ?? null);
-      }
-    }
+    const updateStore = () => setStore(getCurrentSellerStoreProfile());
+    updateStore();
+    window.addEventListener("alpha-vendor-store-updated", updateStore);
+    window.addEventListener("storage", updateStore);
+    return () => { window.removeEventListener("alpha-vendor-store-updated", updateStore); window.removeEventListener("storage", updateStore); };
+  }, [user?.id]);
 
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+  useEffect(() => {
+    drawer.current?.close();
+    if (account.current) account.current.open = false;
+    if (location.hash) {
+      const timer = setTimeout(() => document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [location.pathname, location.hash, location.search]);
+
+  useEffect(() => {
+    setSearch(new URLSearchParams(location.search).get("search") ?? "");
+  }, [location.search]);
+
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); searchRef.current?.focus(); }
+      if (event.key === "Escape" && account.current) account.current.open = false;
+    };
+    const outside = (event: PointerEvent) => { if (account.current && !account.current.contains(event.target as Node)) account.current.open = false; };
+    window.addEventListener("keydown", keydown);
+    document.addEventListener("pointerdown", outside);
+    return () => { window.removeEventListener("keydown", keydown); document.removeEventListener("pointerdown", outside); };
   }, []);
 
-  useEffect(() => {
-    if (!showSettings) return;
-    let canceled = false;
-
-    async function loadProfile() {
-      setProfileLoading(true);
-      setProfileError("");
-      try {
-        const auth = getAuth();
-        const token = auth?.access_token;
-        const response = await fetch("/api/user/profile", {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-
-        const text = await response.text();
-        let payload: unknown = null;
-        try {
-          payload = text ? JSON.parse(text) : null;
-        } catch {
-          payload = text;
-        }
-
-        if (!response.ok) {
-          const message =
-            payload && typeof payload === "object" && "error" in payload
-              ? String((payload as { error: unknown }).error)
-              : `Failed to load profile (${response.status}).`;
-          throw new Error(message);
-        }
-
-        const record =
-          payload && typeof payload === "object"
-            ? (((payload as Record<string, unknown>).data ??
-                (payload as Record<string, unknown>).user ??
-                (payload as Record<string, unknown>).profile ??
-                payload) as Record<string, unknown>)
-            : null;
-        if (!record || canceled) return;
-
-        const nextDetails: VendorProfile = {
-          id: String(record.id ?? record.user_id ?? auth?.user?.id ?? ""),
-          email: String(record.email ?? auth?.user?.email ?? ""),
-          phone: String(record.phone ?? auth?.user?.phone ?? ""),
-          role: String(record.role ?? auth?.user?.role ?? "seller"),
-          first_name: String(record.first_name ?? auth?.user?.first_name ?? ""),
-          last_name: String(record.last_name ?? auth?.user?.last_name ?? ""),
-        };
-
-        setVendorDetails(nextDetails);
-        setVendorName((prev) => getDisplayName(nextDetails) || prev);
-      } catch (err) {
-        if (!canceled) {
-          setProfileError(
-            err instanceof Error
-              ? err.message
-              : "Could not fetch profile details from backend."
-          );
-        }
-      } finally {
-        if (!canceled) setProfileLoading(false);
-      }
-    }
-
-    void loadProfile();
-    return () => {
-      canceled = true;
-    };
-  }, [showSettings, vendorName]);
-
-  return (
-    <div className={styles.page}>
-      <aside className={styles.sidebar}>
-        <div className="mb-6 flex items-center gap-2 px-2 font-semibold text-slate-900">
-          <img className="h-8" src="/logo.png" alt="Alpha Marketplace" />
-          Alpha Marketplace
-        </div>
-        <div className="mb-4">
-          <Link
-            to="/vendor"
-            className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ${
-              isDashboard
-                ? "bg-brand text-white shadow-md shadow-blue-200/60"
-                : "text-slate-600 hover:bg-blue-50"
-            }`}
-          >
-            Dashboard
-          </Link>
-        </div>
-
-        <nav className="flex flex-col gap-4 text-sm">
-          {sellerSections.map((section) => {
-            const [isOpen, setOpen] = sectionState[section.title];
-            const sectionActive = section.items.some(
-              (item) => item.href !== "#" && pathname.startsWith(item.href)
-            );
-
-            return (
-              <div key={section.title}>
-                <button
-                  type="button"
-                  onClick={() => setOpen((prev) => !prev)}
-                  aria-expanded={isOpen}
-                  className="w-full rounded-xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-left text-sm font-semibold text-[#1b3ea6] transition hover:bg-blue-100/70"
-                >
-                  {section.title}
-                </button>
-                {isOpen ? (
-                  <div className="relative ml-4 mt-2 border-l border-blue-200 pl-5">
-                    {section.items.map((item) => {
-                      const active = item.href !== "#" && pathname.startsWith(item.href);
-                      const sharedClass = `relative block py-2 text-sm ${
-                        active ? "font-semibold text-brand" : "text-slate-600 hover:text-[#1b3ea6]"
-                      }`;
-
-                      if (item.href === "#") {
-                        return (
-                          <button
-                            key={`${section.title}-${item.label}`}
-                            type="button"
-                            className={`${sharedClass} w-full cursor-not-allowed text-left opacity-70`}
-                            disabled
-                          >
-                            <span className="absolute -left-[22px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand/70" />
-                            {item.label}
-                          </button>
-                        );
-                      }
-
-                      return (
-                        <Link
-                          key={`${section.title}-${item.label}`}
-                          to={item.href}
-                          className={sharedClass}
-                        >
-                          <span className="absolute -left-[22px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-brand/70" />
-                          {item.label}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ) : null}
-                {sectionActive && !isOpen ? (
-                  <div className="mt-2 px-3 text-xs text-brand">Active section</div>
-                ) : null}
-              </div>
-            );
-          })}
-        </nav>
-
-        <div className={styles.navGroup}>
-          <div className={styles.navLabel}>Account</div>
-          <Link to="/vendor/store" className={styles.settingsBtn}>
-            My Store
-          </Link>
-          <Link to="/vendor/profile" className={styles.settingsBtn}>
-            Profile
-          </Link>
-          <button
-            type="button"
-            className={styles.settingsBtn}
-            onClick={() => setShowSettings(true)}
-          >
-            Settings
-          </button>
-        </div>
-      </aside>
-
-      <main className={styles.main}>
-        <div className={styles.topbar}>
-          <div className={styles.topLeft}>
-            <button className={styles.collapseBtn} aria-label="Collapse sidebar">
-              <span>{"<"}</span>
-            </button>
-            <div className={styles.search}>
-              <span>Search</span>
-              <input aria-label="Search" placeholder="Search..." />
-            </div>
-          </div>
-          <div className={styles.topActions}>
-            <Link to="/vendor/products/create" className={styles.sellButton}>
-              Sell
-            </Link>
-            <div
-              className={`${styles.profile} ${styles.profileMenu} ${
-                profileOpen ? styles.profileMenuOpen : ""
-              }`}
-              onClick={() => setProfileOpen((prev) => !prev)}
-            >
-              <div className={styles.avatar} />
-              <div className={styles.profileMeta}>
-                <span className={styles.profileName}>
-                  {vendorName || "Vendor"}
-                </span>
-                <span className={styles.profileRole}>{roleLabel}</span>
-              </div>
-              <span className={styles.caret}>v</span>
-              <div className={styles.profileDropdown}>
-                <Link
-                  className={styles.profileItem}
-                  to="/vendor/profile"
-                  onClick={() => {
-                    setProfileOpen(false);
-                  }}
-                >
-                  Profile
-                </Link>
-                <Link className={styles.profileItem} to="/login">
-                  Logout
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <Outlet />
-      </main>
-
-      <nav className={styles.mobileNav} aria-label="Vendor mobile navigation">
-        <Link
-          className={`${styles.mobileNavItem} ${styles.mobileNavItemActive}`}
-          to="/vendor"
-        >
-          <span className={styles.mobileNavIcon}>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M3 10l9-7 9 7v9a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2v-9z"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
-          Home
-        </Link>
-        <Link className={styles.mobileNavItem} to="/vendor/orders">
-          <span className={styles.mobileNavIcon}>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M4 6h16M4 12h16M4 18h10"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
-            </svg>
-          </span>
-          Orders
-        </Link>
-        <Link className={styles.mobileNavItem} to="/vendor/products">
-          <span className={styles.mobileNavIcon}>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M4 7h16v10H4V7zm3-3h10v3H7V4z"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
-          Products
-        </Link>
-        <button className={styles.mobileNavItem} type="button">
-          <span className={styles.mobileNavIcon}>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M4 6h16v12H4V6zm0 0l8 6 8-6"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
-          Inbox
+  function findProducts(event: FormEvent) {
+    event.preventDefault();
+    navigate(`/vendor${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ""}#products`);
+  }
+  function signOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    clearAuth();
+    window.location.replace("/login/vendor");
+  }
+  function navItem(item: Item) {
+    return <Link key={item.href} to={item.href} title={item.label} aria-current={active(item.href) ? "page" : undefined}
+      className={`${styles.navLink} ${active(item.href) ? styles.active : ""}`}>
+      <Icon name={item.icon} size={19} /><span>{item.label}</span>
+      {active(item.href) ? <i className={styles.activeDot} /> : null}
+    </Link>;
+  }
+  function sidebarContent(mobile = false) {
+    return <>
+      <Link to="/vendor" className={styles.brand} aria-label="Alpha Marketplace seller overview">
+        <img src="/logo.png" alt="" /><span><strong>Alpha Marketplace</strong><small>SELLER WORKSPACE</small></span>
+      </Link>
+      {mobile ? <button className={`${styles.iconButton} ${styles.drawerClose}`} aria-label="Close navigation" onClick={() => drawer.current?.close()}><Icon name="close" /></button> : null}
+      <Link className={styles.storeCard} to="/vendor/store" title="Store settings"><span className={styles.storeAvatar}><Icon name="catalog" size={18} /></span><span><strong>{store?.name || "Your store"}</strong><small>Manage your storefront</small></span><Icon name="chevron" size={14} /></Link>
+      <nav className={styles.navigation} aria-label={mobile ? "Seller menu" : "Seller navigation"}>
+        <span className={styles.caption}>WORKSPACE</span>
+        {mainLinks.map(navItem)}
+        <span className={styles.caption}>BUSINESS</span>
+        <button className={`${styles.navLink} ${styles.groupButton} ${productRoute ? styles.groupActive : ""}`} aria-expanded={catalogOpen && (!collapsed || mobile)} onClick={() => { if (collapsed && !mobile) { setCollapsed(false); setCatalogOpen(true); } else setCatalogOpen(value => !value); }} title="Products">
+          <Icon name="catalog" size={19} /><span>Products</span><Icon name="chevron" size={14} className={catalogOpen ? styles.chevronOpen : ""} />
         </button>
-        <Link className={styles.mobileNavItem} to="/vendor/profile">
-          <span className={styles.mobileNavIcon}>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle
-                cx="12"
-                cy="8"
-                r="4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-              />
-              <path
-                d="M4 20c1.8-4 13.2-4 16 0"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
-            </svg>
-          </span>
-          Account
-        </Link>
+        {catalogOpen ? <div className={styles.subnav}>{catalog.map(item => <Link key={item.href} to={item.href} aria-current={active(item.href) ? "page" : undefined} className={active(item.href) ? styles.subActive : ""}>{item.label}</Link>)}</div> : null}
+        {navItem({ label: "Store settings", href: "/vendor/store", icon: "settings" })}
+        {navItem({ label: "Your account", href: "/vendor/profile", icon: "accounts" })}
       </nav>
-      {showSettings ? (
-        <div className={styles.settingsModal}>
-          <div className={styles.settingsCard}>
-            <h3>Account settings</h3>
-            <p>Review your account details and manage security.</p>
-            {profileLoading ? (
-              <p className={styles.cardSubtitle}>Loading latest profile from backend...</p>
-            ) : null}
-            {profileError ? (
-              <p className={styles.cardSubtitle}>{profileError}</p>
-            ) : null}
-            <div className={styles.settingsList}>
-              <div className={styles.settingsRow}>
-                <span className={styles.settingsLabel}>User ID</span>
-                <span className={styles.settingsValue}>{vendorDetails?.id ?? "-"}</span>
-              </div>
-              <div className={styles.settingsRow}>
-                <span className={styles.settingsLabel}>Name</span>
-                <span className={styles.settingsValue}>{vendorName || "Vendor"}</span>
-              </div>
-              <div className={styles.settingsRow}>
-                <span className={styles.settingsLabel}>Email</span>
-                <span className={styles.settingsValue}>{vendorDetails?.email ?? "-"}</span>
-              </div>
-              <div className={styles.settingsRow}>
-                <span className={styles.settingsLabel}>Phone</span>
-                <span className={styles.settingsValue}>{vendorDetails?.phone ?? "-"}</span>
-              </div>
-              <div className={styles.settingsRow}>
-                <span className={styles.settingsLabel}>Role</span>
-                <span className={styles.settingsValue}>{roleLabel}</span>
-              </div>
-            </div>
-            <div className={styles.settingsActions}>
-              <button
-                type="button"
-                className={styles.settingsSecondary}
-                onClick={() => setShowSettings(false)}
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                className={styles.settingsPrimary}
-                onClick={() => {
-                  if (vendorDetails?.email) {
-                    try {
-                      sessionStorage.setItem("pendingResetEmail", vendorDetails.email);
-                    } catch {
-                      // ignore storage errors
-                    }
-                  }
-                  window.location.href = "/forgot-password";
-                }}
-              >
-                Reset password
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <div className={styles.sidebarBottom}>
+        <div className={styles.supportCard}><span className={styles.supportIcon}>?</span><strong>A little help goes a long way.</strong><p>Get support for your store and orders.</p><a href="mailto:support@archintell.com">Contact seller support <Icon name="external" size={13} /></a></div>
+        <a className={styles.marketplaceLink} href="/"><Icon name="external" size={17} /><span>Visit marketplace</span></a>
+      </div>
+    </>;
+  }
+
+  return <div className={`${styles.workspace} ${collapsed ? styles.collapsed : ""}`}>
+    <a className={styles.skipLink} href="#seller-content">Skip to content</a>
+    <aside className={styles.sidebar}>{sidebarContent()}</aside>
+    <dialog ref={drawer} className={styles.mobileDrawer} aria-label="Seller navigation" onClick={event => { if (event.target === event.currentTarget) drawer.current?.close(); }}><div className={styles.drawerInner}>{sidebarContent(true)}</div></dialog>
+    <div className={styles.main}>
+      <header className={styles.topbar}>
+        <button className={`${styles.iconButton} ${styles.desktopToggle}`} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(value => !value)}><Icon name="panel" /></button>
+        <button className={`${styles.iconButton} ${styles.mobileToggle}`} aria-label="Open navigation" onClick={() => drawer.current?.showModal()}><Icon name="menu" /></button>
+        <div className={styles.breadcrumb}><span>Workspace</span><Icon name="chevron" size={12} /><strong>{title}</strong></div>
+        <form className={styles.search} onSubmit={findProducts} role="search"><Icon name="search" size={17} /><input ref={searchRef} value={search} onChange={event => setSearch(event.target.value)} aria-label="Search your products" placeholder="Search your products..." /><kbd>Ctrl K</kbd><button type="submit" aria-label="Search products"><Icon name="chevron" size={15} /></button></form>
+        <Link to="/vendor/products/create" className={styles.headerAdd}><Icon name="plus" size={17} /><span>Add product</span></Link>
+        <details className={styles.account} ref={account}><summary aria-label="Account menu"><span className={styles.avatar}>{initials}</span><span className={styles.accountName}><strong>{name}</strong><small>Seller account</small></span><Icon name="chevron" size={13} /></summary>
+          <div className={styles.accountDropdown}><div><strong>{name}</strong><span>{user?.email}</span></div><Link to="/vendor/profile"><Icon name="accounts" size={16} />Your profile</Link><Link to="/vendor/store"><Icon name="settings" size={16} />Store settings</Link>{store?.slug ? <a href={`/store/${encodeURIComponent(store.slug)}`}><Icon name="external" size={16} />View public store</a> : null}<button onClick={() => { if (account.current) account.current.open = false; logout.current?.showModal(); }}><Icon name="logout" size={16} />Sign out</button></div>
+        </details>
+      </header>
+      <main id="seller-content" tabIndex={-1} className={styles.content}><Outlet /></main>
+      <footer className={styles.footer}><span>Alpha Marketplace · Seller workspace</span><span>Built for your next chapter.</span></footer>
     </div>
-  );
+    <nav className={styles.mobileNav} aria-label="Seller quick navigation">{[mainLinks[0], mainLinks[1], catalog[0], { label: "Account", href: "/vendor/profile", icon: "accounts" as const }].map(item => <Link key={item.href} to={item.href} aria-current={active(item.href) ? "page" : undefined} className={active(item.href) ? styles.mobileActive : ""}><Icon name={item.icon} size={20} /><span>{item.label === "All products" ? "Products" : item.label}</span></Link>)}</nav>
+    <dialog ref={logout} className={styles.logoutDialog} aria-labelledby="seller-logout-title" onCancel={() => { if (signingOut) return; }}><Icon name="logout" size={27} /><h2 id="seller-logout-title">Sign out of your workspace?</h2><p>Your store and saved products will be here when you return.</p><div><button autoFocus className={styles.secondaryButton} disabled={signingOut} onClick={() => logout.current?.close()}>Stay signed in</button><button className={styles.primaryButton} disabled={signingOut} onClick={signOut}>{signingOut ? "Signing out..." : "Sign out"}</button></div></dialog>
+  </div>;
 }
