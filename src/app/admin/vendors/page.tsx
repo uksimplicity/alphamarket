@@ -22,13 +22,13 @@ export default function AdminVendorsPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-vendors"],
     queryFn: async () => {
-      const payload = await adminFetcher<unknown>("/grpc/users?limit=100");
+      const payload = await adminFetcher<unknown>("/users?limit=100");
       const rows = asArray(payload);
 
       return rows
         .map((row) => {
           const record = asRecord(row);
-          const role = pickString(record, ["role", "userRole", "account_role"]).toLowerCase();
+          const role = pickString(record, ["role", "userRole", "account_role", "user_type", "type"]).trim().toLowerCase();
           const id = pickString(record, ["id", "user_id", "uuid"]);
 
           return {
@@ -123,6 +123,9 @@ export default function AdminVendorsPage() {
         </pre>
       ) : null}
       <div className="mt-4 space-y-3 text-sm">
+        {data.length === 0 ? (
+          <p className="text-slate-500">No seller accounts found in the returned users.</p>
+        ) : null}
         {data.map((vendor) => (
           <div
             key={vendor.id}

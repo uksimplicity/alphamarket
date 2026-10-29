@@ -62,7 +62,7 @@ async function forwardRequest(
     if (attempt.status === 404) continue;
     if (attempt.status >= 500) {
       upstreamErrorRes = attempt;
-      upstreamErrorText = await attempt.text();
+      upstreamErrorText = await attempt.clone().text();
       continue;
     }
     res = attempt;
