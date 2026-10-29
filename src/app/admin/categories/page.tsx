@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   adminFetcher,
   authAdminFetcher,
@@ -11,13 +11,7 @@ import {
 } from "@/components/admin/api";
 import { getAuth } from "@/components/auth/authStorage";
 import { Card, ErrorState, Skeleton } from "@/components/dashboard/ui";
-
-type Category = {
-  id: string;
-  name: string;
-  createdBy: string;
-  date: string;
-};
+import { extractCategoryRecords, normalizeCategories, type Category } from "@/components/admin/categoryRecords";
 
 type CategoryDeleteTarget = {
   id: string;
@@ -43,6 +37,7 @@ function buildDynamicSlug(name: string) {
 }
 
 export default function AdminCategoriesPage() {
+  const queryClient = useQueryClient();
   const PAGE_SIZE = 20;
   const ADMIN_CATEGORIES_CACHE_KEY = "alpha.admin.categories";
   const [pendingKey, setPendingKey] = useState("");
@@ -59,52 +54,6 @@ export default function AdminCategoriesPage() {
     description: "",
     parentCategoryId: "",
   });
-
-  function extractCategoryRecords(payload: unknown): Record<string, unknown>[] {
-    const found: Record<string, unknown>[] = [];
-    const visited = new WeakSet<object>();
-
-    function walk(value: unknown) {
-      if (Array.isArray(value)) {
-        for (const item of value) walk(item);
-        return;
-      }
-
-      const record = asRecord(value);
-      if (!record) return;
-      if (visited.has(record)) return;
-      visited.add(record);
-
-      const nameValue =
-        typeof record.name === "string"
-          ? record.name
-          : typeof record.title === "string"
-            ? record.title
-            : typeof record.category_name === "string"
-              ? record.category_name
-              : typeof record.categoryName === "string"
-                ? record.categoryName
-            : "";
-      const hasName = nameValue.trim().length > 0;
-      const hasId =
-        typeof record.id === "string" ||
-        typeof record.id === "number" ||
-        typeof record.uuid === "string" ||
-        typeof record.category_id === "string" ||
-        typeof record.categoryId === "string";
-
-      if (hasName && hasId) {
-        found.push(record);
-      }
-
-      for (const nested of Object.values(record)) {
-        walk(nested);
-      }
-    }
-
-    walk(payload);
-    return found;
-  }
 
   async function callCategoryEndpoint<T>(path: string, init?: RequestInit): Promise<T> {
     const candidates = [
@@ -268,62 +217,7 @@ export default function AdminCategoriesPage() {
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-categories"],
-    queryFn: async () => {
-      try {
-        const mapPayloadToCategories = (payload: unknown) => {
-          const discovered = extractCategoryRecords(payload);
-          const fallbackRows = asArray(payload).flatMap((row) =>
-            Array.isArray(row) ? row : [row]
-          );
-          const records = discovered.length
-            ? discovered
-            : fallbackRows.map((row) => asRecord(row)).filter(Boolean) as Record<string, unknown>[];
-
-          const mapped = records.map((record, index) => {
-            const rawName = pickString(
-              record,
-              ["name", "title", "category_name", "categoryName"],
-              ""
-            ).trim();
-            if (!rawName) {
-              return null;
-            }
-            return {
-              id: pickString(record, ["id", "uuid", "category_id", "categoryId"], `category-${index}`),
-              name: rawName,
-              createdBy: pickString(record, ["created_by", "createdBy"], "Admin"),
-              date: pickString(record, ["created_at", "date"], ""),
-            } satisfies Category;
-          });
-          const seen = new Set<string>();
-          return mapped.filter((item): item is Category => {
-            if (!item) return false;
-            const key = `${item.id}:${item.name.toLowerCase()}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-        };
-        const primaryPayload = await fetchCategoriesPayload();
-        const primaryMapped = mapPayloadToCategories(primaryPayload);
-        if (primaryMapped.length > 0) {
-          return primaryMapped;
-        }
-
-        try {
-          const productsPayload = await (async () => {
-            return callCategoryEndpoint<unknown>("/products?limit=300&offset=0");
-          })();
-          const productsMapped = mapPayloadToCategories(productsPayload);
-          if (productsMapped.length > 0) return productsMapped;
-          return [] as Category[];
-        } catch {
-          return [] as Category[];
-        }
-      } catch {
-        return [] as Category[];
-      }
-    },
+    queryFn: async () => normalizeCategories(await fetchCategoriesPayload()),
   });
   useEffect(() => {
     try {
@@ -331,16 +225,8 @@ export default function AdminCategoriesPage() {
       if (raw) {
         const parsed = JSON.parse(raw) as unknown;
         if (Array.isArray(parsed)) {
-          const normalized = parsed
-            .map((item) => asRecord(item))
-            .filter(Boolean)
-            .map((record) => ({
-              id: pickString(record, ["id", "uuid", "category_id", "categoryId"], ""),
-              name: pickString(record, ["name", "title", "category_name", "categoryName"], ""),
-              createdBy: pickString(record, ["createdBy", "created_by"], "Admin"),
-              date: pickString(record, ["date", "created_at"], ""),
-            }))
-            .filter((item) => item.id && item.name);
+          const normalized = normalizeCategories(parsed);
+          localStorage.setItem(ADMIN_CATEGORIES_CACHE_KEY, JSON.stringify(normalized));
           setCachedCategories(normalized);
         }
       }
@@ -352,19 +238,18 @@ export default function AdminCategoriesPage() {
   }, []);
 
   const categories = useMemo(
-    () => ((data && data.length > 0 ? data : cachedCategories) ?? []),
+    () => data ?? cachedCategories,
     [data, cachedCategories]
   );
   useEffect(() => {
-    if (!cacheHydrated) return;
-    if (categories.length === 0) return;
+    if (!cacheHydrated || data === undefined) return;
     try {
-      localStorage.setItem(ADMIN_CATEGORIES_CACHE_KEY, JSON.stringify(categories));
-      setCachedCategories(categories);
+      localStorage.setItem(ADMIN_CATEGORIES_CACHE_KEY, JSON.stringify(data));
+      setCachedCategories(data);
     } catch {
       // ignore storage write errors
     }
-  }, [cacheHydrated, categories]);
+  }, [cacheHydrated, data]);
 
   if (isLoading && cachedCategories.length === 0) {
     return (
@@ -464,31 +349,31 @@ export default function AdminCategoriesPage() {
         }
       }
 
-      setActionMessage("Category created successfully.");
-      setCachedCategories((prev) => {
-        const createdRecord = extractCategoryRecords(createdPayload)[0] ?? asRecord(createdPayload);
-        const optimistic: Category = {
-          id:
-            pickString(createdRecord, ["id", "uuid", "category_id", "categoryId"], "").trim() ||
-            `local-${Date.now().toString(36)}`,
-          name,
-          createdBy: "Admin",
-          date: new Date().toISOString(),
-        };
-        const next = [optimistic, ...prev.filter((item) => item.name !== optimistic.name)];
-        try {
-          localStorage.setItem(ADMIN_CATEGORIES_CACHE_KEY, JSON.stringify(next));
-        } catch {
-          // ignore cache write errors
-        }
-        return next;
-      });
+      const responseRecord = asRecord(createdPayload);
+      if (responseRecord?.success === false) {
+        throw new Error(pickString(responseRecord, ["error", "message"], "Category creation failed."));
+      }
       setCategoryForm({
         name: "",
         description: "",
         parentCategoryId: "",
       });
-      await refetch();
+      const created = normalizeCategories(createdPayload, name).find(
+        (item) => item.name.toLowerCase() === name.toLowerCase()
+      );
+      const refreshed = await refetch();
+      const confirmed = created ?? refreshed.data?.find(
+        (item) => item.name.toLowerCase() === name.toLowerCase()
+      );
+      if (confirmed) {
+        queryClient.setQueryData<Category[]>(["admin-categories"], (current) => [
+          confirmed,
+          ...(current ?? categories).filter((item) => item.id !== confirmed.id),
+        ]);
+        setActionMessage("Category created successfully.");
+      } else {
+        setActionMessage("The create request succeeded, but the category's saved ID could not be confirmed. Refresh the list before trying again.");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create category.";
       setActionMessage(message);
