@@ -28,6 +28,7 @@ type ProductsData = {
   productTypes: CatalogItem[];
   categories: CatalogItem[];
   categoriesFromCache: boolean;
+  productTypesError?: string;
 };
 
 const ADMIN_PRODUCT_TYPES_CACHE_KEY = "alpha.admin.product-types";
@@ -170,29 +171,13 @@ async function fetchOptionalCatalogCollection(path: string, fallback: unknown = 
 }
 
 async function createProductTypeEndpoint(name: string, categoryId: string) {
-  const variants: Array<Record<string, unknown>> = categoryId
-    ? [
-        { name, category_id: categoryId },
-        { name, categoryId },
-        { product_type: name, category_id: categoryId },
-        { type_name: name, category_id: categoryId },
-      ]
-    : [{ name }, { product_type: name }, { type_name: name }];
-
-  let lastError: unknown = null;
-  for (const body of variants) {
-    try {
-      return await adminFetcher<unknown>("/product-types", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    } catch (err) {
-      lastError = err;
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error("Failed to create product type.");
+  // A failed response can follow a successful database write. Do not retry POST
+  // with guessed field names: preserve the original error and avoid duplicates.
+  return adminFetcher<unknown>("/product-types", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(categoryId ? { name, category_id: categoryId } : { name }),
+  });
 }
 
 function isTemporaryProductTypeId(id: string) {
@@ -259,12 +244,18 @@ export default function AdminProductsPage() {
         asArray(productsPayloadPrimary).length > 0
           ? productsPayloadPrimary
           : await fetchOptionalAdminCollection("/products_v0?limit=100", []);
-      const [attributesPayload, productTypesPayload, categoriesResult] = await Promise.all([
+      const [attributesPayload, productTypesResult, categoriesResult] = await Promise.all([
         fetchOptionalAdminCollection("/attributes?limit=100", []),
         (async () => {
-          const payload = await fetchOptionalAdminCollection("/product-types?limit=100", null);
-          if (payload) return payload;
-          return readCachedCatalogItems(ADMIN_PRODUCT_TYPES_CACHE_KEY);
+          try {
+            const payload = await adminFetcher<unknown>("/product-types?limit=100");
+            return { payload, error: "" };
+          } catch (err) {
+            return {
+              payload: readCachedCatalogItems(ADMIN_PRODUCT_TYPES_CACHE_KEY),
+              error: err instanceof Error ? err.message : "Failed to load product types.",
+            };
+          }
         })(),
         (async () => {
           const adminCandidates = [
@@ -318,7 +309,7 @@ export default function AdminProductsPage() {
         fallbackPrefix: "attribute",
       });
 
-      const productTypes = parseCatalogItems(productTypesPayload, {
+      const productTypes = parseCatalogItems(productTypesResult.payload, {
         idKeys: ["id", "uuid", "product_type_id", "type_id"],
         nameKeys: ["name", "title", "product_type", "type_name"],
         hintKeys: ["category_id", "categoryId", "category_name", "categoryName"],
@@ -337,6 +328,7 @@ export default function AdminProductsPage() {
         productTypes,
         categories,
         categoriesFromCache: categoriesResult.fromCache,
+        productTypesError: productTypesResult.error,
       } satisfies ProductsData;
     },
   });
@@ -353,6 +345,7 @@ export default function AdminProductsPage() {
         productTypes: data.productTypes.length > 0 ? data.productTypes : cachedData.productTypes,
         categories: data.categories.length > 0 ? data.categories : cachedData.categories,
         categoriesFromCache: data.categoriesFromCache && cachedData.categories.length > 0,
+        productTypesError: data.productTypesError,
       }
     : cachedData;
 
@@ -365,6 +358,7 @@ export default function AdminProductsPage() {
       productTypes: data.productTypes.length > 0 ? data.productTypes : prev.productTypes,
       categories: data.categories.length > 0 ? data.categories : prev.categories,
       categoriesFromCache: data.categoriesFromCache,
+      productTypesError: data.productTypesError,
     }));
   }, [data]);
 
@@ -455,6 +449,7 @@ export default function AdminProductsPage() {
   }
 
   async function createProductType() {
+    if (pendingKey === "create-product-type") return;
     const name = productTypeForm.name.trim();
     if (!name) {
       setActionMessage("Product type name is required.");
@@ -644,7 +639,7 @@ export default function AdminProductsPage() {
         </div>
       ) : null}
       {actionMessage ? (
-        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+        <div role="status" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
           {actionMessage}
         </div>
       ) : null}
@@ -805,6 +800,15 @@ export default function AdminProductsPage() {
           </div>
         ) : null}
 
+        {resolvedData.productTypesError ? (
+          <div className="mt-4">
+            <ErrorState
+              message={`Failed to load product types. ${resolvedData.productTypesError}`}
+              onRetry={() => { void refetch(); }}
+            />
+          </div>
+        ) : null}
+
         <div className="mt-6 grid gap-3 md:grid-cols-[1fr] md:items-center">
           <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
             <svg viewBox="0 0 24 24" className="h-4 w-4 text-slate-500" aria-hidden="true">
@@ -874,7 +878,9 @@ export default function AdminProductsPage() {
               {filteredProductTypes.length === 0 ? (
                 <tr>
                   <td className="px-4 py-6 text-slate-500" colSpan={4}>
-                    No product types found.
+                    {resolvedData.productTypesError
+                      ? "Product types could not be loaded. Try again above."
+                      : "No product types found."}
                   </td>
                 </tr>
               ) : null}

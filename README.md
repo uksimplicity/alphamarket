@@ -68,6 +68,17 @@ Bank updates, withdrawals and cancellations require review dialogs, forward once
 The documented response schemas are generic. Missing amount/status fields remain unknown, unrecognized lists show errors, and withdrawals stay disabled without an explicit available balance. Authenticated response shapes and real fund movement still need a controlled Paystack/backend test; no funds were moved during implementation.
 
 Run `npm run test:payouts` for payout contract/proxy checks. `tests/payouts.browser.cjs` tests the seller flow using synthetic data with Next.js on port 3011 and Chrome CDP on port 9228.
+## Buyer workspace
+
+The buyer dashboard at `/dashboard/home` keeps the marketplace blue theme with brighter surfaces, account navigation, current order activity, cart totals, saved products, collection filters, local search, price sorting and incremental product display. Product pages share the same visual language with real image selection, zoom, quantity controls, saved items, sharing and native cart confirmation dialogs.
+
+Listings come from the documented `/products/public` endpoint through `/api/products/public`; this workspace displays up to 100 public records. Paid sales and escrow values are not manufactured as buyer metrics. Existing static examples are labelled **Collection preview** and cannot enter the purchase flow as live inventory. Product details remove simulated messages, placeholder phone numbers, unrelated audio specifications and invented view counts.
+
+Saved items are kept on this device per account, with a separate guest collection. They persist across navigation and can be removed from `/dashboard/wishlist`; backend synchronization is not claimed. Main collection photos are served from `public/buyer` instead of requiring a third-party request during the initial render.
+
+Seller chat is waiting for the API the user will provide. The product page shows an honest messaging notice and support link, and sends no fake messages. Details are recorded in [BUYER-EXPERIENCE-NOTES.md](BUYER-EXPERIENCE-NOTES.md).
+
+Run `npm run test:buyer` for public catalog/proxy checks. `tests/buyer.browser.cjs` exercises buyer discovery, saved items, cart, product images, keyboard dialogs, preview restrictions, empty/error states and account switching with synthetic data, using Next.js on port 3011 and Chrome CDP on port 9228.
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

@@ -9,7 +9,10 @@ export default function MarketplaceSearch() {
   function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = query.trim();
-    window.location.assign(value ? `/?q=${encodeURIComponent(value)}#browse-listings` : "/#browse-listings");
+    const buyerArea = /^\/(dashboard|products)(\/|$)/.test(window.location.pathname);
+    const target = buyerArea ? "/dashboard/home" : "/";
+    const anchor = buyerArea ? "buyer-finds" : "browse-listings";
+    window.location.assign(`${target}${value ? `?q=${encodeURIComponent(value)}` : ""}#${anchor}`);
   }
   return <form className={styles.search} role="search" onSubmit={search}><ShopperIcon name="search" size={19} /><input aria-label="Search marketplace products" placeholder="Search products, brands and more" value={query} onChange={event => setQuery(event.target.value)} /><button type="submit">Search</button></form>;
 }

@@ -43,4 +43,3 @@ next-env.d.ts
 # local admin layout previews
 .admin-preview-browser/
 .admin-preview-*.png
-

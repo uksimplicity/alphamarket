@@ -215,7 +215,6 @@ export default function MarketplaceHeaderBase({
         ))}
       </nav>
 
-      <div className={styles.mobileSearchTrigger} aria-hidden="true" />
     </header>
   );
 }

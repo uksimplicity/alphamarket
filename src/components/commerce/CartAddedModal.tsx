@@ -1,82 +1,11 @@
-"use client";
-
-import styles from "@/app/page.module.css";
-
-type CartAddedModalProps = {
-  open: boolean;
-  onClose: () => void;
-  productName: string;
-  cartCount: number;
-};
-
-export default function CartAddedModal({
-  open,
-  onClose,
-  productName,
-  cartCount,
-}: CartAddedModalProps) {
+﻿"use client";
+import { useEffect, useRef } from "react";
+import ShopperIcon from "@/components/marketplace/ShopperIcon";
+import styles from "./cartAdded.module.css";
+type Props = { open: boolean; onClose: () => void; productName: string; cartCount: number };
+export default function CartAddedModal({ open, onClose, productName, cartCount }: Props) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { if (open) dialog.current?.showModal(); else dialog.current?.close(); }, [open]);
   if (!open) return null;
-
-  return (
-    <div
-      className={styles.cartModalOverlay}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Added to cart"
-      onClick={onClose}
-    >
-      <div className={styles.cartModal} onClick={(event) => event.stopPropagation()}>
-        <button
-          type="button"
-          className={styles.cartModalClose}
-          aria-label="Close"
-          onClick={onClose}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M6 6l12 12M18 6l-12 12"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-
-        <div className={styles.cartModalIcon}>
-          <svg viewBox="0 0 64 64" aria-hidden="true">
-            <circle cx="32" cy="32" r="26" fill="none" stroke="#2f7a3d" strokeWidth="6" />
-            <path
-              d="M20 33l8 8 16-18"
-              fill="none"
-              stroke="#2f7a3d"
-              strokeWidth="6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
-
-        <p className={styles.cartModalText}>
-          <strong>{productName}</strong> has been added to your Shopping Cart. You
-          have {cartCount} {cartCount === 1 ? "item" : "items"} in your Shopping
-          Cart.
-        </p>
-
-        <a className={styles.cartModalButton} href="/dashboard/cart">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M5 12l4 4 10-10"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          View Shopping Cart
-        </a>
-      </div>
-    </div>
-  );
+  return <dialog ref={dialog} className={styles.dialog} aria-labelledby="cart-added-title" onCancel={onClose} onClick={event => { if (event.target === event.currentTarget) onClose(); }}><button type="button" className={styles.close} aria-label="Close added-to-cart dialog" onClick={onClose}><ShopperIcon name="close" size={20} /></button><span className={styles.mark}><ShopperIcon name="cart" size={30} /></span><span className={styles.eyebrow}>A GOOD FIND, IN THE BAG</span><h2 id="cart-added-title">Added to your bag.</h2><p><strong>{productName}</strong> is ready when you are.</p><span className={styles.count}>{cartCount} {cartCount === 1 ? "item" : "items"} in your shopping bag</span><a href="/dashboard/cart" className={styles.primary}>View Shopping Cart<ShopperIcon name="arrow" size={17} /></a><button type="button" className={styles.continue} onClick={onClose}>Keep exploring</button></dialog>;
 }

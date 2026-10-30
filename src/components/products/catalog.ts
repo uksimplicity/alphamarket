@@ -1,3 +1,5 @@
+import { marketplaceImage } from "./productMedia";
+
 export type Product = {
   id: string;
   title: string;
@@ -8,6 +10,11 @@ export type Product = {
   rating: string;
   reviews: string;
   description: string;
+  category?: string;
+  stock?: number | null;
+  images?: string[];
+  condition?: string;
+  preview?: boolean;
   seller: { name: string; slug: string };
 };
 
@@ -232,7 +239,7 @@ export function getProductById(id: string) {
     .replace(/[?#].*$/, "")
     .replace(/\/+$/, "");
   const cleaned = normalized.replace(/[^a-z0-9-]/g, "");
-  return (
+  const product = (
     productMap.get(normalized) ||
     productMap.get(cleaned) ||
     extendedCatalog.find(
@@ -241,4 +248,5 @@ export function getProductById(id: string) {
         normalized.includes(slugify(product.title))
     )
   );
+  return product ? { ...product, image: marketplaceImage(product.image), preview: true } : undefined;
 }

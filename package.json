@@ -10,7 +10,8 @@
     "test:payments": "node --test tests/payments.test.cjs",
     "test:seller": "node --test tests/seller-data.test.cjs",
     "test:escrow": "node --test tests/escrow.test.cjs",
-    "test:payouts": "node --test tests/payouts.test.cjs"
+    "test:payouts": "node --test tests/payouts.test.cjs",
+    "test:buyer": "node --test tests/buyer.test.cjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.13",

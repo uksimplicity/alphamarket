@@ -35,4 +35,3 @@ export default function AdminIcon({ name, size = 20, className, style }: {
     </svg>
   );
 }
-

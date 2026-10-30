@@ -50,7 +50,7 @@ function writeJSON<T>(key: string, value: T) {
 }
 
 export function formatCurrency(amount: number) {
-  return `\u20A6${amount.toFixed(2)}`;
+  return new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
 }
 
 export function parsePrice(value: string) {

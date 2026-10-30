@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
 import { paymentError, responseData, orderPaymentStatus } from "./payments";
 import { escrowStatusFromOrder } from "./escrow";
+import { useAuthUser } from "@/components/auth/useAuthUser";
 
 type Row = Record<string, unknown>;
 function record(value: unknown): Row { return value && typeof value === "object" && !Array.isArray(value) ? value as Row : {}; }
@@ -46,14 +47,17 @@ export function parseBuyerOrder(payload: unknown): BuyerOrder | null {
 }
 
 export function useBuyerOrders(id?: string) {
+  const user = useAuthUser();
   const [orders, setOrders] = useState<BuyerOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
+  const [owner, setOwner] = useState<string | undefined>(undefined);
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
       setLoading(true);
+      setOwner(user?.id);
       setError("");
       setOrders([]);
       try {
@@ -76,6 +80,6 @@ export function useBuyerOrders(id?: string) {
     }
     void load();
     return () => controller.abort();
-  }, [id, revision]);
-  return { orders, loading, error, reload: () => setRevision((value) => value + 1) };
+  }, [id, revision, user?.id]);
+  return { orders: owner === user?.id ? orders : [], loading: owner !== user?.id || loading, error: owner === user?.id ? error : "", reload: () => setRevision((value) => value + 1) };
 }
