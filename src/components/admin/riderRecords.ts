@@ -121,3 +121,22 @@ export function mergeRiderDetails(summary: RiderRecord, payload: unknown): Rider
   merged.documents = [...summary.documents, ...detail.documents.filter(document => !summary.documents.some(existing => existing.url === document.url))];
   return merged;
 }
+
+export function mergeRiderAccount(rider: RiderRecord, payload: unknown): RiderRecord {
+  const envelope = record(payload);
+  const data = record(envelope.data ?? payload);
+  const account = record(data.user ?? data);
+  const accountId = read([account], ["id", "user_id", "userId", "uuid"]);
+  if (!rider.userId || accountId !== rider.userId) {
+    throw new Error("The returned account does not match this rider's registered user account.");
+  }
+  // User IDs identify account profiles, never the target of rider verification.
+  const identity = parseRider({user: account});
+  return {
+    ...rider,
+    name: identity.name || rider.name,
+    email: identity.email || rider.email,
+    phone: identity.phone || rider.phone,
+    address: identity.address || rider.address,
+  };
+}

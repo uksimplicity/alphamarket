@@ -9,7 +9,7 @@ const loaded = new Module(filename, module);
 loaded._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, filename);
-const {parseRider, riderRows, mergeRiderDetails, safeRiderDocumentUrl} = loaded.exports;
+const {parseRider, riderRows, mergeRiderDetails, mergeRiderAccount, safeRiderDocumentUrl} = loaded.exports;
 
 test('queue unwraps rider collections without confusing documents with riders', () => {
   const rider = { id: 'rider-1', documents: ['https://example.com/licence.pdf'] };
@@ -88,4 +88,30 @@ test('missing information is not fabricated and user IDs are not verification ID
   assert.equal(rider.name, '');
   assert.equal(rider.licenseNumber, '');
   assert.deepEqual(rider.documents, []);
+});
+
+test('a KYC-only rider gets their registered name from the linked account', () => {
+  const rider = parseRider({id: 'rider-1', user_id: 'user-1', vehicle_number: 'ABC', documents: ['https://example.com/license.pdf']});
+  const merged = mergeRiderAccount(rider, {data: {id: 'user-1', first_name: 'Ada', last_name: 'Okoro', email: 'ada@example.com', phone: '+234123'}});
+  assert.equal(merged.name, 'Ada Okoro');
+  assert.equal(merged.email, 'ada@example.com');
+  assert.equal(merged.phone, '+234123');
+  assert.equal(merged.id, 'rider-1');
+  assert.equal(merged.userId, 'user-1');
+  assert.equal(merged.vehiclePlate, 'ABC');
+  assert.deepEqual(merged.documents, rider.documents);
+});
+
+test('nested camel-case user account responses hydrate identity without erasing known contact fields', () => {
+  const rider = parseRider({id: 'rider-1', userId: 'user-1', phone: '+234123'});
+  const merged = mergeRiderAccount(rider, {data: {user: {id: 'user-1', firstName: 'Ada', lastName: 'Okoro'}}});
+  assert.equal(merged.name, 'Ada Okoro');
+  assert.equal(merged.phone, '+234123');
+});
+
+test('another account or a missing account ID cannot supply the rider identity', () => {
+  const rider = parseRider({id: 'rider-1', user_id: 'user-1'});
+  assert.throws(() => mergeRiderAccount(rider, {data: {id: 'user-2', name: 'Another person'}}), /does not match/);
+  assert.throws(() => mergeRiderAccount(rider, {data: {name: 'Unknown person'}}), /does not match/);
+  assert.throws(() => mergeRiderAccount(parseRider({id: 'rider-1'}), {data: {id: 'rider-1', name: 'Wrong association'}}), /does not match/);
 });

@@ -3,8 +3,9 @@
 import { useId } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAuth } from "@/components/auth/authStorage";
+import { adminFetcher } from "./api";
 import { Button } from "@/components/dashboard/ui";
-import { mergeRiderDetails, parseRider, type RiderRecord } from "./riderRecords";
+import { mergeRiderAccount, mergeRiderDetails, parseRider, type RiderRecord } from "./riderRecords";
 
 async function fetchRiderDetails(id: string, signal: AbortSignal): Promise<unknown> {
   const token = getAuth()?.access_token;
@@ -41,8 +42,21 @@ export default function RiderVerificationCard({ rider: summary, expanded, onRevi
     enabled: expanded && !!summary.id,
     retry: false,
   });
-  const rider = data ? mergeRiderDetails(summary, data) : summary;
-  const name = rider.name || rider.email || (rider.id ? `Rider ${rider.id}` : "Rider profile unavailable");
+  const submittedRider = data ? mergeRiderDetails(summary, data) : summary;
+  const account = useQuery({
+    queryKey: ["admin-rider-account", submittedRider.userId],
+    queryFn: async ({ signal }) => {
+      const payload = await adminFetcher<unknown>(`/grpc/users/${encodeURIComponent(submittedRider.userId)}`, { signal });
+      // Validate the account association inside the query so errors remain local
+      // to this card rather than interrupting the verification queue.
+      mergeRiderAccount(submittedRider, payload);
+      return payload;
+    },
+    enabled: !!submittedRider.userId,
+    retry: false,
+  });
+  const rider = account.data ? mergeRiderAccount(submittedRider, account.data) : submittedRider;
+  const name = rider.name || (account.isFetching ? "Loading registered rider name..." : rider.email || (rider.id ? `Rider ${rider.id}` : "Rider profile unavailable"));
   return <article className="overflow-hidden rounded-xl border border-slate-200 bg-white">
     <div className="p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -63,6 +77,10 @@ export default function RiderVerificationCard({ rider: summary, expanded, onRevi
       </dl>
     </div>
     {expanded && <div id={panelId} className="border-t border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+      {account.error && <div role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <p>The registered account details could not be loaded. The rider's submitted KYC information is shown below.</p>
+        <button className="mt-2 font-semibold underline" onClick={() => account.refetch()}>Retry account details</button>
+      </div>}
       {isFetching && <p role="status" className="mb-4 text-sm text-slate-500">Loading additional rider details…</p>}
       {error && <div role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <p>{error instanceof Error ? error.message : "Additional rider details are unavailable."}</p>
@@ -89,7 +107,7 @@ export default function RiderVerificationCard({ rider: summary, expanded, onRevi
       </ul> : <p className="mt-2 text-sm text-slate-500">No verification documents were returned for this rider.</p>}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-4">
         <p className="max-w-xl text-xs text-slate-500">Review the rider’s identity, vehicle information and submitted documents before verifying.</p>
-        <Button disabled={!rider.id || pending || isFetching} onClick={onVerify}>{pending ? "Verifying…" : "Verify rider"}</Button>
+        <Button disabled={!rider.id || pending || isFetching || account.isFetching} onClick={onVerify}>{pending ? "Verifying…" : "Verify rider"}</Button>
       </div>
     </div>}
   </article>;
