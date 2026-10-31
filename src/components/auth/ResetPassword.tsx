@@ -116,7 +116,7 @@ export default function ResetPassword() {
       >
         {!email ? (
           <div className={styles.errorText}>
-            We couldn't find your email. Please start again.
+            We couldn&apos;t find your email. Please start again.
           </div>
         ) : null}
         {step === "otp" ? (

@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 
 const paths = {
+  chat: "M21 11a8 8 0 0 1-8 8H5l-3 3V11a8 8 0 0 1 8-8h3a8 8 0 0 1 8 8ZM7 9h9M7 13h6",
   overview: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
   catalog: "M12 3 3 7.5 12 12l9-4.5L12 3ZM3 7.5v9L12 21l9-4.5v-9M12 12v9",
   accounts: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3a4 4 0 0 1 0 8M22 21v-2a4 4 0 0 0-3-3.87M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z",

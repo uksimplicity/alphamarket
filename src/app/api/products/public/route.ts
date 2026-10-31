@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   const search = incoming.get("search")?.trim();
   if (search) query.set("search", search.slice(0, 200));
   try {
-    const response = await fetch(`${API}/products/public?${query}`, { cache: "no-store", redirect: "manual", signal: AbortSignal.timeout(15000), headers: { Accept: "application/json" } });
+    const response = await fetch(`${API}/products/public?${query}`, { cache: "no-store", redirect: "manual", signal: AbortSignal.any([req.signal, AbortSignal.timeout(15000)]), headers: { Accept: "application/json" } });
     if (response.status >= 300 && response.status < 400) return Response.json({ error: "Products are temporarily unavailable." }, { status: 502 });
     return new Response(response.status === 204 ? null : await response.text(), { status: response.status, headers: { "Content-Type": response.headers.get("content-type") ?? "application/json", "Cache-Control": "no-store" } });
   } catch { return Response.json({ error: "Products could not be loaded. Please try again." }, { status: 502 }); }

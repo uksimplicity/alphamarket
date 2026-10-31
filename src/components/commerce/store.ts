@@ -1,7 +1,7 @@
-/* eslint-disable no-restricted-globals */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { getAuth, AUTH_UPDATED_EVENT } from "@/components/auth/authStorage";
 
 export type CartItem = {
   id: string;
@@ -27,6 +27,11 @@ export type Order = {
 };
 
 const CART_KEY = "alpha_cart_v1";
+export function cartStorageKey() {
+  const auth = getAuth();
+  const owner = auth?.user?.id || auth?.user?.email?.toLowerCase();
+  return auth?.access_token && owner ? `${CART_KEY}:${encodeURIComponent(owner)}` : CART_KEY;
+}
 const ORDER_KEY = "alpha_orders_v1";
 const CART_EVENT = "alpha-cart-updated";
 const ORDER_EVENT = "alpha-orders-updated";
@@ -60,11 +65,11 @@ export function parsePrice(value: string) {
 }
 
 export function getCart(): Cart {
-  return readJSON<Cart>(CART_KEY, { items: [] });
+  return readJSON<Cart>(cartStorageKey(), { items: [] });
 }
 
 export function saveCart(cart: Cart) {
-  writeJSON(CART_KEY, cart);
+  writeJSON(cartStorageKey(), cart);
   if (isBrowser) {
     window.dispatchEvent(new Event(CART_EVENT));
   }
@@ -164,21 +169,26 @@ function subscribe(eventName: string, callback: () => void) {
   if (!isBrowser) return () => {};
   window.addEventListener(eventName, callback);
   window.addEventListener("storage", callback);
+  window.addEventListener(AUTH_UPDATED_EVENT, callback);
   return () => {
     window.removeEventListener(eventName, callback);
     window.removeEventListener("storage", callback);
+    window.removeEventListener(AUTH_UPDATED_EVENT, callback);
   };
 }
 
-export function useCart() {
-  const [cart, setCart] = useState<Cart>({ items: [] });
-
-  useEffect(() => {
-    setCart(getCart());
-    return subscribe(CART_EVENT, () => setCart(getCart()));
-  }, []);
-
-  return cart;
+const EMPTY_CART = '{"items":[]}';
+const subscribeCart = (callback: () => void) => subscribe(CART_EVENT, callback);
+function cartSnapshot() {
+  try { return localStorage.getItem(cartStorageKey()) || EMPTY_CART; }
+  catch { return EMPTY_CART; }
+}
+export function useCart(): Cart {
+  const raw = useSyncExternalStore(subscribeCart, cartSnapshot, () => EMPTY_CART);
+  return useMemo(() => {
+    try { const value = JSON.parse(raw); return Array.isArray(value?.items) ? value : { items: [] }; }
+    catch { return { items: [] }; }
+  }, [raw]);
 }
 
 export function useCartCount() {

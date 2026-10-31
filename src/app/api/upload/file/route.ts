@@ -1,45 +1,12 @@
+import { problem, sellerAccess, sellerRequest } from "../../seller/productUpstream";
+
 export async function POST(req: Request) {
-  const rawApiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
-  const apiBase = rawApiBase.replace(/\/+$/, "");
-  const apiV1Base = apiBase.endsWith("/api/v1") ? apiBase : `${apiBase}/api/v1`;
-
-  if (!apiBase) {
-    return new Response(
-      JSON.stringify({ error: "NEXT_PUBLIC_API_BASE_URL is not set" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  const formData = await req.formData();
-  const authHeader = req.headers.get("authorization") ?? "";
-
-  const targets = Array.from(new Set([`${apiV1Base}/upload/file`, `${apiBase}/upload/file`]));
-  let res: Response | null = null;
-  for (const target of targets) {
-    const attempt = await fetch(target, {
-      method: "POST",
-      headers: {
-        ...(authHeader ? { Authorization: authHeader } : {}),
-      },
-      body: formData,
-    });
-    if (attempt.status === 404) continue;
-    res = attempt;
-    break;
-  }
-
-  if (!res) {
-    return new Response(
-      JSON.stringify({ error: "Upload endpoint not found on upstream.", tried: targets }),
-      { status: 502, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  const text = await res.text();
-  return new Response(text, {
-    status: res.status,
-    headers: {
-      "Content-Type": res.headers.get("content-type") ?? "application/json",
-    },
-  });
+  const access = sellerAccess(req);
+  if (access instanceof Response) return access;
+  let form: FormData;
+  try { form = await req.formData(); } catch { return problem("A file is required."); }
+  const file = form.get("file");
+  if (!(file instanceof Blob) || !file.size) return problem("Choose a file to upload.");
+  if (file.size > 3 * 1024 * 1024) return problem("File size must be at most 3 MB.");
+  return sellerRequest(req, "/upload/file", "POST", form);
 }

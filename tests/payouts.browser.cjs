@@ -28,6 +28,7 @@ async function main() {
     window.fetch = async (input, init = {}) => {
       const url = typeof input === 'string' ? input : input.url;
       if (!url.startsWith('/api/')) return realFetch(input, init);
+      if (url.startsWith('/api/user/profile')) return Response.json({ data: JSON.parse(localStorage.getItem('alpha.auth') || 'null')?.user || {} });
       window.__calls.push({ url, method: init.method || 'GET', authorization: init.headers?.Authorization });
       const parsed = new URL(url, location.origin), endpoint = parsed.pathname.replace('/api/payouts/', '');
       const method = init.method || 'GET';
@@ -111,7 +112,7 @@ async function main() {
     await evaluate(`localStorage.setItem('alpha.auth', JSON.stringify({ access_token: 'other-token', user: { id: 'other-seller', role: 'seller' } })); window.__summaryFail = true; window.dispatchEvent(new Event('alpha-auth-updated'));`);
     await wait(`document.body.innerText.includes('Balance: Preview unavailable')`);
     await check(`!document.body.innerText.includes('15,000.50')`, 'account switch clears previous available balance');
-    await send('Page.navigate', { url: 'http://127.0.0.1:3011/vendor/payments?buyer=1' }); await wait(`document.body.innerText.includes('Sign in with your seller account')`);
+    await send('Page.navigate', { url: 'http://127.0.0.1:3011/vendor/payments?buyer=1' }); await wait(`document.body.innerText.includes('A seller account approved by the service')`);
     await check(`!__calls.some(item => item.url.startsWith('/api/payouts/'))`, 'non-seller screen does not load payout data');
     assert.deepEqual(errors, []); console.log(checks + ' payout browser checks passed.');
   } finally { await send('Page.close').catch(() => {}); socket.close(); }

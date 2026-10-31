@@ -11,7 +11,7 @@ export default function LoginSelector() {
       subtitle="Choose how you want to access your account."
       footer={
         <div className={styles.footerText}>
-          Don't have an account? <Link className={styles.link} to="/signup">Sign Up</Link>
+          Don&apos;t have an account? <Link className={styles.link} to="/signup">Sign Up</Link>
         </div>
       }
     >

@@ -4,9 +4,13 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
 import { cartSubtotal, formatCurrency, useCart } from "@/components/commerce/store";
-import { checkoutUrl, createdOrderIds, paymentError, paymentReference, PENDING_CHECKOUT_KEY, type PendingCheckout } from "@/components/commerce/payments";
+import { checkoutUrl, checkoutStorageKey, readSavedCheckout, createdOrderIds, paymentError, paymentReference, type PendingCheckout } from "@/components/commerce/payments";
+import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import { Button, Card } from "@/components/dashboard/ui";
 import styles from "./page.module.css";
+import CheckoutAddresses from "@/components/commerce/CheckoutAddresses";
+import DeliveryLocationButton from "@/components/commerce/deliveryLocation";
+import { deliveryPoint } from "@/components/commerce/addresses";
 
 export default function CheckoutPage() {
   const cart = useCart();
@@ -16,7 +20,6 @@ export default function CheckoutPage() {
   const [longitude, setLongitude] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [locating, setLocating] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState<PendingCheckout | null>(null);
   const submitting = useRef(false);
@@ -25,7 +28,7 @@ export default function CheckoutPage() {
     const auth = getAuth();
     setContact(auth?.user?.phone ?? "");
     try {
-      const saved = sessionStorage.getItem(PENDING_CHECKOUT_KEY);
+      const saved = auth?.user?.id ? readSavedCheckout(sessionStorage, auth.user.id) : null;
       if (saved) {
         const value = JSON.parse(saved) as PendingCheckout;
         if (value.buyerId === auth?.user?.id && value.submitted && Array.isArray(value.orderIds)) setPending(value);
@@ -34,17 +37,6 @@ export default function CheckoutPage() {
       setError("Checkout recovery is unavailable. Check your orders before starting another payment.");
     }
   }, []);
-
-  function locateDelivery() {
-    setError("");
-    if (!navigator.geolocation) { setError("Location is unavailable. Enter your delivery coordinates below."); return; }
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => { setLatitude(String(coords.latitude)); setLongitude(String(coords.longitude)); setLocating(false); },
-      () => { setError("Could not get your location. Allow location access or enter your delivery coordinates."); setLocating(false); },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-    );
-  }
 
   async function pay() {
     if (submitting.current) return;
@@ -64,19 +56,24 @@ export default function CheckoutPage() {
         setError("Your cart contains an invalid quantity. Update your cart and try again."); return;
       }
     }
+    let stamp: string;
+    try { stamp = accountStamp(); } catch (failure) { setError((failure as Error).message); return; }
     submitting.current = true;
     setLoading(true);
     const headers = { "Content-Type": "application/json", Authorization: `Bearer ${auth.access_token.replace(/^Bearer\s+/i, "").trim()}` };
     async function request(path: string, body: unknown) {
+      checkAccount(stamp);
       const response = await fetch(path, { method: "POST", headers, body: JSON.stringify(body) });
       const payload = await response.json();
+      checkAccount(stamp);
       if (!response.ok || payload?.success === false) {
         throw Object.assign(new Error(paymentError(payload, `Checkout request failed (${response.status}).`)), { status: response.status, path });
       }
       return payload;
     }
     function persist(value: PendingCheckout) {
-      sessionStorage.setItem(PENDING_CHECKOUT_KEY, JSON.stringify(value));
+      checkAccount(stamp);
+      sessionStorage.setItem(checkoutStorageKey(auth!.user.id!), JSON.stringify(value));
       setPending(value);
     }
     try {
@@ -108,7 +105,7 @@ export default function CheckoutPage() {
       // Validation/auth failures reject the order before creation; let the buyer correct them.
       const failure = err as { status?: number; path?: string };
       if (failure.path === "/api/buyer/orders" && [400, 401, 403, 422].includes(failure.status ?? 0)) {
-        sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
+        if (getAuth()?.access_token === auth.access_token) sessionStorage.removeItem(checkoutStorageKey(auth.user.id));
         setPending(null);
       }
       setError(err instanceof Error ? err.message : "Unable to start payment. Please try again.");
@@ -127,10 +124,11 @@ export default function CheckoutPage() {
         <div className={styles.checkoutLeft}>
           <Card><div className={styles.checkoutCard}>
             <div className={styles.cardHeader}><h2>Delivery Address</h2></div>
+            <CheckoutAddresses address={address} contact={contact} latitude={latitude} longitude={longitude} disabled={loading || Boolean(pending)} onChoose={row => { setAddress(row.address); setContact(row.contact); setLatitude(String(row.latitude)); setLongitude(String(row.longitude)); }} />
             <fieldset className={styles.addressForm} disabled={loading || Boolean(pending)}>
               <label>Full delivery address<textarea autoComplete="street-address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Street address, city and state" /></label>
               <label>Contact phone number<input type="tel" autoComplete="tel" value={contact} onChange={(event) => setContact(event.target.value)} /></label>
-              <Button type="button" onClick={locateDelivery} disabled={locating}>{locating ? "Finding location..." : "Use my current location"}</Button>
+              <DeliveryLocationButton point={deliveryPoint(latitude, longitude)} onConfirm={point => { setLatitude(String(point.latitude)); setLongitude(String(point.longitude)); }} disabled={loading || Boolean(pending)} />
               <p className={styles.mutedText}>Use your current location only if you are at the delivery address, or enter its coordinates.</p>
               <div className={styles.coordinateFields}>
                 <label>Latitude<input type="number" step="any" min="-90" max="90" value={latitude} onChange={(event) => setLatitude(event.target.value)} /></label>

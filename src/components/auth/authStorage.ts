@@ -20,14 +20,18 @@ export type AuthPayload = {
 
 const STORAGE_KEY = "alpha.auth";
 export const AUTH_UPDATED_EVENT = "alpha-auth-updated";
+let generation = 0;
+export const authGeneration = () => generation;
 
 export function setAuth(payload: AuthPayload) {
   if (typeof window === "undefined") return;
+  if (!payload?.user || typeof payload.access_token !== "string" || !payload.access_token.trim()) throw new Error("Sign-in returned an invalid session. Please retry.");
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    generation++;
     window.dispatchEvent(new Event(AUTH_UPDATED_EVENT));
   } catch {
-    // ignore storage errors
+    throw new Error("Your browser could not save sign-in. Check storage settings and retry.");
   }
 }
 
@@ -35,7 +39,9 @@ export function getAuth(): AuthPayload | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as AuthPayload) : null;
+    if (!raw) return null;
+    const value = JSON.parse(raw);
+    return value && typeof value.access_token === "string" && value.access_token.trim() && value.user && typeof value.user === "object" && !Array.isArray(value.user) ? value as AuthPayload : null;
   } catch {
     return null;
   }
@@ -43,6 +49,7 @@ export function getAuth(): AuthPayload | null {
 
 export function clearAuth() {
   if (typeof window === "undefined") return;
+  generation++;
   try {
     localStorage.removeItem(STORAGE_KEY);
     window.dispatchEvent(new Event(AUTH_UPDATED_EVENT));

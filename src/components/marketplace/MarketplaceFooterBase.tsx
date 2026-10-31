@@ -28,7 +28,7 @@ export default function MarketplaceFooterBase({
             </div>
           </div>
           <p>
-            The world's most trusted marketplace for high-quality goods,
+            The world&apos;s most trusted marketplace for high-quality goods,
             connecting buyers and sellers with secure transactions.
           </p>
           <div className={styles.socials}>

@@ -31,6 +31,7 @@ async function main() {
     window.fetch = async (input, init = {}) => {
       const url = typeof input === 'string' ? input : input.url;
       if (!url.startsWith('/api/')) return realFetch(input, init);
+      if (url.startsWith('/api/user/profile')) return Response.json({ data: JSON.parse(localStorage.getItem('alpha.auth') || 'null')?.user || {} });
       window.__calls.push(url);
       if (init.method === 'POST' && url.startsWith('/api/admin/escrows/')) {
         window.__mutations.push({ url, body: init.body ? JSON.parse(init.body) : null });

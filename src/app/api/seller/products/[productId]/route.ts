@@ -1,272 +1,42 @@
-import type { NextRequest } from "next/server";
-import {
-  deleteMockProduct,
-  getMockProduct,
-  updateMockProduct,
-} from "../mockStore";
+import { invalidProduct, problem, productBody, productRows, sellerAccess, sellerRequest } from "../../productUpstream";
 
-const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
-const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
-const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v1`;
-const API_ROOT_BASE = API_BASE.endsWith("/api/v1") ? API_BASE.slice(0, -"/api/v1".length) : API_BASE;
-const API_BASE_CANDIDATES = Array.from(new Set([API_BASE, API_V1_BASE, `${API_ROOT_BASE}/api/v1`, API_ROOT_BASE]));
+type Context = { params: Promise<{ productId: string }> };
 
-function normalizeAuthHeader(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  return trimmed.replace(/^Bearer\s+Bearer\s+/i, "Bearer ");
-}
-
-async function proxySellerProduct(
-  req: Request,
-  productId: string,
-  method: "GET" | "PUT" | "PATCH" | "DELETE"
-) {
-  const { search } = new URL(req.url);
-  const hasBody = method !== "GET" && method !== "DELETE";
-  const body = hasBody ? await req.text() : "";
-  const parseBody = () => {
-    if (!body) return {} as Record<string, unknown>;
-    try {
-      return JSON.parse(body) as Record<string, unknown>;
-    } catch {
-      return {} as Record<string, unknown>;
-    }
-  };
-
-  if (!API_BASE) {
-    if (method === "GET") {
-      const item = getMockProduct(productId);
-      if (!item) {
-        return new Response(JSON.stringify({ error: "Product not found." }), {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ data: item, fallback: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-    if (method === "PUT" || method === "PATCH") {
-      const updated = updateMockProduct(productId, parseBody());
-      if (!updated) {
-        return new Response(JSON.stringify({ error: "Product not found." }), {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ data: updated, fallback: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-    if (method === "DELETE") {
-      const deleted = deleteMockProduct(productId);
-      if (!deleted) {
-        return new Response(JSON.stringify({ error: "Product not found." }), {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ success: true, fallback: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-    return new Response(
-      JSON.stringify({ error: "NEXT_PUBLIC_API_BASE_URL is not set" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+// Swagger has no seller detail GET. Find the exact ID in this authenticated seller's list.
+export async function GET(req: Request, context: Context) {
+  const { productId } = await context.params;
+  const seen = new Set<string>();
+  for (let offset = 0; offset < 10_000;) {
+    const response = await sellerRequest(req, `/seller/products?limit=200&offset=${offset}`);
+    if (!response.ok) return response;
+    const rows = productRows(await response.json());
+    if (!rows) return problem("Marketplace returned an unreadable product list.", 502);
+    const found = rows.find(row => String(row.id ?? row.productId ?? row.product_id ?? row.uuid ?? "") === productId);
+    if (found) return Response.json({ data: found }, { headers: { "Cache-Control": "no-store" } });
+    if (!rows.length) return problem("Product not found in your inventory.", 404);
+    const signature = JSON.stringify(rows.map(row => row.id ?? row.productId ?? row.product_id ?? row.uuid));
+    if (seen.has(signature)) return problem("Marketplace did not advance the inventory page.", 502);
+    seen.add(signature);
+    offset += rows.length;
   }
-
-  const authHeader = normalizeAuthHeader(req.headers.get("authorization") ?? "");
-  const cookieHeader = req.headers.get("cookie") ?? "";
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    ...(authHeader ? { Authorization: authHeader } : {}),
-    ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-  };
-
-  if (hasBody) {
-    headers["Content-Type"] = "application/json";
-  }
-
-  const safeId = encodeURIComponent(productId);
-  const urls = Array.from(
-    new Set([
-      ...API_BASE_CANDIDATES.map((base) => `${base}/seller/products/${safeId}${search}`),
-      ...API_BASE_CANDIDATES.map((base) => `${base}/auth/seller/products/${safeId}${search}`),
-      ...API_BASE_CANDIDATES.map((base) => `${base}/products/${safeId}${search}`),
-    ])
-  );
-
-  try {
-    let res: Response | null = null;
-    let upstreamErrorRes: Response | null = null;
-    const attempts: Array<{ url: string; status: number }> = [];
-
-    for (const url of urls) {
-      res = await fetch(url, {
-        method,
-        headers,
-        body: body || undefined,
-        cache: "no-store",
-      });
-      attempts.push({ url, status: res.status });
-      if (res.status === 404) continue;
-      if (res.status >= 500) {
-        upstreamErrorRes = res;
-        continue;
-      }
-      if (
-        res.status === 400 ||
-        res.status === 401 ||
-        res.status === 403 ||
-        res.status === 405 ||
-        res.status === 422
-      ) {
-        continue;
-      }
-      break;
-    }
-
-    if ((!res || res.status === 404) && !upstreamErrorRes) {
-      if (method === "GET") {
-        const item = getMockProduct(productId);
-        if (item) {
-          return new Response(
-            JSON.stringify({
-              data: item,
-              fallback: true,
-              warning: "Upstream endpoint not found. Returned local mock product.",
-            }),
-            {
-              status: 200,
-              headers: {
-                "Content-Type": "application/json",
-                "X-Proxy-Fallback": "seller-product-detail-mock",
-              },
-            }
-          );
-        }
-      }
-      if (method === "PUT" || method === "PATCH") {
-        const updated = updateMockProduct(productId, parseBody());
-        if (updated) {
-          return new Response(
-            JSON.stringify({
-              data: updated,
-              fallback: true,
-              warning: "Upstream update unavailable. Updated local mock product.",
-            }),
-            {
-              status: 200,
-              headers: {
-                "Content-Type": "application/json",
-                "X-Proxy-Fallback": "seller-product-update-mock",
-              },
-            }
-          );
-        }
-      }
-      if (method === "DELETE") {
-        const deleted = deleteMockProduct(productId);
-        if (deleted) {
-          return new Response(
-            JSON.stringify({
-              success: true,
-              fallback: true,
-              warning: "Upstream delete unavailable. Deleted local mock product.",
-            }),
-            {
-              status: 200,
-              headers: {
-                "Content-Type": "application/json",
-                "X-Proxy-Fallback": "seller-product-delete-mock",
-              },
-            }
-          );
-        }
-      }
-
-      return new Response(
-        JSON.stringify({
-          error: "Upstream endpoint not found.",
-          tried: urls,
-        }),
-        { status: 502, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    const finalRes = upstreamErrorRes ?? res;
-    if (!finalRes) {
-      return new Response(
-        JSON.stringify({
-          error: "Seller product proxy had no upstream response.",
-          tried: urls,
-        }),
-        { status: 502, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    const text = await finalRes.text();
-    if (finalRes.status >= 500) {
-      console.error("Seller product upstream 5xx", {
-        status: finalRes.status,
-        productId,
-        tried: urls,
-        attempts,
-        bodyPreview: text.slice(0, 400),
-      });
-    }
-
-    return new Response(text, {
-      status: finalRes.status,
-      headers: {
-        "Content-Type": finalRes.headers.get("content-type") ?? "application/json",
-      },
-    });
-  } catch (error) {
-    return new Response(
-      JSON.stringify({
-        error: "Failed to reach seller product upstream.",
-        details: error instanceof Error ? error.message : "Unknown fetch error",
-        tried: urls,
-      }),
-      { status: 502, headers: { "Content-Type": "application/json" } }
-    );
-  }
+  return problem("Inventory lookup limit reached. Narrow the inventory before trying again.", 502);
 }
 
-export async function GET(
-  req: NextRequest,
-  context: { params: Promise<{ productId: string }> }
-) {
+export async function PUT(req: Request, context: Context) {
+  const access = sellerAccess(req);
+  if (access instanceof Response) return access;
   const { productId } = await context.params;
-  return proxySellerProduct(req, productId, "GET");
+  const body = await productBody(req);
+  if (!body || !Object.keys(body).length) return problem("Product changes are required.");
+  const error = invalidProduct(body);
+  if (error) return problem(error);
+  return sellerRequest(req, `/seller/product/${encodeURIComponent(productId)}`, "PUT", { ...body, product_id: productId });
 }
 
-export async function PUT(
-  req: NextRequest,
-  context: { params: Promise<{ productId: string }> }
-) {
-  const { productId } = await context.params;
-  return proxySellerProduct(req, productId, "PUT");
-}
+// Existing stock editors use PATCH locally; the documented upstream method is PUT.
+export const PATCH = PUT;
 
-export async function PATCH(
-  req: NextRequest,
-  context: { params: Promise<{ productId: string }> }
-) {
+export async function DELETE(req: Request, context: Context) {
   const { productId } = await context.params;
-  return proxySellerProduct(req, productId, "PATCH");
-}
-
-export async function DELETE(
-  req: NextRequest,
-  context: { params: Promise<{ productId: string }> }
-) {
-  const { productId } = await context.params;
-  return proxySellerProduct(req, productId, "DELETE");
+  return sellerRequest(req, `/seller/product/${encodeURIComponent(productId)}`, "DELETE");
 }

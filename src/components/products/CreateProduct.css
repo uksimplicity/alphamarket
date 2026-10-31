@@ -1,4 +1,5 @@
 .create-page {
+  min-width: 0;
   background: #f3f4f6;
   min-height: 100vh;
   padding: 24px;
@@ -6,6 +7,7 @@
 }
 
 .create-card {
+  min-width: 0;
   background: #ffffff;
   border-radius: 12px;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
@@ -60,12 +62,14 @@
 }
 
 .create-form {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 18px;
 }
 
 .form-section {
+  min-width: 0;
   border: 1px solid #f1f5f9;
   border-radius: 10px;
   padding: 16px;
@@ -225,6 +229,7 @@
 }
 
 .variant-grid {
+  min-width: 0;
   display: grid;
   gap: 12px;
 }
@@ -563,7 +568,7 @@
   .media-grid,
   .variant-row,
   .discount-fields {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .create-header {

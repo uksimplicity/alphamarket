@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
 import { clearCart, getCart } from "@/components/commerce/store";
-import { orderPaymentStatus, paymentError, PENDING_CHECKOUT_KEY, type PendingCheckout } from "@/components/commerce/payments";
+import { checkoutStorageKey, readSavedCheckout, orderPaymentStatus, paymentError, type PendingCheckout } from "@/components/commerce/payments";
+import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import { Button, Card } from "@/components/dashboard/ui";
 
 export default function PaymentStatusPage() {
@@ -23,8 +24,9 @@ export default function PaymentStatusPage() {
       try {
         const auth = getAuth();
         if (!auth?.access_token || !auth.user?.id) throw new Error("Sign in with the buyer account that placed the order to check payment.");
+        const stamp = accountStamp();
         const reference = new URL(window.location.href).searchParams.get("reference") || new URL(window.location.href).searchParams.get("trxref");
-        const saved = sessionStorage.getItem(PENDING_CHECKOUT_KEY) ?? sessionStorage.getItem("alpha.last-paid-checkout.v1");
+        const saved = readSavedCheckout(sessionStorage, auth.user.id) ?? readSavedCheckout(sessionStorage, auth.user.id, true);
         const pending = saved ? JSON.parse(saved) as PendingCheckout : null;
         if (!pending || pending.buyerId !== auth.user.id || !Array.isArray(pending.orderIds) || !pending.orderIds.length) {
           throw new Error("No saved payment was found in this browser tab. Check your orders before starting another payment.");
@@ -43,6 +45,7 @@ export default function PaymentStatusPage() {
           return { id, status: orderPaymentStatus(payload) };
         }));
         if (controller.signal.aborted) return;
+        checkAccount(stamp);
         setOrders(statuses);
         if (statuses.every((order) => order.status === "paid")) {
           setPaid(true);
@@ -50,8 +53,8 @@ export default function PaymentStatusPage() {
           // Preserve products added or changed after the customer left for Paystack.
           if (JSON.stringify(getCart().items) === pending.cartKey) clearCart();
           // Keep confirmation available on refresh without allowing the order to be paid again.
-          sessionStorage.setItem("alpha.last-paid-checkout.v1", JSON.stringify(pending));
-          sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
+          sessionStorage.setItem(checkoutStorageKey(auth.user.id, true), JSON.stringify(pending));
+          sessionStorage.removeItem(checkoutStorageKey(auth.user.id));
           setChecking(false);
           return;
         }

@@ -7,6 +7,7 @@ import { getAuth } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
 import { canConfirmReceipt } from "@/components/commerce/escrow";
 import EscrowStatus from "@/components/commerce/EscrowStatus";
+import ReviewDraftButton from "@/components/commerce/ReviewDraftButton";
 import { paymentError } from "@/components/commerce/payments";
 import { useBuyerOrders } from "@/components/commerce/buyerOrders";
 import {
@@ -70,6 +71,7 @@ export default function OrderDetailPage() {
       {feedback ? <p role="status" className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-slate-700">{feedback}</p> : null}
       <Card>
         <SectionTitle title={`Order ${order.id}`} subtitle={`Vendor: ${order.vendor}`} />
+        {["delivered", "confirmed"].includes(order.status) ? <div className="mt-4"><ReviewDraftButton orderId={order.id} /></div> : null}
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
           <Badge>{order.status}</Badge>
           <span className="font-semibold text-slate-800">

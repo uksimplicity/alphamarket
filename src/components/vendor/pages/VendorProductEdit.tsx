@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getAuth } from "@/components/auth/authStorage";
+import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
+import { asRecord, editedMedia, referenceOptions, uploadedMediaUrl, type ReferenceOption } from "../sellerProductForm";
 import "@/components/products/CreateProduct.css";
 
 export default function VendorProductEdit() {
@@ -13,6 +15,9 @@ export default function VendorProductEdit() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [references, setReferences] = useState<Record<string, ReferenceOption[]>>({});
+  const [attributeValues, setAttributeValues] = useState<Record<string, ReferenceOption[]>>({});
+  const [catalogError, setCatalogError] = useState("");
 
   const [form, setForm] = useState(() => ({
     name: "",
@@ -36,13 +41,14 @@ export default function VendorProductEdit() {
   const MAX_PRODUCT_PRICE = 1000000000;
   const MAX_PRODUCT_STOCK = 1000000;
 
-  const loadProduct = async () => {
+  const loadProduct = useCallback(async () => {
     if (!productId) return;
     setLoading(true);
     setError("");
     try {
       const auth = getAuth();
       const token = auth?.access_token;
+      const stamp = accountStamp();
       const response = await fetch(`/api/seller/products/${encodeURIComponent(productId)}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -60,6 +66,7 @@ export default function VendorProductEdit() {
             : `Failed to load product (${response.status}).`;
         throw new Error(String(message));
       }
+      checkAccount(stamp);
       const payload =
         data?.data || data?.product || data?.item || data?.product_data || data || null;
       setProduct(payload);
@@ -75,8 +82,8 @@ export default function VendorProductEdit() {
           payload?.category ||
           payload?.category_id ||
           "",
-        type: payload?.productTypeId || payload?.type || "",
-        brand: payload?.brandId || payload?.brand?.id || payload?.brand || "",
+        type: payload?.productTypeId || payload?.product_type_id || payload?.productType?.id || payload?.type || "",
+        brand: payload?.brandId || payload?.brand_id || payload?.brand?.id || payload?.brand || "",
         vendor:
           payload?.sellerId ||
           payload?.vendorId ||
@@ -124,11 +131,43 @@ export default function VendorProductEdit() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [productId]);
 
   useEffect(() => {
-    loadProduct();
-  }, [productId]);
+    void loadProduct();
+  }, [loadProduct]);
+
+  useEffect(() => {
+    let active = true;
+    const stamp = accountStamp();
+    const headers = { Authorization: `Bearer ${getAuth()?.access_token}` };
+    Promise.all(["categories", "product-types", "brands", "attributes"].map(async resource => {
+      const response = await fetch(`/api/seller/catalog?resource=${resource}&limit=200`, { headers });
+      if (!response.ok) throw new Error("Some product choices could not be loaded. Your existing selections are preserved.");
+      return [resource, referenceOptions(await response.json())] as const;
+    })).then(entries => { checkAccount(stamp); if (active) setReferences(Object.fromEntries(entries)); })
+      .catch(error => { if (active) setCatalogError(error.message); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const stamp = accountStamp();
+    const ids = [...new Set(variants.map(row => row.variant).filter(Boolean))];
+    Promise.all(ids.map(async id => {
+      const response = await fetch(`/api/seller/catalog?resource=attributes&id=${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${getAuth()?.access_token}` } });
+      if (!response.ok) throw new Error("Variant choices could not be loaded. Your existing selections are preserved.");
+      const payload = await response.json(), row = asRecord(asRecord(payload).data ?? payload);
+      return [id, referenceOptions(row.values ?? row.attribute_values ?? row.attributeValues)] as const;
+    })).then(entries => { checkAccount(stamp); if (active) setAttributeValues(Object.fromEntries(entries)); })
+      .catch(error => { if (active) setCatalogError(error.message); });
+    return () => { active = false; };
+  }, [variants]);
+
+  const options = (resource: string, current: string) => {
+    const rows = references[resource] ?? [];
+    return <>{current && !rows.some(row => row.id === current) ? <option value={current}>Current selection</option> : null}{rows.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</>;
+  };
 
   const handleChange = (
     event:
@@ -142,7 +181,7 @@ export default function VendorProductEdit() {
 
   const handleVariantChange = (index: number, field: "variant" | "value", value: string) => {
     setVariants((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+      prev.map((item, i) => (i === index ? { ...item, [field]: value, ...(field === "variant" ? { value: "" } : {}) } : item))
     );
   };
 
@@ -156,6 +195,7 @@ export default function VendorProductEdit() {
     setSuccess("");
 
     try {
+      const stamp = accountStamp();
       const auth = getAuth();
       const token = auth?.access_token;
       const sellerId = auth?.user?.id;
@@ -178,8 +218,8 @@ export default function VendorProductEdit() {
       }
 
       const numericStock = Number(form.stock || 0);
-      if (numericStock < 0) {
-        throw new Error("Stock cannot be negative.");
+      if (!Number.isInteger(numericStock) || numericStock < 0) {
+        throw new Error("Stock must be a whole number of zero or more.");
       }
       if (numericStock > MAX_PRODUCT_STOCK) {
         throw new Error(`Stock is too large. Maximum is ${MAX_PRODUCT_STOCK.toLocaleString()}.`);
@@ -206,13 +246,7 @@ export default function VendorProductEdit() {
         if (!uploadResponse.ok) {
           throw new Error("Failed to upload one or more product images.");
         }
-        return String(
-          uploadData.url ??
-            uploadData.file_url ??
-            uploadData.path ??
-            (uploadData.data as Record<string, unknown> | undefined)?.url ??
-            ""
-        );
+        return uploadedMediaUrl(uploadData);
       }
 
       const payload = {
@@ -250,18 +284,15 @@ export default function VendorProductEdit() {
           : [],
       } as Record<string, unknown>;
 
+      setSaving(true);
       if (coverFile || imageFiles.length > 0) {
-        const coverUrl = coverFile ? await uploadImage(coverFile) : "";
+        const coverUrl = coverFile ? await uploadImage(coverFile) : undefined;
         const imageUrls = imageFiles.length
           ? (await Promise.all(imageFiles.map((file) => uploadImage(file)))).filter(Boolean)
-          : [];
-        payload.media = {
-          cover: coverUrl,
-          images: imageUrls,
-        };
+          : undefined;
+        payload.media = editedMedia(product ?? {}, coverUrl, imageUrls);
       }
-
-      setSaving(true);
+      checkAccount(stamp);
       const response = await fetch(
         `/api/seller/products/${encodeURIComponent(productId ?? "")}`,
         {
@@ -274,6 +305,7 @@ export default function VendorProductEdit() {
         }
       );
       const text = await response.text();
+      checkAccount(stamp);
       let data = null;
       try {
         data = text ? JSON.parse(text) : null;
@@ -362,6 +394,7 @@ export default function VendorProductEdit() {
         </div>
 
         <form onSubmit={handleSubmit} className="create-form">
+          {catalogError ? <p role="alert">{catalogError}</p> : null}
           <section className="form-section">
             <div className="section-title">Basic Information</div>
             <div className="form-grid">
@@ -377,33 +410,26 @@ export default function VendorProductEdit() {
                 <label>Category</label>
                 <select name="category" value={form.category} onChange={handleChange}>
                   <option value="">Select</option>
-                  <option value="fashion">Fashion</option>
-                  <option value="cloth">Cloth</option>
+                  {options("categories", form.category)}
                 </select>
               </div>
               <div className="field">
                 <label>Product Type</label>
                 <select name="type" value={form.type} onChange={handleChange}>
                   <option value="">Select</option>
-                  <option value="physical">Physical</option>
-                  <option value="digital">Digital</option>
+                  {options("product-types", form.type)}
                 </select>
               </div>
               <div className="field">
                 <label>Brand</label>
                 <select name="brand" value={form.brand} onChange={handleChange}>
                   <option value="">Select</option>
-                  <option value="brand-a">Brand A</option>
-                  <option value="brand-b">Brand B</option>
+                  {options("brands", form.brand)}
                 </select>
               </div>
               <div className="field">
                 <label>Vendor</label>
-                <select name="vendor" value={form.vendor} onChange={handleChange}>
-                  <option value="">Select</option>
-                  <option value="sk-ibrahim">Sk Ibrahim</option>
-                  <option value="jerome-bell">Jerome Bell</option>
-                </select>
+                <input value="Your seller account" readOnly />
               </div>
               <div className="field">
                 <label>Base Price</label>
@@ -493,8 +519,7 @@ export default function VendorProductEdit() {
                     }
                   >
                     <option value="">Select Variant</option>
-                    <option value="size">Size</option>
-                    <option value="color">Color</option>
+                    {options("attributes", row.variant)}
                   </select>
                   <select
                     value={row.value}
@@ -503,8 +528,8 @@ export default function VendorProductEdit() {
                     }
                   >
                     <option value="">Value</option>
-                    <option value="small">Small</option>
-                    <option value="medium">Medium</option>
+                    {row.value && !(attributeValues[row.variant] ?? []).some(option => option.id === row.value) ? <option value={row.value}>Current value</option> : null}
+                    {(attributeValues[row.variant] ?? []).map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
                   </select>
                 </div>
               ))}
@@ -563,12 +588,7 @@ export default function VendorProductEdit() {
 
           <section className="form-section">
             <div className="section-title">Tags</div>
-            <select className="tags-select" value={form.tags} onChange={handleChange} name="tags">
-              <option value="">Select Tags</option>
-              <option value="new">New</option>
-              <option value="featured">Featured</option>
-              <option value="sale">Sale</option>
-            </select>
+            <input className="tags-select" value={form.tags} onChange={handleChange} name="tags" placeholder="Tags, separated by commas" />
             <div className="tag-list">
               {form.tags
                 ? form.tags
@@ -578,7 +598,7 @@ export default function VendorProductEdit() {
                     .map((tag) => (
                       <span className="tag-pill" key={tag}>
                         {tag}
-                        <button type="button" aria-label={`Remove ${tag}`}>
+                        <button type="button" aria-label={`Remove ${tag}`} onClick={() => setForm(prev => ({ ...prev, tags: prev.tags.split(",").map(value => value.trim()).filter(value => value !== tag).join(", ") }))}>
                           {"\u00d7"}
                         </button>
                       </span>

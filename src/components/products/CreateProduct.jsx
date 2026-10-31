@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import "@/components/products/CreateProduct.css";
 import { getAuth } from "@/components/auth/authStorage";
+import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
+import { uploadedMediaUrl } from "@/components/vendor/sellerProductForm";
 
 const initialForm = {
   name: "",
@@ -592,15 +594,7 @@ async function uploadFile(file, folder, token) {
       throw new Error(String(message));
     }
 
-    return (
-      data?.url ||
-      data?.file_url ||
-      data?.path ||
-      data?.data?.url ||
-      data?.data?.file_url ||
-      data?.data?.path ||
-      ""
-    );
+    return uploadedMediaUrl(data);
   }
 
   const handleSubmit = async (event) => {
@@ -674,6 +668,10 @@ async function uploadFile(file, folder, token) {
       setError("Product description is required.");
       return;
     }
+    if (mode === "seller" && !form.brand.trim()) {
+      setError("Choose a brand before saving your product.");
+      return;
+    }
     if (form.brand.trim() && !isUuid(form.brand.trim())) {
       setError("Brand must be a valid UUID.");
       return;
@@ -742,7 +740,7 @@ async function uploadFile(file, folder, token) {
     if (form.location.trim()) payload.location = form.location.trim();
     if (form.shortDescription.trim()) payload.shortDescription = form.shortDescription.trim();
     const selectedBrandId = form.brand.trim();
-    if (mode === "admin" && selectedBrandId && isUuid(selectedBrandId)) {
+    if (selectedBrandId && isUuid(selectedBrandId)) {
       payload.brandId = selectedBrandId;
     }
     if (stockNumber !== null) payload.stock = stockNumber;
@@ -775,6 +773,7 @@ async function uploadFile(file, folder, token) {
     }
 
     try {
+      const stamp = accountStamp();
       setLoading(true);
 
       const coverUrl = await uploadFile(coverFile, "products", authorization);
@@ -786,6 +785,7 @@ async function uploadFile(file, folder, token) {
       payload.media.cover = coverUrl;
       payload.media.images = imageUrls.filter(Boolean);
       payload.media.video = videoUrl;
+      checkAccount(stamp);
 
       const createEndpoint =
         mode === "admin" ? "/api/admin/products" : "/api/seller/products";
@@ -812,6 +812,7 @@ async function uploadFile(file, folder, token) {
       }
 
       let { response, data } = await createWithPayload(payload);
+      checkAccount(stamp);
 
       if (!response.ok) {
         const message =
@@ -920,17 +921,15 @@ async function uploadFile(file, folder, token) {
                 ) : null}
               </div>
               <div className="field">
-                <label>Brand (optional)</label>
+                <label>{mode === "seller" ? "Brand" : "Brand (optional)"}</label>
                 <select
                   name="brand"
                   value={form.brand}
                   onChange={handleChange}
-                  disabled={mode === "seller"}
+                  disabled={catalogLoading || loading}
                 >
                   <option value="">
-                    {mode === "seller"
-                      ? "Temporarily unavailable"
-                      : catalogLoading
+                    {catalogLoading
                       ? "Loading brands..."
                       : "Select Brand"}
                   </option>
@@ -940,11 +939,7 @@ async function uploadFile(file, folder, token) {
                     </option>
                   ))}
                 </select>
-                {mode === "seller" ? (
-                  <div className="mt-2 text-xs text-slate-500">
-                    Brand selection is temporarily disabled for seller product create.
-                  </div>
-                ) : !catalogLoading && !hasBrandOptions ? (
+                {!catalogLoading && !hasBrandOptions ? (
                   <div className="mt-2 text-xs text-slate-500">No brands available yet.</div>
                 ) : null}
               </div>

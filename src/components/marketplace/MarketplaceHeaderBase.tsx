@@ -207,7 +207,7 @@ export default function MarketplaceHeaderBase({
       </div>
 
       <nav className={styles.categories}>
-        <a href="/#browse-listings">All Categories</a>
+        <LinkComponent href="/#browse-listings">All Categories</LinkComponent>
         {adminCategoryNames.map((name) => (
           <a key={name} href={`/?category=${encodeURIComponent(name.toLowerCase())}#browse-listings`}>
             {name}

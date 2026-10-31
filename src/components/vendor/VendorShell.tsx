@@ -1,6 +1,7 @@
 "use client";
 
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import NextLink from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { clearAuth, getDisplayName } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
@@ -19,6 +20,9 @@ const catalog: Item[] = [
 const mainLinks: Item[] = [
   { label: "Overview", href: "/vendor", icon: "overview" },
   { label: "Orders", href: "/vendor/orders", icon: "orders" },
+  { label: "Messages", href: "/vendor/messages", icon: "chat" },
+  { label: "Address Book", href: "/vendor/addresses", icon: "delivery" },
+  { label: "Notifications", href: "/vendor/notifications", icon: "bell" },
   { label: "Performance", href: "/vendor#performance", icon: "chart" },
   { label: "Payments & payouts", href: "/vendor/payments", icon: "wallet" },
 ];
@@ -31,7 +35,12 @@ export default function VendorShell() {
   const initials = name.split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase();
   const [collapsed, setCollapsed] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(true);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => new URLSearchParams(location.search).get("search") ?? "");
+  const [searchLocation, setSearchLocation] = useState(location.search);
+  if (searchLocation !== location.search) {
+    setSearchLocation(location.search);
+    setSearch(new URLSearchParams(location.search).get("search") ?? "");
+  }
   const [signingOut, setSigningOut] = useState(false);
   const [store, setStore] = useState<ReturnType<typeof getCurrentSellerStoreProfile>>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -59,10 +68,6 @@ export default function VendorShell() {
       return () => clearTimeout(timer);
     }
   }, [location.pathname, location.hash, location.search]);
-
-  useEffect(() => {
-    setSearch(new URLSearchParams(location.search).get("search") ?? "");
-  }, [location.search]);
 
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -112,7 +117,7 @@ export default function VendorShell() {
       </nav>
       <div className={styles.sidebarBottom}>
         <div className={styles.supportCard}><span className={styles.supportIcon}>?</span><strong>A little help goes a long way.</strong><p>Get support for your store and orders.</p><a href="mailto:support@archintell.com">Contact seller support <Icon name="external" size={13} /></a></div>
-        <a className={styles.marketplaceLink} href="/"><Icon name="external" size={17} /><span>Visit marketplace</span></a>
+        <NextLink className={styles.marketplaceLink} href="/"><Icon name="external" size={17} /><span>Visit marketplace</span></NextLink>
       </div>
     </>;
   }

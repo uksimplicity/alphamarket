@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAuth } from "@/components/auth/authStorage";
 import { useBuyerOrders, type BuyerOrder } from "@/components/commerce/buyerOrders";
-import { PENDING_CHECKOUT_KEY } from "@/components/commerce/payments";
+import { checkoutStorageKey } from "@/components/commerce/payments";
 import {
   formatCurrency,
 } from "@/components/commerce/store";
 import { Button, Card, SectionTitle } from "@/components/dashboard/ui";
+import ReviewDraftButton from "@/components/commerce/ReviewDraftButton";
 
 export default function OrdersPage() {
   const { orders, loading, error, reload } = useBuyerOrders();
@@ -16,7 +17,7 @@ export default function OrdersPage() {
   function payOrder(order: BuyerOrder) {
     const buyerId = getAuth()?.user?.id;
     if (!buyerId) return;
-    sessionStorage.setItem(PENDING_CHECKOUT_KEY, JSON.stringify({ buyerId, orderIds: [order.id], cartKey: "", submitted: true }));
+    sessionStorage.setItem(checkoutStorageKey(buyerId), JSON.stringify({ buyerId, orderIds: [order.id], cartKey: "", submitted: true }));
     router.push("/dashboard/checkout");
   }
 
@@ -61,6 +62,7 @@ export default function OrdersPage() {
                 <div className="mt-4 space-y-3">
                   <p className="text-sm capitalize">Order: {order.status.replaceAll("_", " ")}</p>
                   <p className="text-sm capitalize">Payment: {order.paymentStatus.replaceAll("_", " ")}</p>
+                  {["delivered", "confirmed"].includes(order.status) ? <ReviewDraftButton orderId={order.id} /> : null}
                   {order.paymentStatus === "pending" && order.status !== "cancelled" ? <Button onClick={() => payOrder(order)}>Pay with Paystack</Button> : null}
                 </div>
               </div>

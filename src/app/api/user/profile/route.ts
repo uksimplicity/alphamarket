@@ -34,7 +34,12 @@ async function proxyProfile(req: Request, method: "GET" | "PUT") {
         headers,
         body: body || undefined,
         cache: "no-store",
+        redirect: "manual",
+        signal: AbortSignal.timeout(20_000),
       });
+      if (res.status >= 300 && res.status < 400) {
+        return Response.json({ error: "Unexpected profile service redirect." }, { status: 502 });
+      }
       if (res.status === 404) continue;
       if (res.status >= 500) {
         upstreamErrorRes = res;

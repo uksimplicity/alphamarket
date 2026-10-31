@@ -26,6 +26,10 @@ import VendorStore from "./vendor/pages/VendorStore";
 import VendorPayments from "./vendor/pages/VendorPayments";
 import ProductDetailRoute from "./products/ProductDetailRoute";
 import SellerStoreRoute from "./store/SellerStoreRoute";
+import SessionBoundary from "./auth/SessionBoundary";
+import ChatWorkspace from "./chat/ChatWorkspace";
+import SavedAddresses from "./commerce/SavedAddresses";
+import NotificationPreferencesPanel from "./commerce/NotificationPreferencesPanel";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 export default function AppRouter() {
@@ -44,7 +48,7 @@ export default function AppRouter() {
         <Route path="/products/:productId" element={<ProductDetailRoute />} />
         <Route path="/store/:slug" element={<SellerStoreRoute />} />
 
-        <Route path="/vendor" element={<VendorShell />}>
+        <Route path="/vendor" element={<SessionBoundary seller><VendorShell /></SessionBoundary>}>
           <Route index element={<VendorDashboard />} />
           <Route path="products" element={<VendorProductsAll />} />
           <Route path="products/create" element={<VendorProductsCreate />} />
@@ -60,6 +64,9 @@ export default function AppRouter() {
           <Route path="store" element={<VendorStore />} />
           <Route path="profile" element={<VendorProfile />} />
           <Route path="payments" element={<VendorPayments />} />
+          <Route path="messages" element={<ChatWorkspace />} />
+          <Route path="addresses" element={<SavedAddresses />} />
+          <Route path="notifications" element={<NotificationPreferencesPanel />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

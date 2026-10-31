@@ -48,6 +48,7 @@ async function main() {
       const url = typeof input === 'string' ? input : input.url;
       if (url.startsWith('/api/')) {
         window.__sellerRequests.push(url);
+        if (url.startsWith('/api/user/profile')) return Response.json({ data: JSON.parse(localStorage.getItem('alpha.auth') || 'null')?.user || {} });
         if (window.__sellerPreviewMode === 'error' && url.startsWith('/api/seller/orders')) return Response.json({ error: 'Synthetic order service failure' }, { status: 503 });
         if (url.startsWith('/api/seller/products')) return Response.json({ data: { products: window.__sellerPreviewMode === 'empty' ? [] : products } });
         if (url.startsWith('/api/seller/orders')) return Response.json({ data: { orders: window.__sellerPreviewMode === 'empty' ? [] : orders } });

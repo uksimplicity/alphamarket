@@ -5,7 +5,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useRouter } from "next/navigation";
 import AuthLayout from "./AuthLayout";
 import styles from "./auth.module.css";
-import { setAuth } from "./authStorage";
+import { authGeneration, clearAuth, setAuth } from "./authStorage";
 
 export default function UserLogin() {
   const navigate = useNavigate();
@@ -30,7 +30,7 @@ export default function UserLogin() {
       subtitle="Sign in to continue shopping and manage your account."
       footer={
         <div className={styles.footerText}>
-          Don't have an account? <Link className={styles.link} to="/signup">Sign Up</Link>
+          Don&apos;t have an account? <Link className={styles.link} to="/signup">Sign Up</Link>
         </div>
       }
     >
@@ -50,6 +50,8 @@ export default function UserLogin() {
             return;
           }
 
+          clearAuth();
+          const loginEpoch = authGeneration();
           let redirecting = false;
           try {
             setLoading(true);
@@ -100,7 +102,7 @@ export default function UserLogin() {
               (root?.user && typeof root.user === "object"
                 ? (root.user as Record<string, unknown>)
                 : null);
-            const accessToken = String(
+            const tokenCandidate = (
               data?.access_token ??
                 data?.accessToken ??
                 data?.token ??
@@ -108,7 +110,8 @@ export default function UserLogin() {
                 root?.accessToken ??
                 root?.token ??
                 ""
-            ).trim();
+            );
+            const accessToken = typeof tokenCandidate === "string" ? tokenCandidate.trim() : "";
             const refreshToken = String(data?.refresh_token ?? root?.refresh_token ?? "");
             const tokenType = String(data?.token_type ?? root?.token_type ?? "");
             const expiresIn = Number(data?.expires_in ?? root?.expires_in ?? 0);
@@ -122,9 +125,10 @@ export default function UserLogin() {
                 ""
             ).trim().toLowerCase();
 
+            if (authGeneration() !== loginEpoch) throw new Error("Sign-in changed. Please try again.");
             if (userCandidate && accessToken) {
               setAuth({
-                user: userCandidate,
+                user: { ...userCandidate, role },
                 access_token: accessToken,
                 refresh_token: refreshToken || undefined,
                 token_type: tokenType || undefined,

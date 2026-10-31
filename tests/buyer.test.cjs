@@ -8,7 +8,7 @@ function load(relative) {
   const filename = path.resolve(__dirname, '..', relative);
   const compiled = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
   const loaded = new Module(filename, module); loaded.filename = filename; loaded.paths = module.paths;
-  loaded.require = request => request.startsWith('@/') ? load('src/' + request.slice(2) + '.ts') : request.startsWith('.') ? load(path.resolve(path.dirname(filename), request + '.ts')) : module.require(request);
+  loaded.require = request => request.startsWith('@/') ? load('src/' + request.slice(2) + '.ts') : request.startsWith('.') ? load(path.resolve(path.dirname(filename), request.endsWith('.ts') ? request : request + '.ts')) : module.require(request);
   loaded._compile(compiled.outputText, filename); return loaded.exports;
 }
 const buyer = load('src/components/dashboard/buyerCatalog.ts');
@@ -17,6 +17,44 @@ test('buyer listings use public response envelopes and never invent price, stock
   assert.equal(product.price, ''); assert.equal(product.stock, null); assert.equal(product.rating, ''); assert.equal(product.preview, false); assert.equal(buyer.canShop(product), false);
   assert.throws(() => buyer.buyerProducts({ success: false, message: 'Unavailable' }), /Unavailable/);
   assert.throws(() => buyer.buyerProducts({ data: {} }), /could not be loaded/);
+});
+
+test('catalog pagination advances by raw rows and preserves unknown totals', () => {
+  const first = buyer.buyerCatalogPage({ data: { products: [{ id: 'hidden', status: 'draft' }, { id: 'one' }], total: 5, offset: 0 } }, 2, 0);
+  assert.deepEqual(first.products.map(item => item.id), ['one']);
+  assert.equal(first.nextOffset, 2); assert.equal(first.hasMore, true);
+  const last = buyer.buyerCatalogPage({ data: { products: [{ id: 'last' }], total: 5, offset: 4 } }, 2, 4);
+  assert.equal(last.nextOffset, 5); assert.equal(last.hasMore, false);
+  assert.equal(buyer.buyerCatalogPage({ data: [{ id: 'a' }, { id: 'b' }] }, 2, 0).hasMore, true);
+  assert.equal(buyer.buyerCatalogPage({ data: [] }, 2, 2).hasMore, false);
+  assert.throws(() => buyer.buyerCatalogPage({ data: { products: [], total: 20 } }, 2, 0), /incomplete page/);
+  assert.throws(() => buyer.buyerCatalogPage({ data: { products: [{ id: 'a' }], offset: 0 } }, 2, 2), /unexpected page/);
+});
+
+test('public product links resolve beyond 100 rows without seller privileges or premature 404s', async () => {
+  const originalFetch = global.fetch, previousBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+  process.env.NEXT_PUBLIC_API_BASE_URL = 'https://backend.test/api/v1';
+  const api = load('src/app/api/products/public/[id]/route.ts');
+  const calls = [];
+  let failLater = false;
+  global.fetch = async (url, init) => {
+    calls.push({ url, init });
+    const offset = Number(new URL(url).searchParams.get('offset'));
+    if (offset && failLater) return Response.json({ error: 'Unavailable' }, { status: 503 });
+    const products = offset ? [{ id: 'beyond-first-page', price: 1200 }] : Array.from({ length: 100 }, (_, i) => ({ id: `p-${i}` }));
+    return Response.json({ data: { products, total: 101, limit: 100, offset } });
+  };
+  const lookup = id => api.GET(new Request(`https://app.test/api/products/public/${id}`, { headers: { Authorization: 'Bearer buyer' } }), { params: Promise.resolve({ id }) });
+  try {
+    const found = await lookup('beyond-first-page');
+    assert.equal(found.status, 200); assert.equal((await found.json()).data.id, 'beyond-first-page');
+    assert.equal(calls.length, 2); assert.match(calls[1].url, /offset=100/);
+    assert.ok(calls.every(call => !call.init.headers.Authorization && new URL(call.url).pathname === '/api/v1/products/public'));
+    assert.equal((await lookup('missing')).status, 404);
+    failLater = true;
+    assert.equal((await lookup('missing')).status, 503);
+    assert.equal((await lookup(' ')).status, 400);
+  } finally { global.fetch = originalFetch; if (previousBase === undefined) delete process.env.NEXT_PUBLIC_API_BASE_URL; else process.env.NEXT_PUBLIC_API_BASE_URL = previousBase; }
 });
 test('unpublished products are hidden and only purchasable live stock enters the bag', () => {
   const data = buyer.buyerProducts({ data: { products: [{ id: 'draft', status: 'draft' }, { id: 'pending', status: 'pending_review' }, { name: 'No ID', price: 500 }, { id: 'sold', price: 1000, stock: 0 }, { id: 'live', price: 2500.5, stock: 4 }] } });

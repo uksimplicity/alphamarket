@@ -3,15 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test:payments": "node --test tests/payments.test.cjs",
-    "test:seller": "node --test tests/seller-data.test.cjs",
+    "test:seller": "node --test tests/seller-data.test.cjs tests/seller-products.test.cjs",
     "test:escrow": "node --test tests/escrow.test.cjs",
     "test:payouts": "node --test tests/payouts.test.cjs",
-    "test:buyer": "node --test tests/buyer.test.cjs"
+    "test:buyer": "node --test tests/buyer.test.cjs",
+    "test:parity": "node --test tests/mobile-parity.test.cjs tests/chat.test.cjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.13",

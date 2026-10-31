@@ -15,6 +15,8 @@ import styles from "./customer.module.css";
 const links: { href: string; label: string; icon: ShopperIconName }[] = [
   { href: "/dashboard/home", label: "Overview", icon: "home" },
   { href: "/dashboard/orders", label: "My orders", icon: "orders" },
+  { href: "/dashboard/messages", label: "Messages", icon: "chat" },
+  { href: "/dashboard/addresses", label: "Address Book", icon: "truck" },
   { href: "/dashboard/wishlist", label: "Saved items", icon: "heart" },
   { href: "/dashboard/cart", label: "Shopping cart", icon: "cart" },
   { href: "/dashboard/profile", label: "My profile", icon: "user" },
@@ -68,7 +70,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
           </main>
         </div>
       </>
-      <nav className={styles.mobileNav} aria-label="Main navigation">{links.filter(item => ["home", "orders", "heart", "user"].includes(item.icon)).map(item => <Link key={item.href} href={item.href} className={active(item.href) ? styles.active : undefined} aria-current={active(item.href) ? "page" : undefined}><ShopperIcon name={item.icon} size={21} /><span>{item.icon === "home" ? "Home" : item.icon === "orders" ? "Orders" : item.icon === "heart" ? "Saved" : "Account"}</span></Link>)}</nav>
+      <nav className={styles.mobileNav} aria-label="Main navigation">{links.filter(item => ["home", "orders", "chat", "heart", "user"].includes(item.icon)).map(item => <Link key={item.href} href={item.href} className={active(item.href) ? styles.active : undefined} aria-current={active(item.href) ? "page" : undefined}><ShopperIcon name={item.icon} size={21} /><span>{item.icon === "home" ? "Home" : item.icon === "orders" ? "Orders" : item.icon === "chat" ? "Messages" : item.icon === "heart" ? "Saved" : "Account"}</span></Link>)}</nav>
       <dialog ref={dialog} className={styles.dialog} onCancel={() => setSigningOut(false)} onClick={event => { if (event.target === event.currentTarget) setSigningOut(false); }} aria-labelledby="customer-signout-heading">
         <ShopperIcon name="logout" size={24} /><h2 id="customer-signout-heading">Sign out of your account?</h2><p>Your saved items and orders will be here when you return.</p><div className={styles.dialogActions}><button type="button" onClick={() => setSigningOut(false)}>Stay signed in</button><button type="button" className={styles.primary} onClick={() => { clearAuth(); window.location.assign("/login"); }}>Sign out</button></div>
       </dialog>

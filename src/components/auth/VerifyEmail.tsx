@@ -27,7 +27,7 @@ export default function VerifyEmail() {
       subtitle="Enter the verification code sent to your email."
       footer={
         <div className={styles.resend}>
-          Didn't receive a code?{" "}
+          Didn&apos;t receive a code?{" "}
           <button
             type="button"
             className={styles.linkButton}
@@ -125,7 +125,7 @@ export default function VerifyEmail() {
       >
         {!email ? (
           <div className={styles.errorText}>
-            We couldn't find your email. Please return to sign up or resend the
+            We couldn&apos;t find your email. Please return to sign up or resend the
             verification code.
           </div>
         ) : null}

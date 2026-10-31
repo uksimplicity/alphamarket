@@ -54,6 +54,18 @@ export function paymentReference(payload: unknown): string {
 }
 
 export const PENDING_CHECKOUT_KEY = "alpha.pending-checkout.v1";
+export function checkoutStorageKey(buyerId: string, paid = false) {
+  if (!buyerId.trim()) throw new Error("Please sign in with the buyer account.");
+  return `${paid ? "alpha.last-paid-checkout.v1" : PENDING_CHECKOUT_KEY}:${encodeURIComponent(buyerId)}`;
+}
+export function readSavedCheckout(storage: Pick<Storage, "getItem" | "setItem" | "removeItem">, buyerId: string, paid = false) {
+  const scoped = checkoutStorageKey(buyerId, paid), existing = storage.getItem(scoped);
+  if (existing !== null) return existing;
+  const legacy = paid ? "alpha.last-paid-checkout.v1" : PENDING_CHECKOUT_KEY;
+  const raw = storage.getItem(legacy);
+  if (raw && JSON.parse(raw)?.buyerId === buyerId) { storage.setItem(scoped, raw); storage.removeItem(legacy); return raw; }
+  return null;
+}
 export type PendingCheckout = {
   buyerId: string;
   orderIds: string[];

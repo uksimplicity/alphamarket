@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getAuth } from "@/components/auth/authStorage";
 import "@/components/products/CreateProduct.css";
 
+const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+const display = (...values: unknown[]) => { const value = values.find(value => typeof value === "string" && value.trim() || typeof value === "number" && Number.isFinite(value)); return value === undefined ? "-" : String(value); };
+
 export default function VendorProductDetail() {
   const { productId } = useParams();
   const navigate = useNavigate();
-  const [product, setProduct] = useState<any | null>(null);
+  const [product, setProduct] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -21,7 +24,7 @@ export default function VendorProductDetail() {
     return String(value);
   };
 
-  const loadProduct = async () => {
+  const loadProduct = useCallback(async () => {
     if (!productId) return;
     setLoading(true);
     setError("");
@@ -47,100 +50,60 @@ export default function VendorProductDetail() {
       }
       const payload =
         data?.data || data?.product || data?.item || data?.product_data || data || null;
-      setProduct(payload);
+      setProduct(record(payload));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load product.");
       setProduct(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [productId]);
 
   useEffect(() => {
-    loadProduct();
-  }, [productId]);
+    void loadProduct();
+  }, [loadProduct]);
 
   const summary = useMemo(() => {
     if (!product) return null;
     return {
-      id:
-        product?.id ||
-        product?.productId ||
-        product?.product_id ||
-        product?._id ||
-        product?.uuid ||
-        product?.slug ||
-        productId ||
-        "",
-      name: product?.name || product?.title || "Product",
-      category:
-        product?.category?.name ||
-        product?.categoryName ||
-        product?.category ||
-        product?.category_id ||
-        product?.categoryId ||
-        "Category",
-      status:
-        product?.status ||
-        (product?.isPublished ? "publish" : product?.active === false ? "draft" : "publish"),
-      vendor:
-        product?.vendor?.name ||
-        product?.vendorName ||
-        product?.seller?.name ||
-        product?.sellerName ||
-        "Vendor",
-      brand:
-        product?.brand?.name || product?.brandName || product?.brand || product?.brandId || "-",
-      productType:
-        product?.productType?.name ||
-        product?.productTypeName ||
-        product?.productTypeId ||
-        product?.type ||
-        "-",
-      slug: product?.slug || "-",
-      sellerId: product?.sellerId || product?.seller_id || product?.seller?.id || "-",
-      stock: product?.stock ?? product?.quantity ?? "-",
-      price:
-        product?.basePrice ??
-        product?.base_price ??
-        product?.price ??
-        product?.amount ??
-        product?.unitPrice ??
-        "-",
-      tags: Array.isArray(product?.tags)
-        ? product.tags.filter(Boolean).join(", ")
-        : product?.tags || "-",
-      description:
-        product?.shortDescription ||
-        product?.short_description ||
-        product?.description ||
-        "-",
-      media: product?.media || {
-        cover: product?.cover || product?.coverImage || "",
-        images: product?.images || [],
-      },
-      variants: product?.variants || product?.attributes || product?.variantRows || [],
+      id: display(product.id, product.productId, product.product_id, product._id, product.uuid, product.slug, productId),
+      name: display(product.name, product.title, "Product"),
+      category: display(record(product.category).name, product.categoryName, product.category, product.category_id, product.categoryId),
+      status: display(product.status, product.isPublished === true ? "publish" : product.active === false ? "draft" : "Unknown"),
+      vendor: display(record(product.vendor).name, product.vendorName, record(product.seller).name, product.sellerName),
+      brand: display(record(product.brand).name, product.brandName, product.brand, product.brandId),
+      productType: display(record(product.productType).name, product.productTypeName, product.productTypeId, product.type),
+      slug: display(product.slug),
+      sellerId: display(product.sellerId, product.seller_id, record(product.seller).id),
+      stock: display(product.stock, product.quantity),
+      price: product.basePrice ?? product.base_price ?? product.price ?? product.amount ?? product.unitPrice,
+      tags: Array.isArray(product.tags) ? product.tags.filter(tag => typeof tag === "string").join(", ") : display(product.tags),
+      description: display(product.shortDescription, product.short_description, product.description),
+      media: product.media ? record(product.media) : { cover: product.cover ?? product.coverImage, images: product.images },
+      variants: product.variants ?? product.attributes ?? product.variantRows,
     };
   }, [product, productId]);
 
   const variantRows = useMemo(() => {
     if (!summary?.variants || !Array.isArray(summary.variants)) return [];
-    return summary.variants.map((row: any, index: number) => ({
-      skuId: row?.skuId || row?.sku_id || row?.sku || `SKU-${index + 1}`,
-      variantId: row?.variantId || row?.variant_id || row?.id || `VAR-${index + 1}`,
-      color: row?.color || row?.colour || row?.attribute_value || row?.value || "-",
-      size: row?.size || row?.size_name || "-",
-      visible: row?.visible || row?.quantity || row?.stock || "-",
-      status: row?.status || (row?.active ? "Active" : "Inactive"),
-    }));
+    return summary.variants.map((input: unknown) => { const row = record(input); return ({
+      skuId: display(row.skuId, row.sku_id, row.sku),
+      variantId: display(row.variantId, row.variant_id, row.id),
+      color: display(row.color, row.colour, row.attribute_value, row.value),
+      size: display(row.size, row.size_name),
+      visible: display(row.visible, row.quantity, row.stock),
+      status: display(row.status, row.active === true ? "Active" : row.active === false ? "Inactive" : "Unknown"),
+    }); });
   }, [summary]);
 
   const mediaUrls = useMemo(() => {
     if (!summary?.media) return [];
     const cover = summary.media?.cover || summary.media?.coverUrl;
     const images = Array.isArray(summary.media?.images) ? summary.media.images : [];
-    return [cover, ...images].filter(Boolean);
+    return [cover, ...images].filter((url): url is string => typeof url === "string" && !!url);
   }, [summary]);
+
+  const discount = record(Array.isArray(product?.discounts) ? product.discounts[0] : null);
 
   if (loading) {
     return (
@@ -280,9 +243,9 @@ export default function VendorProductDetail() {
         <section className="form-section">
           <div className="section-title">Discount</div>
           <div className="details-grid">
-            <div className="details-card"><div className="details-icon">DT</div><div><div className="details-title">Discount Title</div><div className="details-value">{product?.discounts?.[0]?.title || "-"}</div></div></div>
-            <div className="details-card"><div className="details-icon">DP</div><div><div className="details-title">Discount Price</div><div className="details-value">{formatPrice(product?.discounts?.[0]?.price ?? "-")}</div></div></div>
-            <div className="details-card"><div className="details-icon">DD</div><div><div className="details-title">Discount Duration</div><div className="details-value">{product?.discounts?.[0]?.startDate || "-"}</div></div></div>
+            <div className="details-card"><div className="details-icon">DT</div><div><div className="details-title">Discount Title</div><div className="details-value">{display(discount.title)}</div></div></div>
+            <div className="details-card"><div className="details-icon">DP</div><div><div className="details-title">Discount Price</div><div className="details-value">{formatPrice(discount.price)}</div></div></div>
+            <div className="details-card"><div className="details-icon">DD</div><div><div className="details-title">Discount Duration</div><div className="details-value">{display(discount.startDate)}</div></div></div>
           </div>
         </section>
       </div>
