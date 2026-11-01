@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getAuth } from "@/components/auth/authStorage";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
-import { asRecord, editedMedia, referenceOptions, uploadedMediaUrl, type ReferenceOption } from "../sellerProductForm";
+import { asRecord, editedMedia, referenceOptions, uploadProductMedia, type ReferenceOption } from "../sellerProductForm";
 import "@/components/products/CreateProduct.css";
 
 export default function VendorProductEdit() {
@@ -225,29 +225,7 @@ export default function VendorProductEdit() {
         throw new Error(`Stock is too large. Maximum is ${MAX_PRODUCT_STOCK.toLocaleString()}.`);
       }
 
-      async function uploadImage(file: File): Promise<string> {
-        const fd = new FormData();
-        fd.append("file", file);
-        fd.append("folder", "products");
-        const uploadResponse = await fetch("/api/upload/file", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: fd,
-        });
-        const uploadText = await uploadResponse.text();
-        let uploadData: Record<string, unknown> = {};
-        try {
-          uploadData = uploadText
-            ? (JSON.parse(uploadText) as Record<string, unknown>)
-            : {};
-        } catch {
-          uploadData = {};
-        }
-        if (!uploadResponse.ok) {
-          throw new Error("Failed to upload one or more product images.");
-        }
-        return uploadedMediaUrl(uploadData);
-      }
+      const uploadImage = (file: File) => uploadProductMedia(file, token);
 
       const payload = {
         name: form.name,

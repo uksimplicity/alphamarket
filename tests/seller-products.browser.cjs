@@ -19,7 +19,7 @@ async function main() {
     window.fetch=async(input,init={})=>{const url=typeof input==='string'?input:input.url;if(!url.startsWith('/api/'))return realFetch(input,init);
       if(url.startsWith('/api/user/profile'))return Response.json({data:JSON.parse(localStorage.getItem('alpha.auth')).user});
       if(url.startsWith('/api/seller/catalog')){const p=new URL(url,location.origin).searchParams;const resource=p.get('resource');if(p.get('id'))return Response.json({data:{id:'attribute-1',values:[{id:'value-1',name:'Oak'},{id:'value-2',name:'Walnut'}]}});const data={categories:[{id:'category-1',name:'Furniture'}],'product-types':[{id:'type-1',name:'Physical'}],brands:[{id:'brand-1',name:'Workshop'}],attributes:[{id:'attribute-1',name:'Wood'}]};return Response.json({data:data[resource]||[]});}
-      if(url==='/api/upload/file'){__uploads++;return Response.json({data:{url:'https://images.example/new-cover.png'}});}
+      if(url==='/api/upload/file'){__uploads++;if(window.__failUpload)return Response.json({message:'Failed to upload file'},{status:500});return Response.json({data:{file:{fileUrl:'https://images.example/new-cover.png'}}});}
       if(url.startsWith('/api/seller/products/')){if(init.method==='PUT'){__writes.push(JSON.parse(init.body));return Response.json({data:product});}return Response.json({data:product});}
       if(url==='/api/seller/products'&&init.method==='POST'){const created=JSON.parse(init.body);__writes.push(created);sessionStorage.setItem('seller-created-product',JSON.stringify(created));sessionStorage.setItem('seller-created-upload-count',String(__uploads));return Response.json({data:{id:'created-product'}},{status:201});}
       return Response.json({data:[]});
@@ -62,11 +62,20 @@ async function main() {
     assert.equal(await evaluate('__writes.length'), 0);
     await input('textarea[name="shortDescription"]','A simple chair for everyday use.');
     await evaluate(`document.querySelector('form.create-form').requestSubmit()`);
+    await wait(`document.body.innerText.includes('Product location is required.')`);
+    assert.equal(await evaluate('__uploads===0&&__writes.length===0'), true);
+    await input('input[name="location"]','  Lagos  ');
+    await evaluate(`document.querySelector('form.create-form').requestSubmit()`);
     await wait(`document.body.innerText.includes('Add at least one product image.')`);
     assert.equal(await evaluate('__writes.length'), 0);
     assert.equal(await evaluate('__uploads'), 0);
-    console.log('PASS missing description or product image blocks creation before any upload or write');
+    console.log('PASS missing description, location or product image blocks creation before any upload or write');
     await evaluate(`const photoInput=document.querySelector('input[type="file"][multiple]');photoInput.files=(()=>{const files=new DataTransfer();files.items.add(new File(['image'],'chair.png',{type:'image/png'}));return files.files;})();photoInput.dispatchEvent(new Event('change',{bubbles:true}));`);
+    await evaluate(`window.__failUpload=true;document.querySelector('form.create-form').requestSubmit()`);
+    await wait(`document.body.innerText.includes('chair.png')&&document.body.innerText.includes('(500)')&&document.body.innerText.includes('Failed to upload file')`);
+    assert.equal(await evaluate('__writes.length'), 0);
+    console.log('PASS upload failure identifies the file and status and prevents product creation');
+    await evaluate(`window.__failUpload=false;window.__uploads=0`);
     await evaluate(`document.querySelector('form.create-form').requestSubmit()`);
     await wait(`sessionStorage.getItem('seller-created-product')`);
     const created = await evaluate(`JSON.parse(sessionStorage.getItem('seller-created-product'))`);
@@ -77,11 +86,12 @@ async function main() {
     assert.equal(created.categoryId, 'category-1');
     assert.equal(created.productTypeId, 'type-1');
     assert.equal(created.shortDescription, 'A simple chair for everyday use.');
+    assert.equal(created.location, 'Lagos');
     assert.equal(created.media.images.length, 1);
     assert.equal(await evaluate(`sessionStorage.getItem('seller-created-upload-count')`), '1');
-    assert.equal(['brandId','stock','location','tags','discounts','attributes'].every(key=>!Object.hasOwn(created,key)), true);
+    assert.equal(['brandId','stock','tags','discounts','attributes'].every(key=>!Object.hasOwn(created,key)), true);
     console.log('PASS seller can create with a description and gallery photo while all other optional details stay omitted');
-    assert.deepEqual(errors, []); console.log('7 seller product browser checks passed.');
+    assert.deepEqual(errors, []); console.log('8 seller product browser checks passed.');
   } finally { socket.close(); await fetch(chromeUrl + '/json/close/' + target.id).catch(()=>{}); }
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

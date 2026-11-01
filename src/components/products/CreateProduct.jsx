@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import "@/components/products/CreateProduct.css";
 import { getAuth } from "@/components/auth/authStorage";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
-import { uploadedMediaUrl } from "@/components/vendor/sellerProductForm";
+import { uploadProductMedia } from "@/components/vendor/sellerProductForm";
 
 const initialForm = {
   name: "",
@@ -564,39 +564,6 @@ export default function CreateProduct({ mode = "seller" }) {
     setDiscountEnabled(false);
   };
 
-async function uploadFile(file, folder, token) {
-    if (!file) return "";
-    const fd = new FormData();
-    fd.append("file", file);
-    if (folder) fd.append("folder", folder);
-
-    const response = await fetch("/api/upload/file", {
-      method: "POST",
-      headers: {
-        Authorization: token,
-      },
-      body: fd,
-    });
-
-    const text = await response.text();
-    let data = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = text;
-    }
-
-    if (!response.ok) {
-      const message =
-        data && typeof data === "object" && "error" in data
-          ? data.error
-          : `File upload failed (${response.status}).`;
-      throw new Error(String(message));
-    }
-
-    return uploadedMediaUrl(data);
-  }
-
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
@@ -666,6 +633,10 @@ async function uploadFile(file, folder, token) {
     }
     if (!form.shortDescription.trim()) {
       setError("Product description is required.");
+      return;
+    }
+    if (!form.location.trim()) {
+      setError("Product location is required.");
       return;
     }
     if (mode === "seller" && !coverFile && imageFiles.length === 0) {
@@ -771,11 +742,11 @@ async function uploadFile(file, folder, token) {
       const stamp = accountStamp();
       setLoading(true);
 
-      const coverUrl = await uploadFile(coverFile, "products", authorization);
+      const coverUrl = coverFile ? await uploadProductMedia(coverFile, authorization) : "";
       const imageUrls = imageFiles.length
-        ? await Promise.all(imageFiles.map((file) => uploadFile(file, "products", authorization)))
+        ? await Promise.all(imageFiles.map((file) => uploadProductMedia(file, authorization)))
         : [];
-      const videoUrl = await uploadFile(videoFile, "products", authorization);
+      const videoUrl = videoFile ? await uploadProductMedia(videoFile, authorization) : "";
 
       if (coverFile || imageFiles.length || videoFile) {
         payload.media = {
@@ -862,7 +833,7 @@ async function uploadFile(file, folder, token) {
         </div>
 
         <form onSubmit={handleSubmit} className="create-form">
-          <p className="text-sm text-slate-500">Product name, category, product type, base price, and description are required.{mode === "seller" ? " Add at least one product image." : ""}</p>
+          <p className="text-sm text-slate-500">Product name, category, product type, base price, description, and location are required.{mode === "seller" ? " Add at least one product image." : ""}</p>
           <section className="form-section">
             <div className="section-title">Basic Information</div>
             <div className="form-grid">
@@ -980,8 +951,8 @@ async function uploadFile(file, folder, token) {
             </div>
             <div className="form-grid">
               <div className="field">
-                <label>Location (optional)</label>
-                <input name="location" value={form.location} onChange={handleChange} />
+                <label htmlFor="product-location">Location *</label>
+                <input id="product-location" name="location" aria-required="true" value={form.location} onChange={handleChange} />
               </div>
             </div>
           </section>

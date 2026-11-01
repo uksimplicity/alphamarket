@@ -4,7 +4,7 @@ const load = require('./support/load-ts.cjs');
 const originalFetch = global.fetch, originalBase = process.env.NEXT_PUBLIC_API_BASE_URL;
 beforeEach(() => { load.reset(); process.env.NEXT_PUBLIC_API_BASE_URL = 'https://marketplace.example/api/v1'; });
 afterEach(() => { global.fetch = originalFetch; if (originalBase === undefined) delete process.env.NEXT_PUBLIC_API_BASE_URL; else process.env.NEXT_PUBLIC_API_BASE_URL = originalBase; });
-const payload = { name: 'Chair', categoryId: 'category', productTypeId: 'type', brandId: 'chosen-brand', basePrice: 5000, stock: 3, shortDescription: 'An actual chair', media: { cover: 'https://images.example/chair.png' } };
+const payload = { name: 'Chair', categoryId: 'category', productTypeId: 'type', brandId: 'chosen-brand', basePrice: 5000, stock: 3, location: 'Lagos', shortDescription: 'An actual chair', media: { cover: 'https://images.example/chair.png' } };
 const request = (method, body, auth = 'Bearer seller-token') => new Request('https://web.example/api/seller/products', { method, headers: { Authorization: auth, Cookie: 'browser=private', 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 const detail = () => load('src/app/api/seller/products/[productId]/route.ts');
 const context = { params: Promise.resolve({ productId: 'product-1' }) };
@@ -21,7 +21,7 @@ test('create preserves selected brand and sends once to singular authenticated e
 });
 
 test('seller creation accepts description and a gallery image without other optional details', async () => {
-  const minimal = { name: 'Chair', slug: 'chair', sellerId: 'seller-one', basePrice: 5000, categoryId: 'category', productTypeId: 'type', shortDescription: 'An actual chair', media: { images: ['https://images.example/chair.png'] } };
+  const minimal = { name: 'Chair', slug: 'chair', sellerId: 'seller-one', basePrice: 5000, categoryId: 'category', productTypeId: 'type', location: 'Lagos', shortDescription: 'An actual chair', media: { images: ['https://images.example/chair.png'] } };
   const calls = [];
   global.fetch = async (url, init) => { calls.push({ url, body: JSON.parse(init.body) }); return Response.json({ data: { id: 'created' } }, { status: 201 }); };
   const result = await load('src/app/api/seller/products/route.ts').POST(request('POST', minimal));
@@ -45,6 +45,44 @@ test('seller creation rejects missing description or images before contacting th
     assert.match((await response.json()).error, /product image/);
   }
   assert.equal(calls, 0);
+});
+
+test('seller creation requires a nonblank location before any backend write', async () => {
+  let calls = 0;
+  global.fetch = async () => { calls++; return Response.json({}); };
+  const collection = load('src/app/api/seller/products/route.ts');
+  for (const location of [undefined, '', '   ', 123]) {
+    const response = await collection.POST(request('POST', { ...payload, location }));
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error, 'Product location is required.');
+  }
+  assert.equal(calls, 0);
+});
+
+test('product uploads accept nested file URLs and preserve backend failure information without replay', async () => {
+  const api = load('src/components/vendor/sellerProductForm.ts');
+  for (const value of [
+    { data: { file: { url: 'https://images.example/cover.png' } } },
+    { file: { fileUrl: 'https://images.example/cover.png' } },
+    { data: { file_url: 'https://images.example/cover.png' } },
+  ]) assert.equal(api.uploadedMediaUrl(value), 'https://images.example/cover.png');
+  assert.throws(() => api.uploadedMediaUrl({ success: false, message: 'Storage unavailable', url: 'https://images.example/false.png' }), /Storage unavailable/);
+  const file = new File(['photo'], 'chair.png', { type: 'image/png' });
+  const calls = [];
+  global.fetch = async (url, init) => { calls.push({url, init}); return Response.json({ data: { file: { fileUrl: 'https://images.example/cover.png' } } }); };
+  assert.equal(await api.uploadProductMedia(file, 'Bearer seller-token'), 'https://images.example/cover.png');
+  assert.equal(calls[0].init.headers.Authorization, 'Bearer seller-token');
+  assert.equal(calls[0].init.headers['Content-Type'], undefined);
+  assert.equal(calls[0].init.body.get('folder'), 'products');
+  assert.equal(calls[0].init.body.get('file').name, 'chair.png');
+  let failures = 0;
+  global.fetch = async () => { failures++; return Response.json({ message: 'Failed to upload file' }, { status: 500 }); };
+  await assert.rejects(api.uploadProductMedia(file, 'seller-token'), /chair\.png.*500.*Failed to upload file/);
+  assert.equal(failures, 1);
+  global.fetch = async () => Response.json({ success: false, error: { message: 'Storage unavailable' } });
+  await assert.rejects(api.uploadProductMedia(file, 'seller-token'), /Storage unavailable/);
+  global.fetch = async () => new Response('<html>too large</html>', { status: 413 });
+  await assert.rejects(api.uploadProductMedia(file, 'seller-token'), /Maximum size is 3 MB/);
 });
 
 test('update, stock patch and delete use singular routes without fallback after failures', async () => {

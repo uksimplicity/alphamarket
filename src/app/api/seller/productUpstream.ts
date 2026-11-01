@@ -45,6 +45,7 @@ export function invalidProduct(body: Record<string, unknown>, creating = false) 
   if (creating && (typeof body.categoryId !== "string" || !body.categoryId.trim())) return "Category is required.";
   if (creating && (typeof body.productTypeId !== "string" || !body.productTypeId.trim())) return "Product type is required.";
   if (creating) {
+    if (typeof body.location !== "string" || !body.location.trim()) return "Product location is required.";
     if (typeof body.shortDescription !== "string" || !body.shortDescription.trim()) return "Product description is required.";
     const media = body.media && typeof body.media === "object" && !Array.isArray(body.media) ? body.media as Record<string, unknown> : {};
     const hasCover = typeof media.cover === "string" && Boolean(media.cover.trim());
