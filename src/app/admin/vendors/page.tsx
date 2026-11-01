@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
+import { adminFetcher, asRecord, pickString } from "@/components/admin/api";
+import { fetchAdminUsers } from "@/components/admin/users";
+import UserAccountActions from "@/components/admin/UserAccountActions";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type Vendor = {
   id: string;
   name: string;
+  email: string;
   status: string;
   store: string;
   performance: string;
@@ -22,8 +25,7 @@ export default function AdminVendorsPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-vendors"],
     queryFn: async () => {
-      const payload = await adminFetcher<unknown>("/users?limit=100");
-      const rows = asArray(payload);
+      const rows = await fetchAdminUsers();
 
       return rows
         .map((row) => {
@@ -33,6 +35,7 @@ export default function AdminVendorsPage() {
 
           return {
             id,
+            email: pickString(record, ["email"]),
             role,
             name: pickString(record, ["name", "full_name"]) ||
               `${pickString(record, ["first_name"])} ${pickString(record, ["last_name"])}`
@@ -46,6 +49,7 @@ export default function AdminVendorsPage() {
         .filter((vendor) => vendor.id)
         .filter((vendor) => vendor.role.includes("seller") || vendor.role.includes("vendor"));
     },
+    refetchInterval: 30_000,
   });
 
   if (isLoading) {
@@ -137,10 +141,7 @@ export default function AdminVendorsPage() {
             </div>
             <div className="text-xs text-slate-500">{vendor.performance}</div>
             <div className="text-xs font-semibold text-brand">{vendor.status}</div>
-            <div className="flex gap-2">
-              <Button variant="ghost">Suspend</Button>
-              <Button>Approve</Button>
-            </div>
+            <UserAccountActions id={vendor.id} email={vendor.email} status={vendor.status} />
           </div>
         ))}
       </div>

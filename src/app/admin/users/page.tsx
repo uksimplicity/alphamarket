@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { adminFetcher, asArray, asRecord, pickNumber, pickString } from "@/components/admin/api";
+import { asRecord, pickNumber, pickString } from "@/components/admin/api";
+import { fetchAdminUsers } from "@/components/admin/users";
+import UserAccountActions from "@/components/admin/UserAccountActions";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type User = {
@@ -25,34 +26,31 @@ function normalizeUserRole(value: string): User["role"] {
 }
 
 export default function AdminUsersPage() {
-  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
-  const [actionError, setActionError] = useState("");
-
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-users"],
     queryFn: async () => {
-      const payload = await adminFetcher<unknown>("/users?limit=100");
-      const rows = asArray(payload);
+      const rows = await fetchAdminUsers();
 
-      return rows.map((row, index) => {
+      return rows.map((row) => {
         const record = asRecord(row);
 
         return {
-          id: pickString(record, ["id", "user_id", "uuid"], `user-${index}`),
+          id: pickString(record, ["id", "user_id", "uuid"]),
           name:
             pickString(record, ["name", "full_name"]) ||
             `${pickString(record, ["first_name"])} ${pickString(record, ["last_name"])}`
               .trim() ||
             pickString(record, ["email"], "Unknown user"),
-          email: pickString(record, ["email"], "No email"),
+          email: pickString(record, ["email"]),
           status: pickString(record, ["status"], "unknown"),
           orders: pickNumber(record, ["orders", "orders_count", "total_orders"], 0),
           role: normalizeUserRole(
-            pickString(record, ["role", "user_type", "type"], "buyer")
+            pickString(record, ["role", "userRole", "account_role", "user_type", "type"], "buyer")
           ),
         } satisfies User;
       });
     },
+    refetchInterval: 30_000,
   });
 
   if (isLoading) {
@@ -73,35 +71,11 @@ export default function AdminUsersPage() {
     );
   }
 
-  async function updateUserStatus(userId: string, status: "active" | "suspended") {
-    try {
-      setActionError("");
-      setPendingUserId(userId);
-
-      await adminFetcher(`/users/${userId}/status`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-
-      await refetch();
-    } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : "Failed to update user status."
-      );
-    } finally {
-      setPendingUserId(null);
-    }
-  }
-
   return (
     <Card>
-      <SectionTitle title="Users" subtitle="Manage account access and status." />
-      {actionError ? (
-        <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          {actionError}
-        </div>
-      ) : null}
+      <SectionTitle title="Users" subtitle="Approve, suspend, reactivate, or delete accounts."
+        action={<Button variant="ghost" onClick={() => refetch()}>Refresh</Button>} />
+      <p className="mt-2 text-sm text-slate-500">{data.length} users</p>
 
       <div className="mt-4 rounded-2xl border border-slate-200">
         <div className="hidden grid-cols-[2.2fr_1fr_1fr_1.2fr] gap-4 border-b border-slate-200 bg-slate-50/80 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 md:grid">
@@ -114,7 +88,6 @@ export default function AdminUsersPage() {
         <div className="divide-y divide-slate-200">
           {data.map((user) => {
             const status = user.status.toLowerCase();
-            const isPendingRow = pendingUserId === user.id;
             const badgeTone =
               status === "active"
                 ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
@@ -132,7 +105,7 @@ export default function AdminUsersPage() {
 
             return (
               <div
-                key={user.id}
+                key={user.id || user.email}
                 className="grid gap-4 px-4 py-4 md:grid-cols-[2.2fr_1fr_1fr_1.2fr] md:items-center md:px-5"
               >
                 <div className="min-w-0">
@@ -162,30 +135,7 @@ export default function AdminUsersPage() {
                   </span>
                 </div>
 
-                <div className="flex justify-start gap-2 md:justify-end">
-                  <Button
-                    variant="ghost"
-                    disabled={isPendingRow}
-                    onClick={() => updateUserStatus(user.id, "suspended")}
-                  >
-                    {isPendingRow
-                      ? "Updating..."
-                      : status === "suspended"
-                      ? "Suspended"
-                      : "Suspend"}
-                  </Button>
-                  <Button
-                    variant={status === "active" ? "ghost" : "primary"}
-                    disabled={isPendingRow}
-                    onClick={() => updateUserStatus(user.id, "active")}
-                  >
-                    {isPendingRow
-                      ? "Updating..."
-                      : status === "active"
-                      ? "Activated"
-                      : "Activate"}
-                  </Button>
-                </div>
+                <UserAccountActions id={user.id} email={user.email} status={user.status} />
               </div>
             );
           })}

@@ -35,10 +35,12 @@ async function forwardRequest(
   const hasBody = method !== "GET" && method !== "DELETE";
   const body = hasBody ? await req.text() : "";
   const headers = buildHeaders(req, hasBody);
-  const joinedPath = pathParts.join("/");
+  const joinedPath = pathParts.map(encodeURIComponent).join("/");
 
-  const candidateUrls = joinedPath === "categories" && method === "POST"
-    ? [`${API_BASE}/admin/categories${search}`]
+  const accountMutation = method !== "GET" &&
+    (joinedPath === "user" || /^users\/[^/]+\/status$/.test(joinedPath));
+  const candidateUrls = accountMutation || (joinedPath === "categories" && method === "POST")
+    ? [`${API_BASE}/admin/${joinedPath}${search}`]
     : Array.from(
     new Set(
       API_BASE_CANDIDATES.flatMap((base) => [
@@ -103,7 +105,7 @@ async function forwardRequest(
       { status: res.status, headers: { "Content-Type": "application/json" } }
     );
   }
-  return new Response(text, {
+  return new Response(res.status === 204 || res.status === 205 ? null : text, {
     status: res.status,
     headers: {
       "Content-Type": res.headers.get("content-type") ?? "application/json",

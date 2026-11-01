@@ -55,6 +55,7 @@ async function callApi(basePath: string, path: string, init: RequestInit | undef
   const response = await fetch(`${basePath}${path}`, {
     ...init,
     headers,
+    cache: "no-store",
   });
   const data = await readResponseData(response);
 

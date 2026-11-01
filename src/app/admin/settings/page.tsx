@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
+import { adminAccountQueryKeys, deleteAdminUser } from "@/components/admin/users";
 
 type AdminAccount = {
   id: string;
@@ -17,6 +18,7 @@ type SettingsData = {
 };
 
 export default function AdminSettingsPage() {
+  const queryClient = useQueryClient();
   const [deleteEmail, setDeleteEmail] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState("");
@@ -81,15 +83,14 @@ export default function AdminSettingsPage() {
 
   async function deleteUserByEmail() {
     if (!deleteEmail.trim()) return;
+    if (!window.confirm(`Delete the account for ${deleteEmail.trim()}? This cannot be undone.`)) return;
     try {
       setDeleteMessage("");
       setDeleteLoading(true);
-      await adminFetcher(`/user?email=${encodeURIComponent(deleteEmail.trim())}`, {
-        method: "DELETE",
-      });
-      setDeleteMessage("User deletion request sent successfully.");
+      await deleteAdminUser(deleteEmail);
+      setDeleteMessage("Account deleted successfully.");
       setDeleteEmail("");
-      await refetch();
+      await Promise.all(adminAccountQueryKeys.map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
     } catch (err) {
       setDeleteMessage(err instanceof Error ? err.message : "Failed to delete user.");
     } finally {

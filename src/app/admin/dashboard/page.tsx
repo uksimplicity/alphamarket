@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { adminFetcher, asArray, asRecord, pickNumber, pickString } from "@/components/admin/api";
+import { fetchAdminUserCount } from "@/components/admin/users";
 import { ErrorState, Skeleton } from "@/components/dashboard/ui";
 
 type AdminDashboardData = {
@@ -72,10 +73,6 @@ function pickMetricCount(
   }
 
   return fallback;
-}
-
-function resolveUsersCount(payload: unknown): number {
-  return asArray(payload).length;
 }
 
 function normalizeDashboardData(
@@ -167,13 +164,12 @@ export default function AdminDashboardPage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-dashboard"],
     queryFn: async () => {
-      const [dashboardPayload, usersPayload] = await Promise.all([
-        adminFetcher<unknown>("/dashboard"),
-        adminFetcher<unknown>("/users?limit=1000"),
-      ]);
-      const usersCount = resolveUsersCount(usersPayload);
+      const dashboardPayload = await adminFetcher<unknown>("/dashboard");
+      const usersCount = await fetchAdminUserCount();
       return normalizeDashboardData(dashboardPayload, { totalUsers: usersCount });
     },
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: "always",
   });
 
   if (isLoading) {
