@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 import { isTemporaryProductTypeId, loadProductTypeDetails, parseCatalogItems, type CatalogItem } from "@/components/admin/catalogRecords";
 import ProductTypeDetailsDialog from "@/components/admin/ProductTypeDetailsDialog";
+import ProductTypeEditDialog from "@/components/admin/ProductTypeEditDialog";
 import { getAuth } from "@/components/auth/authStorage";
 import { useAdminToast } from "@/components/admin/AdminToastProvider";
 import { productTypeResponseError } from "@/components/admin/productTypeResponse";
@@ -129,8 +130,10 @@ async function deleteProductTypeEndpoint(id: string): Promise<void> {
 }
 
 export default function AdminProductsPage() {
+  const queryClient = useQueryClient();
   const showToast = useAdminToast();
   const [viewedProductType, setViewedProductType] = useState<CatalogItem | null>(null);
+  const [editedProductType, setEditedProductType] = useState<CatalogItem | null>(null);
   const [productTypeViewError, setProductTypeViewError] = useState("");
   const productTypeViewRequest = useRef(0);
   const [pendingKey, setPendingKey] = useState("");
@@ -438,21 +441,34 @@ export default function AdminProductsPage() {
     setPendingKey((key) => key.startsWith("get-product-type-") ? "" : key);
   }
 
-  async function upsertProductType(id: string, name: string) {
-    const seed = { id, name };
-    const input = window.prompt("Update product type payload (JSON)", JSON.stringify(seed, null, 2));
-    if (!input) return;
+  async function updateProductType(name: string, categoryId: string) {
+    if (!editedProductType) return;
+    const { id } = editedProductType;
+    if (isTemporaryProductTypeId(id)) throw new Error("This product type has no saved backend ID. Refresh the list before editing.");
     try {
       setPendingKey(`put-product-type-${id}`);
-      await adminFetcher(`/product-types/${id}`, {
+      const payload = await adminFetcher<unknown>(`/product-types/${encodeURIComponent(id)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: input,
+        body: JSON.stringify({ name, ...(categoryId ? { category_id: categoryId } : {}) }),
       });
-      setActionMessage("Product type updated.");
-      await refetch();
+      const responseError = productTypeResponseError(payload);
+      if (responseError) throw new Error(responseError);
+      const updatedType = { ...editedProductType, name, ...(categoryId ? {
+        categoryId, categoryName: resolvedData.categories.find((category) => category.id === categoryId)?.name || (categoryId === editedProductType.categoryId ? editedProductType.categoryName : ""),
+      } : {}) };
+      queryClient.setQueryData<CatalogItem[]>(["admin-product-types"], (types) => types?.map((type) => type.id === id ? updatedType : type));
+      setCachedData((prev) => {
+        const productTypes = prev.productTypes.map((type) => type.id === id ? updatedType : type);
+        cacheProductTypes(productTypes);
+        return { ...prev, productTypes };
+      });
+      setEditedProductType(null);
+      showToast("Product type updated successfully.", "success");
+      void productTypesQuery.refetch();
     } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : "Failed to update product type.");
+      showToast(err instanceof Error ? err.message : "Failed to update product type.", "error");
+      throw err;
     } finally {
       setPendingKey("");
     }
@@ -557,6 +573,8 @@ export default function AdminProductsPage() {
       {viewedProductType ? <ProductTypeDetailsDialog item={viewedProductType}
         loading={pendingKey === `get-product-type-${viewedProductType.id}`}
         error={productTypeViewError} onClose={closeProductTypeView} /> : null}
+      {editedProductType ? <ProductTypeEditDialog key={editedProductType.id} item={editedProductType}
+        categories={resolvedData.categories} onSave={updateProductType} onClose={() => setEditedProductType(null)} /> : null}
       {error ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           {error instanceof Error ? error.message : "Some admin data could not be refreshed."}
@@ -791,7 +809,7 @@ export default function AdminProductsPage() {
                       <Button
                         variant="ghost"
                         disabled={pendingKey === `put-product-type-${type.id}`}
-                        onClick={() => upsertProductType(type.id, type.name)}
+                        onClick={() => setEditedProductType(type)}
                       >
                         Edit
                       </Button>

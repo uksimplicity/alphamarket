@@ -47,6 +47,7 @@ async function main() {
       window.__catalogReads = [];
       window.__unrelatedProductReads = 0;
       window.__failAction = false;
+      let editedType = null;
       let users = JSON.parse(sessionStorage.getItem('admin-fixture-users') || '[{"id":"seller-one","name":"Synthetic Seller","email":"seller@example.test","role":"seller","status":"pending"}]');
       if (!sessionStorage.getItem('admin-fixture-users')) users.push(...Array.from({ length: 25 }, (_, i) => ({ id: 'buyer-' + i, name: 'Synthetic Buyer ' + i, email: 'buyer' + i + '@example.test', role: 'buyer', status: 'pending' })));
       const save = () => sessionStorage.setItem('admin-fixture-users', JSON.stringify(users));
@@ -60,6 +61,10 @@ async function main() {
           window.__writes.push({ path: url.pathname, method, body: init.body });
           if (window.__failAction) return Response.json({ error: 'Action denied by service' }, { status: 403 });
           if (url.pathname === '/api/admin/product-types' && method === 'POST') return Response.json({ success: true, message: 'Accepted' }, { status: 201 });
+          if (url.pathname === '/api/admin/product-types/real-type' && method === 'PUT') {
+            editedType = { id: 'real-type', ...JSON.parse(init.body) };
+            return Response.json({success:true,data:editedType});
+          }
           if (url.pathname.endsWith('/status')) {
             const status = JSON.parse(init.body).status;
             const id = decodeURIComponent(url.pathname.split('/').at(-2));
@@ -87,10 +92,10 @@ async function main() {
           if (sessionStorage.getItem('catalog-use-cache') === 'wrong-resource') return Response.json({success:true,data:{products:[],total:0,limit:100,offset:0}});
           if (sessionStorage.getItem('catalog-use-cache') === 'empty') return Response.json({data:[]});
           if (sessionStorage.getItem('catalog-use-cache')) return Response.json({error:'Catalog offline'}, {status:503});
-          return Response.json({Data:{Catalog:{Types:[{ID:'real-type',Name:'Kit',CategoryID:'sports'},{productTypeId:'type-detail',productTypeName:'Boots'}]}}});
+          return Response.json({Data:{Catalog:{Types:[editedType || {ID:'real-type',Name:'Kit',CategoryID:'sports'},{productTypeId:'type-detail',productTypeName:'Boots'}]}}});
         }
         if (url.pathname === '/api/admin/product-types/type-detail') return Response.json({data:{id:'type-detail',name:'Boots',category_id:'football'}});
-        if (url.pathname === '/api/admin/categories/raw') return Response.json({data:[{id:'sports',name:'Sportswear'}]});
+        if (url.pathname === '/api/admin/categories/raw') return Response.json({data:[{id:'sports',name:'Sportswear'},{id:'football',name:'Football Equipment'}]});
         if (url.pathname === '/api/admin/categories/sports') return Response.json({data:{id:'sports',name:'Sportswear'}});
         if (url.pathname === '/api/admin/categories/football') return Response.json({data:{id:'football',name:'Football Equipment'}});
         if (url.pathname === '/api/user/profile') return Response.json({ data: { id: 'admin-fixture', role: 'admin' } });
@@ -180,6 +185,35 @@ async function main() {
     await wait(`document.querySelector('dialog[open]')?.textContent.includes('Football Equipment')`);
     await click('Close');
     console.log('PASS product type View reveals category names from list mappings and fetched details');
+    const typeWrites = `window.__writes.filter(row=>row.path==='/api/admin/product-types/real-type'&&row.method==='PUT')`;
+    const editName = async value => evaluate(`(()=>{const input=document.querySelector('dialog[open] input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await click('Edit');
+    await wait(`document.querySelector('dialog[open] select')?.value==='sports'&&!document.querySelector('dialog[open] select').disabled`);
+    assert.equal(await evaluate(`document.querySelector('dialog[open] input').value`), 'Kit');
+    await editName('Discarded change'); await click('Cancel');
+    assert.equal(await evaluate(`${typeWrites}.length`), 0);
+    await click('Edit');
+    await editName('   '); await click('Save changes');
+    await wait(`document.querySelector('dialog[open] [role="alert"]')?.textContent.includes('name is required')`);
+    assert.equal(await evaluate(`${typeWrites}.length`), 0);
+    await editName('Updated Kit');
+    await evaluate(`window.__failAction=true`);
+    await click('Save changes');
+    await wait(`document.querySelector('dialog[open] [role="alert"]')?.textContent.includes('Action denied')`);
+    assert.equal(await evaluate(`document.querySelector('dialog[open] input').value`), 'Updated Kit');
+    await evaluate(`window.__failAction=false;const select=document.querySelector('dialog[open] select');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'football');select.dispatchEvent(new Event('change',{bubbles:true}));`);
+    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    assert.equal(await evaluate(`document.querySelector('dialog[open]').getBoundingClientRect().right<=innerWidth`), true);
+    await click('Save changes');
+    await wait(`!document.querySelector('dialog[open]')&&${stat}?.includes('Updated Kit')&&document.querySelector('[data-admin-toast]')?.textContent.includes('Product type updated successfully.')`);
+    const writes = await evaluate(typeWrites);
+    assert.equal(writes.length, 2);
+    assert.deepEqual(JSON.parse(writes[1].body), {name:'Updated Kit',category_id:'football'});
+    await click('View');
+    await wait(`document.querySelector('dialog[open]')?.textContent.includes('Football Equipment')`);
+    await click('Close');
+    await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+    console.log('PASS product type edit form prefills fields, validates, cancels without writes, retains failed edits, and saves name/category with a toast on mobile');
     await evaluate(`sessionStorage.setItem('catalog-use-cache','yes');localStorage.setItem('alpha.admin.product-types',JSON.stringify([{id:'tmppt-cached',name:'Cached Jerseys',categoryId:'sports',categoryName:'Sportswear'}]));`);
     await send('Page.reload', { ignoreCache: true });
     await wait(`${stat}?.includes('Cached Jerseys')`);
