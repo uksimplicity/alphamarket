@@ -16,6 +16,14 @@ test('single create responses and nested lists preserve the actual type ID and c
   }
 });
 
+test('collection parsing preserves legacy service-specific arrays for types and categories', () => {
+  const types = { data: { available_types: [{ id: 'type-one', name: 'Jerseys', category_id: 'sports' }] } };
+  assert.equal(catalog.parseCatalogItems(types)[0].name, 'Jerseys');
+  assert.equal(catalog.parseCatalogItems(types)[0].categoryId, 'sports');
+  const categories = { data: { category_list: [{ id: 'sports', name: 'Sportswear' }] } };
+  assert.equal(catalog.parseCatalogItems(categories)[0].name, 'Sportswear');
+});
+
 test('view resolves a cached temporary type category without sending a fake ID to the API', async () => {
   global.fetch = async () => { throw new Error('No API calls expected'); };
   const type = { id: 'tmppt-one', name: 'Jerseys', hint: '', categoryId: 'sports' };

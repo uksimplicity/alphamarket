@@ -1,4 +1,4 @@
-import { adminFetcher, asRecord, pickString } from "./api";
+import { adminFetcher, asArray, asRecord, pickString } from "./api";
 
 export type CatalogItem = { id: string; name: string; hint: string; categoryId?: string; categoryName?: string };
 
@@ -25,6 +25,9 @@ export function parseCatalogItems(payload: unknown, config?: {
     for (const key of ["data", "items", "results", "rows", "productTypes", "product_types", "product_type", "productType", "categories", "category", "attributes", "attribute"]) walk(record[key]);
   }
   walk(payload);
+  // Retain the original collection parser's support for service-specific array
+  // names inside data envelopes, in addition to single-record detail responses.
+  if (!found.size) asArray(payload).forEach(walk);
   return [...found.values()];
 }
 

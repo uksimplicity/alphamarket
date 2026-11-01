@@ -38,8 +38,11 @@ function isPlaceholderId(value: string) {
   );
 }
 
-function cacheProductTypes(types: CatalogItem[]) {
+function cacheProductTypes(types: CatalogItem[], allowEmpty = false) {
   if (typeof window === "undefined") return;
+  // A missing or empty collection must not erase types retained from creation.
+  // Explicit deletion updates the cache separately below.
+  if (types.length === 0 && !allowEmpty) return;
   try {
     const normalized = types
       .map((item) => ({
@@ -499,7 +502,7 @@ export default function AdminProductsPage() {
       }
       setCachedData((prev) => {
         const nextProductTypes = prev.productTypes.filter((item) => item.id !== id);
-        cacheProductTypes(nextProductTypes);
+        cacheProductTypes(nextProductTypes, true);
         return { ...prev, productTypes: nextProductTypes };
       });
       await refetch();

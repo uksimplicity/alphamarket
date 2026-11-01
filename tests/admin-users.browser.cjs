@@ -78,8 +78,9 @@ async function main() {
         }
         if (url.pathname === '/api/admin/dashboard') return Response.json({ total_users: 999 });
         if (url.pathname === '/api/admin/product-types') {
+          if (sessionStorage.getItem('catalog-use-cache') === 'empty') return Response.json({data:[]});
           if (sessionStorage.getItem('catalog-use-cache')) return Response.json({error:'Catalog offline'}, {status:503});
-          return Response.json({data:{product_types:[{id:'real-type',name:'Kit',category_id:'sports'},{id:'type-detail',name:'Boots'}]}});
+          return Response.json({data:{available_types:[{id:'real-type',name:'Kit',category_id:'sports'},{id:'type-detail',name:'Boots'}]}});
         }
         if (url.pathname === '/api/admin/product-types/type-detail') return Response.json({data:{id:'type-detail',name:'Boots',category_id:'football'}});
         if (url.pathname === '/api/admin/categories/raw') return Response.json({data:[{id:'sports',name:'Sportswear'}]});
@@ -177,6 +178,14 @@ async function main() {
     assert.equal(await evaluate(`window.__catalogReads.some(path=>path.includes('tmppt-'))`), false);
     await click('Close');
     console.log('PASS cached temporary types reveal their category without sending invalid IDs to the backend');
+    await evaluate(`sessionStorage.setItem('catalog-use-cache','empty')`);
+    await send('Page.reload', { ignoreCache: true });
+    await wait(`${stat}?.includes('Cached Jerseys')&&window.__catalogReads.includes('/api/admin/product-types')`);
+    await evaluate(`new Promise(resolve=>setTimeout(resolve,150))`);
+    await wait(`localStorage.getItem('alpha.admin.product-types')?.includes('Cached Jerseys')`);
+    await send('Page.reload', { ignoreCache: true });
+    await wait(`${stat}?.includes('Cached Jerseys')&&window.__catalogReads.includes('/api/admin/product-types')`);
+    console.log('PASS an empty successful collection never clears cached types across page reloads');
     assert.deepEqual(errors, []);
   } finally {
     await send('Page.close'); socket.close();
