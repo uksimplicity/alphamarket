@@ -5,6 +5,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 import { adminAccountQueryKeys, deleteAdminUser } from "@/components/admin/users";
+import { useAdminToast } from "@/components/admin/AdminToastProvider";
+import AccountDeleteConfirmation from "@/components/admin/AccountDeleteConfirmation";
 
 type AdminAccount = {
   id: string;
@@ -19,9 +21,11 @@ type SettingsData = {
 
 export default function AdminSettingsPage() {
   const queryClient = useQueryClient();
+  const showToast = useAdminToast();
   const [deleteEmail, setDeleteEmail] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-settings"],
@@ -83,16 +87,20 @@ export default function AdminSettingsPage() {
 
   async function deleteUserByEmail() {
     if (!deleteEmail.trim()) return;
-    if (!window.confirm(`Delete the account for ${deleteEmail.trim()}? This cannot be undone.`)) return;
     try {
       setDeleteMessage("");
       setDeleteLoading(true);
       await deleteAdminUser(deleteEmail);
+      setConfirmDelete(false);
       setDeleteMessage("Account deleted successfully.");
+      showToast("Account deleted successfully.");
       setDeleteEmail("");
       await Promise.all(adminAccountQueryKeys.map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
     } catch (err) {
-      setDeleteMessage(err instanceof Error ? err.message : "Failed to delete user.");
+      setConfirmDelete(false);
+      const message = err instanceof Error ? err.message : "Failed to delete user.";
+      setDeleteMessage(message);
+      showToast(message, "error");
     } finally {
       setDeleteLoading(false);
     }
@@ -135,13 +143,17 @@ export default function AdminSettingsPage() {
             onChange={(event) => setDeleteEmail(event.target.value)}
           />
           <Button
-            variant="ghost"
-            disabled={deleteLoading}
-            onClick={deleteUserByEmail}
+            variant="danger"
+            disabled={deleteLoading || !deleteEmail.trim()}
+            onClick={() => setConfirmDelete(true)}
           >
             {deleteLoading ? "Deleting..." : "Delete User"}
           </Button>
         </div>
+        {confirmDelete ? (
+          <AccountDeleteConfirmation email={deleteEmail.trim()} pending={deleteLoading}
+            onCancel={() => setConfirmDelete(false)} onConfirm={deleteUserByEmail} />
+        ) : null}
         {deleteMessage ? (
           <div className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
             {deleteMessage}

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { asRecord, pickNumber, pickString } from "@/components/admin/api";
 import { fetchAdminUsers } from "@/components/admin/users";
 import UserAccountActions from "@/components/admin/UserAccountActions";
+import { useAdminToast } from "@/components/admin/AdminToastProvider";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
 type User = {
@@ -26,6 +27,7 @@ function normalizeUserRole(value: string): User["role"] {
 }
 
 export default function AdminUsersPage() {
+  const showToast = useAdminToast();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-users"],
     queryFn: async () => {
@@ -74,7 +76,10 @@ export default function AdminUsersPage() {
   return (
     <Card>
       <SectionTitle title="Users" subtitle="Approve, suspend, reactivate, or delete accounts."
-        action={<Button variant="ghost" onClick={() => refetch()}>Refresh</Button>} />
+        action={<Button variant="ghost" onClick={async () => {
+          const result = await refetch();
+          showToast(result.error ? result.error.message : "Users refreshed successfully.", result.error ? "error" : "success");
+        }}>Refresh</Button>} />
       <p className="mt-2 text-sm text-slate-500">{data.length} users</p>
 
       <div className="mt-4 rounded-2xl border border-slate-200">

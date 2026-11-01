@@ -9,21 +9,35 @@ test('user totals prefer pagination totals over page counts and preserve zero', 
   assert.equal(users.reportedUserCount({ count: 100, data: { users: [], pagination: { total: '245' } } }), 245);
   assert.equal(users.reportedUserCount({ data: { total_users: 0 } }), 0);
   assert.equal(users.reportedUserCount({ data: { total: 99, total_orders: 500 } }, true), undefined);
-  assert.equal(users.reportedUserCount({ data: { users: { count: 12 } } }, true), 12);
+  assert.equal(users.reportedUserCount({ data: { users: { count: 12 } } }, true), undefined);
   for (const total of [null, '', false, -1, 'Infinity', 'NaN']) {
     assert.equal(users.reportedUserCount({ total }), undefined);
   }
 });
 
-test('dashboard count uses the reported total rather than the returned page length', async () => {
+test('overview counts the same 26 accounts as Users instead of a one-row page count', async () => {
   const calls = [];
+  const accounts = Array.from({ length: 26 }, (_, i) => ({ id: String(i) }));
   global.fetch = async (url, init) => {
     calls.push(url);
     assert.equal(init.cache, 'no-store');
-    return Response.json({ data: { users: [{ id: 'one' }], total: 245 } });
+    const limit = Number(new URL(url, 'http://localhost').searchParams.get('limit'));
+    const rows = accounts.slice(0, limit);
+    return Response.json({ data: { users: rows, count: rows.length } });
   };
-  assert.equal(await users.fetchAdminUserCount(), 245);
+  assert.equal(await users.fetchAdminUserCount(), 26);
+  assert.equal(calls[0], '/api/admin/users?limit=100&offset=0');
   assert.equal(calls.length, 1);
+});
+
+test('page-local count never truncates users beyond the first full page', async () => {
+  const accounts = Array.from({ length: 126 }, (_, i) => ({ id: String(i) }));
+  global.fetch = async url => {
+    const offset = Number(new URL(url, 'http://localhost').searchParams.get('offset'));
+    const rows = accounts.slice(offset, offset + 100);
+    return Response.json({ users: rows, count: rows.length });
+  };
+  assert.equal(await users.fetchAdminUserCount(), 126);
 });
 
 test('count falls back to actual user rows when list metadata is absent', async () => {

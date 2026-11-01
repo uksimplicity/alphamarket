@@ -59,12 +59,15 @@ export function Button({
   variant = "primary",
   ...rest
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "ghost";
+  variant?: "primary" | "ghost" | "success" | "warning" | "danger";
 }) {
   const variants = {
     primary:
       "bg-brand text-white hover:bg-[#2952cc] shadow-sm border border-transparent",
     ghost: "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50",
+    success: "bg-green-700 text-white border border-green-700 hover:bg-green-800",
+    warning: "bg-orange-600 text-white border border-orange-600 hover:bg-orange-700",
+    danger: "bg-red-600 text-white border border-red-600 hover:bg-red-700",
   };
   return (
     <button

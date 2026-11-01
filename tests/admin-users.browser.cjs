@@ -43,6 +43,7 @@ async function main() {
       window.__writes = [];
       window.__failAction = false;
       let users = JSON.parse(sessionStorage.getItem('admin-fixture-users') || '[{"id":"seller-one","name":"Synthetic Seller","email":"seller@example.test","role":"seller","status":"pending"}]');
+      if (!sessionStorage.getItem('admin-fixture-users')) users.push(...Array.from({ length: 25 }, (_, i) => ({ id: 'buyer-' + i, name: 'Synthetic Buyer ' + i, email: 'buyer' + i + '@example.test', role: 'buyer', status: 'pending' })));
       const save = () => sessionStorage.setItem('admin-fixture-users', JSON.stringify(users));
       const realFetch = window.fetch.bind(window);
       window.fetch = async (input, init = {}) => {
@@ -54,7 +55,8 @@ async function main() {
           if (window.__failAction) return Response.json({ error: 'Action denied by service' }, { status: 403 });
           if (url.pathname.endsWith('/status')) {
             const status = JSON.parse(init.body).status;
-            users = users.map(user => ({ ...user, status })); save();
+            const id = decodeURIComponent(url.pathname.split('/').at(-2));
+            users = users.map(user => user.id === id ? { ...user, status } : user); save();
             return new Response(null, { status: 204 });
           }
           if (url.pathname === '/api/admin/user' && method === 'DELETE') {
@@ -63,7 +65,12 @@ async function main() {
           }
           return Response.json({ error: 'Unexpected fixture write' }, { status: 400 });
         }
-        if (url.pathname === '/api/admin/users') return Response.json({ data: { users, pagination: { total: users.length } } });
+        if (url.pathname === '/api/admin/users') {
+          const offset = Number(url.searchParams.get('offset') || 0);
+          const limit = Number(url.searchParams.get('limit') || 100);
+          const rows = users.slice(offset, offset + limit);
+          return Response.json({ data: { users: rows, count: rows.length } });
+        }
         if (url.pathname === '/api/admin/dashboard') return Response.json({ total_users: 999 });
         if (url.pathname === '/api/user/profile') return Response.json({ data: { id: 'admin-fixture', role: 'admin' } });
         return Response.json({ data: [] });
@@ -71,24 +78,36 @@ async function main() {
     ` });
     await send('Page.navigate', { url: 'http://127.0.0.1:3014/admin/dashboard' });
     await wait(`${stat}?.includes('Total Users')`);
-    await wait(`[...document.querySelectorAll('main div')].some(el=>el.textContent==='Total Users'&&el.nextElementSibling?.textContent==='1')`);
-    console.log('PASS dashboard uses user-service total instead of stale dashboard total');
+    await wait(`[...document.querySelectorAll('main div')].some(el=>el.textContent==='Total Users'&&el.nextElementSibling?.textContent==='26')`);
+    console.log('PASS overview counts 26 users despite page-local counts and stale dashboard totals');
     await click('Accounts');
     await wait(`document.querySelector('a[href="/admin/users"]')`);
     await evaluate(`document.querySelector('a[href="/admin/users"]').click()`);
     await wait(`${button('Approve')}`);
+    await wait(`${stat}?.includes('26 users')`);
+    for (const [label, expected] of [['Approve', 'rgb(21, 128, 61)'], ['Suspend', 'rgb(234, 88, 12)'], ['Delete', 'rgb(220, 38, 38)']]) {
+      assert.equal(await evaluate(`getComputedStyle(${button(label)}).backgroundColor`), expected, label + ' button color');
+    }
+    console.log('PASS Users agrees with Overview; approve is green, suspend orange, delete red');
     await click('Approve'); await wait(`${button('Active')}`);
+    await wait(`document.querySelector('[data-admin-toast]')?.textContent.includes('Account approved successfully.')`);
     assert.equal(await evaluate(`window.__writes.length`), 1);
     assert.equal(await evaluate(`${button('Active')}.disabled`), true);
     await click('Suspend'); await wait(`${button('Reactivate')}`);
+    await wait(`document.querySelector('[data-admin-toast]')?.textContent.includes('Account suspended successfully.')`);
     await click('Reactivate'); await wait(`${button('Active')}`);
+    await wait(`document.querySelector('[data-admin-toast]')?.textContent.includes('Account reactivated successfully.')`);
+    await evaluate(`document.querySelector('button[aria-label="Dismiss notification"]').click()`);
+    await wait(`!document.querySelector('[data-admin-toast]')`);
     console.log('PASS approve, suspend, and reactivate update the account status');
     await evaluate('window.__failAction = true');
     await click('Suspend'); await wait(`document.querySelector('[role="alert"]')?.textContent.includes('Action denied')`);
+    assert.equal(await evaluate(`document.querySelector('[data-admin-toast]').getAttribute('role')`), 'alert');
     assert.ok(await evaluate(`Boolean(${button('Active')})`));
     await evaluate('window.__failAction = false');
     console.log('PASS backend rejection keeps the existing status and displays the error');
     await click('Delete'); await wait(`document.querySelector('[role="alertdialog"]')`);
+    assert.equal(await evaluate(`document.querySelector('[role="alertdialog"] p').textContent`), 'Are you sure you want to delete this account?');
     assert.equal(await evaluate('window.__writes.length'), 4);
     await click('Cancel');
     assert.equal(await evaluate('window.__writes.length'), 4);
@@ -97,12 +116,19 @@ async function main() {
     await wait(`${button('Suspend')}`);
     await click('Suspend'); await wait(`${button('Reactivate')}`);
     console.log('PASS seller account controls are connected');
-    await click('Delete'); await click('Confirm delete');
+    await evaluate('window.__failAction = true');
+    await click('Delete'); await click('Yes');
+    await wait(`!document.querySelector('[role="alertdialog"]')&&document.querySelector('[data-admin-toast]')?.textContent.includes('Action denied')`);
+    await evaluate('window.__failAction = false');
+    console.log('PASS rejected deletion keeps the account and shows an error toast above the closed dialog');
+    await click('Delete'); await click('Yes');
     await wait(`${stat}?.includes('No seller accounts found')`);
-    assert.equal(await evaluate(`window.__writes.filter(row=>row.method==='DELETE').length`), 1);
+    await wait(`document.querySelector('[data-admin-toast]')?.textContent.includes('Account deleted successfully.')`);
+    console.log('PASS approval, suspension, reactivation, errors, and deletion show dismissible toasts; deletion toast survives row removal');
+    assert.equal(await evaluate(`window.__writes.filter(row=>row.method==='DELETE').length`), 2);
     await evaluate(`document.querySelector('a[href="/admin/dashboard"]').click()`);
-    await wait(`[...document.querySelectorAll('main div')].some(el=>el.textContent==='Total Users'&&el.nextElementSibling?.textContent==='0')`);
-    console.log('PASS confirmed deletion removes account and updates dashboard count to zero');
+    await wait(`[...document.querySelectorAll('main div')].some(el=>el.textContent==='Total Users'&&el.nextElementSibling?.textContent==='25')`);
+    console.log('PASS confirmed deletion removes account and updates dashboard count to 25');
     assert.deepEqual(errors, []);
   } finally {
     await send('Page.close'); socket.close();

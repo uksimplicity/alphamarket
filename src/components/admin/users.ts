@@ -15,11 +15,6 @@ export function reportedUserCount(payload: unknown, userMetricOnly = false): num
     const count = reportedUserCount(record[key], key === "users" ? false : userMetricOnly);
     if (count !== undefined) return count;
   }
-  if (!userMetricOnly) {
-    const value = record.count;
-    if ((typeof value === "number" || (typeof value === "string" && value.trim())) &&
-      Number.isSafeInteger(Number(value)) && Number(value) >= 0) return Number(value);
-  }
   return undefined;
 }
 
@@ -55,9 +50,6 @@ export async function fetchAdminUsers(): Promise<Record<string, unknown>[]> {
 }
 
 export async function fetchAdminUserCount(): Promise<number> {
-  const payload = await adminFetcher<unknown>("/users?limit=1&offset=0");
-  const count = reportedUserCount(payload);
-  if (count !== undefined) return count;
   return (await fetchAdminUsers()).length;
 }
 
