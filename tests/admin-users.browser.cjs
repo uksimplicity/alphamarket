@@ -129,6 +129,23 @@ async function main() {
     await evaluate(`document.querySelector('a[href="/admin/dashboard"]').click()`);
     await wait(`[...document.querySelectorAll('main div')].some(el=>el.textContent==='Total Users'&&el.nextElementSibling?.textContent==='25')`);
     console.log('PASS confirmed deletion removes account and updates dashboard count to 25');
+    await evaluate(`sessionStorage.setItem('admin-fixture-users', JSON.stringify([
+      {id:'layout-one',role:'seller',name:'First Seller',email:'first.seller@example.test',store:{name:'First Store'},status:'active'},
+      {id:'layout-two',role:'seller',name:'A seller with a much longer account name',email:'a.very.long.seller.email.address.for.layout.verification@example.test',status:'pending'},
+      {id:'layout-three',role:'seller',name:'Third Seller',email:'third.seller@example.test',status:'suspended'}
+    ]));localStorage.setItem('alpha.vendor.storeProfiles.v1',JSON.stringify([{ownerKey:'layout-two',slug:'second-store',name:'Second Store With A Longer Name'}]));`);
+    await send('Page.navigate', { url: 'http://127.0.0.1:3014/admin/vendors' });
+    await wait(`${stat}?.includes('First Store')&&${stat}?.includes('Second Store With A Longer Name')`);
+    assert.equal(await evaluate(`document.querySelector('[data-seller-row] a').textContent`), 'first.seller@example.test');
+    assert.equal(await evaluate(`document.querySelectorAll('[data-seller-row]')[2].textContent.includes('Store name unavailable')`), true);
+    const columns = await evaluate(`[...document.querySelectorAll('[data-seller-row]')].map(row=>[...row.children].map(cell=>Math.round(cell.getBoundingClientRect().left)))`);
+    assert.deepEqual(columns[0], columns[1]);
+    assert.deepEqual(columns[1], columns[2]);
+    console.log('PASS seller emails and API/browser store names display in aligned desktop columns');
+    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await wait(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`);
+    assert.equal(await evaluate(`document.querySelectorAll('[data-seller-row]').length`), 3);
+    console.log('PASS long seller names and emails fit the mobile layout');
     assert.deepEqual(errors, []);
   } finally {
     await send('Page.close'); socket.close();

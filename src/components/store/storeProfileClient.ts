@@ -116,6 +116,13 @@ export function getCurrentSellerStoreProfile(): SellerStoreProfile | null {
   return profiles.find((entry) => entry.ownerKey === ownerKey) ?? null;
 }
 
+export function getSellerStoreProfileByOwner(id: string, email: string): SellerStoreProfile | null {
+  return readAllStoreProfiles().find((entry) =>
+    (Boolean(id) && entry.ownerKey === id) ||
+    (Boolean(email) && entry.ownerKey.toLowerCase() === email.toLowerCase())
+  ) ?? null;
+}
+
 export function getStoreProfileBySlug(slug: string): SellerStoreProfile | null {
   const normalizedSlug = slugifyStoreName(slug);
   if (!normalizedSlug) return null;

@@ -1,53 +1,33 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { adminFetcher, asRecord, pickString } from "@/components/admin/api";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { adminFetcher } from "@/components/admin/api";
 import { fetchAdminUsers } from "@/components/admin/users";
+import { sellerAccounts } from "@/components/admin/sellerAccounts";
+import { getSellerStoreProfileByOwner, subscribeStoreProfiles } from "@/components/store/storeProfileClient";
 import UserAccountActions from "@/components/admin/UserAccountActions";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
-type Vendor = {
-  id: string;
-  name: string;
-  email: string;
-  status: string;
-  store: string;
-  performance: string;
-};
-
 export default function AdminVendorsPage() {
+  const queryClient = useQueryClient();
   const [lookupEmail, setLookupEmail] = useState("");
   const [lookupId, setLookupId] = useState("");
   const [lookupResult, setLookupResult] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
+  useEffect(() => subscribeStoreProfiles(() => {
+    void queryClient.invalidateQueries({ queryKey: ["admin-vendors"] });
+  }), [queryClient]);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-vendors"],
     queryFn: async () => {
       const rows = await fetchAdminUsers();
 
-      return rows
-        .map((row) => {
-          const record = asRecord(row);
-          const role = pickString(record, ["role", "userRole", "account_role", "user_type", "type"]).trim().toLowerCase();
-          const id = pickString(record, ["id", "user_id", "uuid"]);
-
-          return {
-            id,
-            email: pickString(record, ["email"]),
-            role,
-            name: pickString(record, ["name", "full_name"]) ||
-              `${pickString(record, ["first_name"])} ${pickString(record, ["last_name"])}`
-                .trim() ||
-              pickString(record, ["email"], "Unknown vendor"),
-            status: pickString(record, ["status"], "pending"),
-            store: pickString(record, ["store", "store_name", "business_name"], "No store name"),
-            performance: pickString(record, ["performance", "rating", "score"], "No metrics"),
-          } satisfies Vendor & { role: string };
-        })
-        .filter((vendor) => vendor.id)
-        .filter((vendor) => vendor.role.includes("seller") || vendor.role.includes("vendor"));
+      return sellerAccounts(rows).map((seller) => ({
+        ...seller,
+        store: seller.store || getSellerStoreProfileByOwner(seller.id, seller.email)?.name || "",
+      }));
     },
     refetchInterval: 30_000,
   });
@@ -100,10 +80,11 @@ export default function AdminVendorsPage() {
 
   return (
     <Card>
-      <SectionTitle title="Vendors" subtitle="Approve, suspend, and review metrics." />
+      <SectionTitle title="Sellers" subtitle="Review seller details and manage account access." />
       <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 md:grid-cols-[1fr_auto_1fr_auto]">
         <input
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+          className="min-w-0 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+          aria-label="Lookup seller by email"
           placeholder="Lookup user by email"
           value={lookupEmail}
           onChange={(event) => setLookupEmail(event.target.value)}
@@ -112,7 +93,8 @@ export default function AdminVendorsPage() {
           {lookupLoading ? "Looking up..." : "Lookup Email"}
         </Button>
         <input
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+          className="min-w-0 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+          aria-label="Lookup seller by ID"
           placeholder="Lookup user by ID"
           value={lookupId}
           onChange={(event) => setLookupId(event.target.value)}
@@ -127,21 +109,34 @@ export default function AdminVendorsPage() {
         </pre>
       ) : null}
       <div className="mt-4 space-y-3 text-sm">
+        <div className="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_6rem_18rem] items-center gap-5 rounded-lg bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 xl:grid">
+          <div>Seller</div><div>Store</div><div>Status</div><div className="text-right">Actions</div>
+        </div>
         {data.length === 0 ? (
           <p className="text-slate-500">No seller accounts found in the returned users.</p>
         ) : null}
         {data.map((vendor) => (
           <div
             key={vendor.id}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3"
+            data-seller-row
+            className="grid min-w-0 gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_6rem_18rem] xl:items-center xl:gap-5"
           >
-            <div>
-              <div className="font-semibold text-slate-800">{vendor.name}</div>
-              <div className="text-xs text-slate-500">{vendor.store}</div>
+            <div className="min-w-0 [overflow-wrap:anywhere]">
+              <div className="font-semibold leading-6 text-slate-800">{vendor.name}</div>
+              {vendor.email ? <a className="mt-1 block text-sm leading-5 text-slate-500 hover:text-brand" href={`mailto:${vendor.email}`}>{vendor.email}</a>
+                : <p className="mt-1 text-sm text-slate-500">Email unavailable</p>}
             </div>
-            <div className="text-xs text-slate-500">{vendor.performance}</div>
-            <div className="text-xs font-semibold text-brand">{vendor.status}</div>
-            <UserAccountActions id={vendor.id} email={vendor.email} status={vendor.status} />
+            <div className="min-w-0 [overflow-wrap:anywhere]">
+              <div className="mb-1 text-xs text-slate-400 xl:hidden">Store</div>
+              <div className="leading-6 text-slate-700">{vendor.store || "Store name unavailable"}</div>
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-slate-400 xl:hidden">Status</div>
+              <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ring-1 ${vendor.status === "active" ? "bg-green-50 text-green-700 ring-green-200" : vendor.status === "pending" ? "bg-orange-50 text-orange-700 ring-orange-200" : "bg-slate-100 text-slate-700 ring-slate-200"}`}>{vendor.status.replace(/_/g, " ")}</span>
+            </div>
+            <div className="min-w-0 sm:justify-self-end xl:w-full">
+              <UserAccountActions id={vendor.id} email={vendor.email} status={vendor.status} />
+            </div>
           </div>
         ))}
       </div>
