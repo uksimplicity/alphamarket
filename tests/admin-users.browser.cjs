@@ -45,6 +45,7 @@ async function main() {
       localStorage.setItem('alpha.auth', JSON.stringify({ access_token: 'synthetic-admin', user: { id: 'admin-fixture', first_name: 'Admin', role: 'admin' } }));
       window.__writes = [];
       window.__catalogReads = [];
+      window.__unrelatedProductReads = 0;
       window.__failAction = false;
       let users = JSON.parse(sessionStorage.getItem('admin-fixture-users') || '[{"id":"seller-one","name":"Synthetic Seller","email":"seller@example.test","role":"seller","status":"pending"}]');
       if (!sessionStorage.getItem('admin-fixture-users')) users.push(...Array.from({ length: 25 }, (_, i) => ({ id: 'buyer-' + i, name: 'Synthetic Buyer ' + i, email: 'buyer' + i + '@example.test', role: 'buyer', status: 'pending' })));
@@ -58,6 +59,7 @@ async function main() {
         if (method !== 'GET') {
           window.__writes.push({ path: url.pathname, method, body: init.body });
           if (window.__failAction) return Response.json({ error: 'Action denied by service' }, { status: 403 });
+          if (url.pathname === '/api/admin/product-types' && method === 'POST') return Response.json({ success: true, message: 'Accepted' }, { status: 201 });
           if (url.pathname.endsWith('/status')) {
             const status = JSON.parse(init.body).status;
             const id = decodeURIComponent(url.pathname.split('/').at(-2));
@@ -77,13 +79,19 @@ async function main() {
           return Response.json({ data: { users: rows, count: rows.length } });
         }
         if (url.pathname === '/api/admin/dashboard') return Response.json({ total_users: 999 });
+        if (['/api/admin/products','/api/admin/products_v0','/api/admin/attributes'].includes(url.pathname)) {
+          window.__unrelatedProductReads++;
+          return new Promise(()=>{});
+        }
         if (url.pathname === '/api/admin/product-types') {
+          if (sessionStorage.getItem('catalog-use-cache') === 'wrong-resource') return Response.json({success:true,data:{products:[],total:0,limit:100,offset:0}});
           if (sessionStorage.getItem('catalog-use-cache') === 'empty') return Response.json({data:[]});
           if (sessionStorage.getItem('catalog-use-cache')) return Response.json({error:'Catalog offline'}, {status:503});
-          return Response.json({data:{available_types:[{id:'real-type',name:'Kit',category_id:'sports'},{id:'type-detail',name:'Boots'}]}});
+          return Response.json({Data:{Catalog:{Types:[{ID:'real-type',Name:'Kit',CategoryID:'sports'},{productTypeId:'type-detail',productTypeName:'Boots'}]}}});
         }
         if (url.pathname === '/api/admin/product-types/type-detail') return Response.json({data:{id:'type-detail',name:'Boots',category_id:'football'}});
         if (url.pathname === '/api/admin/categories/raw') return Response.json({data:[{id:'sports',name:'Sportswear'}]});
+        if (url.pathname === '/api/admin/categories/sports') return Response.json({data:{id:'sports',name:'Sportswear'}});
         if (url.pathname === '/api/admin/categories/football') return Response.json({data:{id:'football',name:'Football Equipment'}});
         if (url.pathname === '/api/user/profile') return Response.json({ data: { id: 'admin-fixture', role: 'admin' } });
         return Response.json({ data: [] });
@@ -162,6 +170,8 @@ async function main() {
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
     await send('Page.navigate', { url: 'http://127.0.0.1:3014/admin/products#product-types' });
     await wait(`${stat}?.includes('Kit')&&${stat}?.includes('Boots')`);
+    assert.equal(await evaluate('window.__unrelatedProductReads'), 0);
+    console.log('PASS product types render independently of unrelated product requests and support server field aliases');
     await click('View');
     await wait(`document.querySelector('dialog[open]')?.textContent.includes('Sportswear')`);
     assert.equal(await evaluate(`document.querySelector('dialog[open] dd').textContent`), 'Kit');
@@ -186,6 +196,22 @@ async function main() {
     await send('Page.reload', { ignoreCache: true });
     await wait(`${stat}?.includes('Cached Jerseys')&&window.__catalogReads.includes('/api/admin/product-types')`);
     console.log('PASS an empty successful collection never clears cached types across page reloads');
+    await evaluate(`sessionStorage.setItem('catalog-use-cache','wrong-resource');localStorage.removeItem('alpha.admin.product-types')`);
+    await send('Page.reload', { ignoreCache: true });
+    await wait(`document.querySelector('[role="alert"]')?.textContent.includes('products collection instead of product types')`);
+    assert.equal(await evaluate(`${stat}.includes('No saved product types were returned.')`), false);
+    console.log('PASS the actual reported wrong-collection payload displays a service error instead of an empty list');
+    await evaluate(`sessionStorage.setItem('catalog-use-cache','empty')`);
+    await send('Page.reload', { ignoreCache: true });
+    await wait(`${stat}?.includes('No saved product types were returned.')`);
+    await click('Create Product Type');
+    await evaluate(`const input=document.querySelector('input[placeholder="Product Type Name"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'Unconfirmed Type');input.dispatchEvent(new Event('input',{bubbles:true}));`);
+    await click('Create');
+    await wait(`${stat}?.includes('did not return a saved product type')`);
+    assert.equal(await evaluate(`document.querySelector('tbody').textContent.includes('Unconfirmed Type')`), false);
+    assert.equal(await evaluate(`localStorage.getItem('alpha.admin.product-types')?.includes('tmppt-')||false`), false);
+    assert.equal(await evaluate(`window.__writes.filter(row=>row.path==='/api/admin/product-types').length`), 1);
+    console.log('PASS accepted-but-unconfirmed creation never fabricates a saved type or retries its write');
     assert.deepEqual(errors, []);
   } finally {
     await send('Page.close'); socket.close();

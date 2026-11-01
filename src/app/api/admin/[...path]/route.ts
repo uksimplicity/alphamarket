@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { productTypeResponseError } from "@/components/admin/productTypeResponse";
 
 const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
@@ -36,10 +37,13 @@ async function forwardRequest(
   const body = hasBody ? await req.text() : "";
   const headers = buildHeaders(req, hasBody);
   const joinedPath = pathParts.map(encodeURIComponent).join("/");
+  const productTypeRequest = pathParts[0] === "product-types";
 
   const accountMutation = method !== "GET" &&
     (joinedPath === "user" || /^users\/[^/]+\/status$/.test(joinedPath));
-  const candidateUrls = accountMutation || (joinedPath === "categories" && method === "POST")
+  const candidateUrls = productTypeRequest
+    ? [`${API_ROOT_BASE}/api/v1/admin/${joinedPath}${search}`]
+    : accountMutation || (joinedPath === "categories" && method === "POST")
     ? [`${API_BASE}/admin/${joinedPath}${search}`]
     : Array.from(
     new Set(
@@ -59,9 +63,10 @@ async function forwardRequest(
       headers,
       body: body || undefined,
       cache: "no-store",
+      ...(productTypeRequest ? { redirect: "manual" as const } : {}),
     });
     attempts.push({ url, status: attempt.status });
-    if (attempt.status === 404) continue;
+    if (attempt.status === 404 && !productTypeRequest) continue;
     res = attempt;
     break;
   }
@@ -94,7 +99,36 @@ async function forwardRequest(
     );
   }
 
-  const text = await res.text();
+  let text = await res.text();
+  let productTypeUpstreamPath = `/api/v1/admin/${joinedPath}`;
+  if (productTypeRequest && res.status >= 300 && res.status < 400) {
+    return Response.json({ error: "The product type service redirected to an unexpected endpoint." }, { status: 502 });
+  }
+  if (productTypeRequest && res.ok && text.trim()) {
+    let error: string | null;
+    try { error = productTypeResponseError(JSON.parse(text)); }
+    catch { error = "The product type service returned an unreadable response."; }
+    // The seller catalog is also a documented read-only source of product types.
+    // Do not replay creates/updates/deletes, or retry authorization failures.
+    if (error && method === "GET" && pathParts.length === 1) {
+      try {
+        const fallback = await fetch(`${API_ROOT_BASE}/api/v1/seller/product-types${search}`, {
+          method: "GET", headers, cache: "no-store", redirect: "manual",
+          signal: AbortSignal.timeout(15_000),
+        });
+        const fallbackText = await fallback.text();
+        if (fallback.ok && !productTypeResponseError(JSON.parse(fallbackText))) {
+          res = fallback;
+          text = fallbackText;
+          error = null;
+          productTypeUpstreamPath = "/api/v1/seller/product-types";
+        }
+      } catch { /* Keep the original, actionable service error. */ }
+    }
+    if (error) return Response.json({ error }, { status: 502, headers: {
+      "Cache-Control": "no-store", "X-Admin-Upstream-Path": `/api/v1/admin/${joinedPath}`,
+    } });
+  }
   if (res.status >= 500) {
     return new Response(
       JSON.stringify({
@@ -109,6 +143,7 @@ async function forwardRequest(
     status: res.status,
     headers: {
       "Content-Type": res.headers.get("content-type") ?? "application/json",
+      ...(productTypeRequest ? { "Cache-Control": "no-store", "X-Admin-Upstream-Path": productTypeUpstreamPath } : {}),
     },
   });
 }

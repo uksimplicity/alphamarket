@@ -1,33 +1,48 @@
-import { adminFetcher, asArray, asRecord, pickString } from "./api";
+import { adminFetcher, asRecord } from "./api";
 
 export type CatalogItem = { id: string; name: string; hint: string; categoryId?: string; categoryName?: string };
+
+const fieldKey = (key: string) => key.replace(/[_-]/g, "").toLowerCase();
+function catalogText(record: Record<string, unknown> | null, keys: string[]) {
+  if (!record) return "";
+  const fields = new Map(Object.entries(record).map(([key, value]) => [fieldKey(key), value]));
+  for (const key of keys) {
+    const value = fields.get(fieldKey(key));
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return "";
+}
 
 export function parseCatalogItems(payload: unknown, config?: {
   idKeys?: string[]; nameKeys?: string[]; hintKeys?: string[]; fallbackPrefix?: string;
 }): CatalogItem[] {
   const found = new Map<string, CatalogItem>();
+  const visited = new WeakSet<object>();
+  const isProductType = config?.idKeys?.some((key) => ["producttypeid", "typeid"].includes(fieldKey(key)));
   function walk(value: unknown) {
     if (Array.isArray(value)) { value.forEach(walk); return; }
     const record = asRecord(value);
-    if (!record) return;
-    const id = pickString(record, config?.idKeys ?? ["id", "uuid"]).trim();
-    const name = pickString(record, config?.nameKeys ?? ["name", "title"]).trim();
+    if (!record || visited.has(record)) return;
+    visited.add(record);
+    const id = catalogText(record, config?.idKeys ?? ["id", "uuid"]);
+    const name = catalogText(record, [...(config?.nameKeys ?? ["name", "title"]), ...(isProductType ? ["product_type_name", "type_name", "type", "label"] : [])]);
     if (id && name) {
-      const category = asRecord(record.category);
+      const category = asRecord(Object.entries(record).find(([key]) => ["category", "parentcategory"].includes(fieldKey(key)))?.[1]);
       if (!found.has(id)) found.set(id, {
         id, name,
-        hint: pickString(record, config?.hintKeys ?? ["description"]),
-        categoryId: pickString(record, ["category_id", "categoryId"]).trim() || pickString(category, ["id", "uuid", "category_id"]).trim(),
-        categoryName: pickString(record, ["category_name", "categoryName"]).trim() || pickString(category, ["name", "title", "category_name"]).trim(),
+        hint: catalogText(record, config?.hintKeys ?? ["description"]),
+        categoryId: catalogText(record, ["category_id"]) || catalogText(category, ["id", "uuid", "category_id"]),
+        categoryName: catalogText(record, ["category_name"]) || catalogText(category, ["name", "title", "category_name"]),
       });
       return;
     }
-    for (const key of ["data", "items", "results", "rows", "productTypes", "product_types", "product_type", "productType", "categories", "category", "attributes", "attribute"]) walk(record[key]);
+    for (const [key, child] of Object.entries(record)) {
+      if (isProductType && ["category", "categories", "parentcategory"].includes(fieldKey(key))) continue;
+      if (Array.isArray(child) || asRecord(child)) walk(child);
+    }
   }
   walk(payload);
-  // Retain the original collection parser's support for service-specific array
-  // names inside data envelopes, in addition to single-record detail responses.
-  if (!found.size) asArray(payload).forEach(walk);
   return [...found.values()];
 }
 

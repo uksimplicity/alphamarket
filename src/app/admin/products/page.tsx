@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 import { isTemporaryProductTypeId, loadProductTypeDetails, parseCatalogItems, type CatalogItem } from "@/components/admin/catalogRecords";
 import ProductTypeDetailsDialog from "@/components/admin/ProductTypeDetailsDialog";
+import { getAuth } from "@/components/auth/authStorage";
+import { useAdminToast } from "@/components/admin/AdminToastProvider";
+import { productTypeResponseError } from "@/components/admin/productTypeResponse";
 
 type Product = {
   id: string;
@@ -99,8 +102,9 @@ async function fetchOptionalAdminCollection(path: string, fallback: unknown = []
 
 async function fetchOptionalCatalogCollection(path: string, fallback: unknown = []): Promise<unknown> {
   try {
+    const token = getAuth()?.access_token;
     const response = await fetch(path, {
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       cache: "no-store",
     });
     if (!response.ok) return fallback;
@@ -121,26 +125,11 @@ async function createProductTypeEndpoint(name: string, categoryId: string) {
 }
 
 async function deleteProductTypeEndpoint(id: string): Promise<void> {
-  const paths = [
-    `/product-types/${id}?hard=true`,
-    `/product-types/${id}?force=true`,
-    `/product-types/${id}`,
-  ];
-
-  let lastError: unknown = null;
-  for (const path of paths) {
-    try {
-      await adminFetcher(path, { method: "DELETE" });
-      return;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error("Failed to delete product type.");
+  await adminFetcher(`/product-types/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export default function AdminProductsPage() {
+  const showToast = useAdminToast();
   const [viewedProductType, setViewedProductType] = useState<CatalogItem | null>(null);
   const [productTypeViewError, setProductTypeViewError] = useState("");
   const productTypeViewRequest = useRef(0);
@@ -174,103 +163,82 @@ export default function AdminProductsPage() {
     return () => window.removeEventListener("hashchange", syncHash);
   }, []);
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["admin-products"],
+  const productTypesQuery = useQuery({
+    queryKey: ["admin-product-types"],
     queryFn: async () => {
-      const productsPayloadPrimary = await fetchOptionalAdminCollection("/products?limit=100", []);
-      const productsPayload =
-        asArray(productsPayloadPrimary).length > 0
-          ? productsPayloadPrimary
-          : await fetchOptionalAdminCollection("/products_v0?limit=100", []);
-      const [attributesPayload, productTypesResult, categoriesResult] = await Promise.all([
-        fetchOptionalAdminCollection("/attributes?limit=100", []),
-        (async () => {
-          try {
-            const payload = await adminFetcher<unknown>("/product-types?limit=100");
-            return { payload, error: "" };
-          } catch (err) {
-            return {
-              payload: readCachedCatalogItems(ADMIN_PRODUCT_TYPES_CACHE_KEY),
-              error: err instanceof Error ? err.message : "Failed to load product types.",
-            };
-          }
-        })(),
-        (async () => {
-          const adminCandidates = [
-            "/categories/raw?limit=200&offset=0",
-            "/categories?limit=200&offset=0",
-            "/categories?limit=200",
-            "/categories",
-          ];
-
-          for (const path of adminCandidates) {
-            const categoriesPayload = await fetchOptionalAdminCollection(path, null);
-            if (categoriesPayload) {
-              return {
-                payload: categoriesPayload,
-                fromCache: false,
-              };
-            }
-          }
-
-          const sellerCatalogPayload = await fetchOptionalCatalogCollection(
-            "/api/seller/catalog?resource=categories&limit=200&offset=0",
-            null
-          );
-          if (sellerCatalogPayload) {
-            return {
-              payload: sellerCatalogPayload,
-              fromCache: false,
-            };
-          }
-          return {
-            payload: readCachedCatalogItems("alpha.admin.categories"),
-            fromCache: true,
-          };
-        })(),
-      ]);
-
-      const products = asArray(productsPayload).map((row, index) => {
-        const record = asRecord(row);
-        return {
-          id: pickString(record, ["id", "product_id", "uuid"], `product-${index}`),
-          name: pickString(record, ["name", "title"], "Unnamed product"),
-          category: pickString(record, ["category", "category_name", "categoryId"], "Uncategorized"),
-          status: pickString(record, ["status"], "unknown"),
-          sellerId: pickString(record, ["seller_id", "sellerId"], ""),
-        } satisfies Product;
+      const payload = await adminFetcher<unknown>("/product-types?limit=100", {
+        signal: AbortSignal.timeout(25_000),
       });
-
-      const attributes = parseCatalogItems(attributesPayload, {
-        idKeys: ["id", "uuid", "attribute_id"],
-        nameKeys: ["name", "title", "attribute_name"],
-        fallbackPrefix: "attribute",
-      });
-
-      const productTypes = parseCatalogItems(productTypesResult.payload, {
+      const responseError = productTypeResponseError(payload);
+      if (responseError) throw new Error(responseError);
+      return parseCatalogItems(payload, {
         idKeys: ["id", "uuid", "product_type_id", "type_id"],
-        nameKeys: ["name", "title", "product_type", "type_name"],
-        hintKeys: ["category_id", "categoryId", "category_name", "categoryName"],
-        fallbackPrefix: "product-type",
+        nameKeys: ["name", "title", "product_type", "type_name", "product_type_name", "label"],
+        hintKeys: ["category_id", "category_name"],
       });
+    },
+    refetchInterval: 30_000,
+    retry: 1,
+  });
 
-      const categories = parseCatalogItems(categoriesResult.payload, {
-        idKeys: ["id", "uuid", "category_id", "categoryId"],
-        nameKeys: ["name", "title", "category_name", "categoryName"],
-        fallbackPrefix: "category",
+  const categoriesQuery = useQuery({
+    queryKey: ["admin-product-type-categories"],
+    queryFn: async () => {
+      for (const path of ["/categories/raw?limit=200&offset=0", "/categories?limit=200&offset=0", "/categories?limit=200", "/categories"]) {
+        const payload = await fetchOptionalAdminCollection(path, null);
+        const items = parseCatalogItems(payload, {
+          idKeys: ["id", "uuid", "category_id"],
+          nameKeys: ["name", "title", "category_name"],
+        });
+        if (items.length) return { items, fromCache: false };
+      }
+      const payload = await fetchOptionalCatalogCollection("/api/seller/catalog?resource=categories&limit=200&offset=0", null);
+      const items = parseCatalogItems(payload, {
+        idKeys: ["id", "uuid", "category_id"], nameKeys: ["name", "title", "category_name"],
       });
-
-      return {
-        products,
-        attributes,
-        productTypes,
-        categories,
-        categoriesFromCache: categoriesResult.fromCache,
-        productTypesError: productTypesResult.error,
-      } satisfies ProductsData;
+      if (items.length) return { items, fromCache: false };
+      return { items: readCachedCatalogItems("alpha.admin.categories"), fromCache: true };
     },
   });
 
+  const productQuery = useQuery({
+    queryKey: ["admin-products"],
+    enabled: cacheHydrated && activeHash !== "product-types",
+    queryFn: async () => {
+      const primary = await fetchOptionalAdminCollection("/products?limit=100", []);
+      const payload = asArray(primary).length ? primary : await fetchOptionalAdminCollection("/products_v0?limit=100", []);
+      const attributes = await fetchOptionalAdminCollection("/attributes?limit=100", []);
+      return {
+        products: asArray(payload).map((row, index) => {
+          const record = asRecord(row);
+          return {
+            id: pickString(record, ["id", "product_id", "uuid"], `product-${index}`),
+            name: pickString(record, ["name", "title"], "Unnamed product"),
+            category: pickString(record, ["category", "category_name", "categoryId"], "Uncategorized"),
+            status: pickString(record, ["status"], "unknown"),
+            sellerId: pickString(record, ["seller_id", "sellerId"], ""),
+          } satisfies Product;
+        }),
+        attributes: parseCatalogItems(attributes, {
+          idKeys: ["id", "uuid", "attribute_id"], nameKeys: ["name", "title", "attribute_name"],
+        }),
+      };
+    },
+  });
+
+  const data = useMemo<ProductsData>(() => ({
+    products: productQuery.data?.products ?? [],
+    attributes: productQuery.data?.attributes ?? [],
+    productTypes: productTypesQuery.data ?? [],
+    categories: categoriesQuery.data?.items ?? [],
+    categoriesFromCache: categoriesQuery.data?.fromCache ?? true,
+    productTypesError: productTypesQuery.error?.message,
+  }), [productQuery.data, productTypesQuery.data, categoriesQuery.data, productTypesQuery.error]);
+  const error = productQuery.error;
+  const refetch = () => Promise.all([
+    ...(activeHash === "product-types" ? [] : [productQuery.refetch()]),
+    productTypesQuery.refetch(), categoriesQuery.refetch(),
+  ]);
   useEffect(() => {
     setCachedData(readCachedProductsData());
     setCacheHydrated(true);
@@ -300,7 +268,7 @@ export default function AdminProductsPage() {
     }));
   }, [data]);
 
-  if (isLoading && !cacheHydrated && !data) {
+  if (!cacheHydrated) {
     return (
       <div className="grid gap-6">
         <Skeleton className="h-10" />
@@ -409,17 +377,18 @@ export default function AdminProductsPage() {
         fallbackPrefix: "product-type",
       })[0];
       const selectedCategory = resolvedData.categories.find((item) => item.id === categoryId);
-      const createdType: CatalogItem = parsedCreatedType ? {
-        ...parsedCreatedType,
-        categoryId: parsedCreatedType.categoryId || categoryId,
-        categoryName: parsedCreatedType.categoryName || selectedCategory?.name || "",
-      } : {
-          id: `tmppt-${Date.now().toString(36)}`,
-          name,
-          hint: selectedCategory?.name ?? "",
-          categoryId,
-          categoryName: selectedCategory?.name ?? "",
-        };
+      const savedType = parsedCreatedType ?? (await productTypesQuery.refetch()).data?.find((item) =>
+        item.name.toLowerCase() === name.toLowerCase() && (!categoryId || item.categoryId === categoryId)
+      );
+      if (!savedType || isTemporaryProductTypeId(savedType.id)) {
+        setActionMessage("The server accepted the request but did not return a saved product type. Refresh the list before submitting again.");
+        return;
+      }
+      const createdType: CatalogItem = {
+        ...savedType,
+        categoryId: savedType.categoryId || categoryId,
+        categoryName: savedType.categoryName || selectedCategory?.name || "",
+      };
       setActionMessage("Product type created.");
       setProductTypeForm({ name: "", categoryId: "" });
       setCachedData((prev) => {
@@ -705,10 +674,15 @@ export default function AdminProductsPage() {
 
       <Card>
         <div id="product-types" className="h-0 scroll-mt-24" aria-hidden="true" />
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <h2 className="text-[34px] font-semibold leading-none text-slate-900">
             Product Types List
           </h2>
+          <div className="flex flex-wrap items-center gap-3">
+          <Button variant="ghost" disabled={productTypesQuery.isFetching} onClick={async () => {
+            const result = await productTypesQuery.refetch();
+            showToast(result.error ? result.error.message : "Product types refreshed successfully.", result.error ? "error" : "success");
+          }}>{productTypesQuery.isFetching ? "Refreshing..." : "Refresh"}</Button>
           <button
             type="button"
             onClick={() => setShowProductTypeForm((prev) => !prev)}
@@ -716,6 +690,7 @@ export default function AdminProductsPage() {
           >
             {showProductTypeForm ? "Close" : "Create Product Type"}
           </button>
+          </div>
         </div>
 
         {showProductTypeForm ? (
@@ -736,7 +711,7 @@ export default function AdminProductsPage() {
                 }
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
               >
-                <option value="">No category</option>
+                <option value="">{categoriesQuery.isPending ? "Loading categories..." : "No category"}</option>
                 {selectableCategories.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -833,9 +808,11 @@ export default function AdminProductsPage() {
               {filteredProductTypes.length === 0 ? (
                 <tr>
                   <td className="px-4 py-6 text-slate-500" colSpan={4}>
-                    {resolvedData.productTypesError
+                    {productTypesQuery.isPending
+                      ? "Loading product types..."
+                      : resolvedData.productTypesError
                       ? "Product types could not be loaded. Try again above."
-                      : "No product types found."}
+                      : productTypeSearch.trim() ? "No product types match your search." : "No saved product types were returned."}
                   </td>
                 </tr>
               ) : null}
