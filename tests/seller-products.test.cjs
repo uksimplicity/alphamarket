@@ -4,7 +4,7 @@ const load = require('./support/load-ts.cjs');
 const originalFetch = global.fetch, originalBase = process.env.NEXT_PUBLIC_API_BASE_URL;
 beforeEach(() => { load.reset(); process.env.NEXT_PUBLIC_API_BASE_URL = 'https://marketplace.example/api/v1'; });
 afterEach(() => { global.fetch = originalFetch; if (originalBase === undefined) delete process.env.NEXT_PUBLIC_API_BASE_URL; else process.env.NEXT_PUBLIC_API_BASE_URL = originalBase; });
-const payload = { name: 'Chair', categoryId: 'category', productTypeId: 'type', brandId: 'chosen-brand', basePrice: 5000, stock: 3 };
+const payload = { name: 'Chair', categoryId: 'category', productTypeId: 'type', brandId: 'chosen-brand', basePrice: 5000, stock: 3, shortDescription: 'An actual chair', media: { cover: 'https://images.example/chair.png' } };
 const request = (method, body, auth = 'Bearer seller-token') => new Request('https://web.example/api/seller/products', { method, headers: { Authorization: auth, Cookie: 'browser=private', 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 const detail = () => load('src/app/api/seller/products/[productId]/route.ts');
 const context = { params: Promise.resolve({ productId: 'product-1' }) };
@@ -18,6 +18,33 @@ test('create preserves selected brand and sends once to singular authenticated e
   assert.equal(JSON.parse(calls[0].init.body).brandId, 'chosen-brand');
   assert.equal(calls[0].init.headers.Authorization, 'Bearer seller-token');
   assert.equal(calls[0].init.headers.Cookie, undefined); assert.equal(calls[0].init.redirect, 'manual');
+});
+
+test('seller creation accepts description and a gallery image without other optional details', async () => {
+  const minimal = { name: 'Chair', slug: 'chair', sellerId: 'seller-one', basePrice: 5000, categoryId: 'category', productTypeId: 'type', shortDescription: 'An actual chair', media: { images: ['https://images.example/chair.png'] } };
+  const calls = [];
+  global.fetch = async (url, init) => { calls.push({ url, body: JSON.parse(init.body) }); return Response.json({ data: { id: 'created' } }, { status: 201 }); };
+  const result = await load('src/app/api/seller/products/route.ts').POST(request('POST', minimal));
+  assert.equal(result.status, 201);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].body, minimal);
+});
+
+test('seller creation rejects missing description or images before contacting the backend', async () => {
+  let calls = 0;
+  global.fetch = async () => { calls++; return Response.json({}); };
+  const collection = load('src/app/api/seller/products/route.ts');
+  for (const shortDescription of [undefined, '', '   ']) {
+    const response = await collection.POST(request('POST', { ...payload, shortDescription }));
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /description is required/);
+  }
+  for (const media of [undefined, {}, { cover: ' ', images: [] }, { video: 'https://images.example/video.mp4' }]) {
+    const response = await collection.POST(request('POST', { ...payload, media }));
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /product image/);
+  }
+  assert.equal(calls, 0);
 });
 
 test('update, stock patch and delete use singular routes without fallback after failures', async () => {

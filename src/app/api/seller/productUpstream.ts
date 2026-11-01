@@ -44,6 +44,13 @@ export function invalidProduct(body: Record<string, unknown>, creating = false) 
   if ((creating || "name" in body) && (typeof body.name !== "string" || !body.name.trim())) return "Product name is required.";
   if (creating && (typeof body.categoryId !== "string" || !body.categoryId.trim())) return "Category is required.";
   if (creating && (typeof body.productTypeId !== "string" || !body.productTypeId.trim())) return "Product type is required.";
+  if (creating) {
+    if (typeof body.shortDescription !== "string" || !body.shortDescription.trim()) return "Product description is required.";
+    const media = body.media && typeof body.media === "object" && !Array.isArray(body.media) ? body.media as Record<string, unknown> : {};
+    const hasCover = typeof media.cover === "string" && Boolean(media.cover.trim());
+    const hasProductPhoto = Array.isArray(media.images) && media.images.some((item) => typeof item === "string" && item.trim());
+    if (!hasCover && !hasProductPhoto) return "Add at least one product image.";
+  }
   if (creating || "basePrice" in body) {
     const price = body.basePrice;
     if (typeof price !== "number" || !Number.isFinite(price) || price <= 0 || price > 1e9) return "Price must be greater than zero and at most 1,000,000,000.";

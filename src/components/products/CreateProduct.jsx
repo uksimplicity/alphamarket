@@ -668,8 +668,8 @@ async function uploadFile(file, folder, token) {
       setError("Product description is required.");
       return;
     }
-    if (mode === "seller" && !form.brand.trim()) {
-      setError("Choose a brand before saving your product.");
+    if (mode === "seller" && !coverFile && imageFiles.length === 0) {
+      setError("Add at least one product image.");
       return;
     }
     if (form.brand.trim() && !isUuid(form.brand.trim())) {
@@ -730,11 +730,6 @@ async function uploadFile(file, folder, token) {
       slug: normalizedSlug,
       status: submitIntent === "draft" ? "draft" : "publish",
       isPublished: submitIntent !== "draft",
-      media: {
-        cover: "",
-        images: [],
-        video: "",
-      },
     };
 
     if (form.location.trim()) payload.location = form.location.trim();
@@ -782,9 +777,13 @@ async function uploadFile(file, folder, token) {
         : [];
       const videoUrl = await uploadFile(videoFile, "products", authorization);
 
-      payload.media.cover = coverUrl;
-      payload.media.images = imageUrls.filter(Boolean);
-      payload.media.video = videoUrl;
+      if (coverFile || imageFiles.length || videoFile) {
+        payload.media = {
+          cover: coverUrl,
+          images: imageUrls.filter(Boolean),
+          video: videoUrl,
+        };
+      }
       checkAccount(stamp);
 
       const createEndpoint =
@@ -863,6 +862,7 @@ async function uploadFile(file, folder, token) {
         </div>
 
         <form onSubmit={handleSubmit} className="create-form">
+          <p className="text-sm text-slate-500">Product name, category, product type, base price, and description are required.{mode === "seller" ? " Add at least one product image." : ""}</p>
           <section className="form-section">
             <div className="section-title">Basic Information</div>
             <div className="form-grid">
@@ -921,7 +921,7 @@ async function uploadFile(file, folder, token) {
                 ) : null}
               </div>
               <div className="field">
-                <label>{mode === "seller" ? "Brand" : "Brand (optional)"}</label>
+                <label>Brand (optional)</label>
                 <select
                   name="brand"
                   value={form.brand}
@@ -931,7 +931,7 @@ async function uploadFile(file, folder, token) {
                   <option value="">
                     {catalogLoading
                       ? "Loading brands..."
-                      : "Select Brand"}
+                      : "No brand"}
                   </option>
                   {brandOptions.map((item) => (
                     <option key={item.id} value={item.id}>
@@ -956,7 +956,7 @@ async function uploadFile(file, folder, token) {
                 />
               </div>
               <div className="field">
-                <label>Stock</label>
+                <label>Stock (optional)</label>
                 <input
                   type="number"
                   min="0"
@@ -980,14 +980,15 @@ async function uploadFile(file, folder, token) {
             </div>
             <div className="form-grid">
               <div className="field">
-                <label>Location</label>
+                <label>Location (optional)</label>
                 <input name="location" value={form.location} onChange={handleChange} />
               </div>
             </div>
           </section>
 
           <section className="form-section">
-            <div className="section-title">Media</div>
+            <div className="section-title">{mode === "seller" ? "Product Images" : "Media (optional)"}</div>
+            {mode === "seller" ? <p className="mb-3 text-sm text-slate-500">Add at least one cover photo or product photo. Video is optional.</p> : null}
             <div className="media-grid">
               <label className="upload-card">
                 <input
