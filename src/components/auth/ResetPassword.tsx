@@ -50,6 +50,7 @@ export default function ResetPassword() {
         className={styles.form}
         onSubmit={async (event) => {
           event.preventDefault();
+          if (loading) return;
           setError("");
           setSuccess("");
 
@@ -61,18 +62,18 @@ export default function ResetPassword() {
             setError("Please enter your OTP and new password.");
             return;
           }
-    if (!isStrongPassword(password)) {
-      setError("Please meet all password requirements.");
-      return;
-    }
+          if (!isStrongPassword(password)) {
+            setError("Please meet all password requirements.");
+            return;
+          }
           if (password !== confirmPassword) {
             setError("Passwords do not match.");
             return;
           }
 
-          const otpNumber = Number.parseInt(otp, 10);
-          if (Number.isNaN(otpNumber)) {
-            setError("OTP must be a number.");
+          const resetOtp = otp.trim();
+          if (!/^\d+$/.test(resetOtp)) {
+            setError("OTP must contain only digits.");
             return;
           }
 
@@ -84,7 +85,7 @@ export default function ResetPassword() {
               body: JSON.stringify({
                 email,
                 new_password: password,
-                otp: otpNumber,
+                otp: resetOtp,
               }),
             });
 
@@ -124,6 +125,9 @@ export default function ResetPassword() {
             <input
               className={styles.input}
               placeholder="OTP code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
               value={otp}
               onChange={(event) => setOtp(event.target.value)}
             />
@@ -131,8 +135,8 @@ export default function ResetPassword() {
               type="button"
               className={styles.primaryBtn}
               onClick={() => {
-                if (!otp) {
-                  setError("Please enter your OTP.");
+                if (!/^\d+$/.test(otp.trim())) {
+                  setError("Please enter a valid OTP containing only digits.");
                   return;
                 }
                 setError("");
@@ -310,7 +314,7 @@ export default function ResetPassword() {
           </div>
         ) : null}
         {success ? <div className={styles.successText}>{success}</div> : null}
-        <button className={styles.primaryBtn} type="submit">
+        <button className={styles.primaryBtn} type="submit" disabled={loading}>
           {loading ? "Resetting..." : "Reset Password"}
         </button>
       </form>
