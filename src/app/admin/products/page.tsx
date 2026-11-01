@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
+import { isTemporaryProductTypeId, loadProductTypeDetails, parseCatalogItems, type CatalogItem } from "@/components/admin/catalogRecords";
+import ProductTypeDetailsDialog from "@/components/admin/ProductTypeDetailsDialog";
 
 type Product = {
   id: string;
@@ -12,14 +14,6 @@ type Product = {
   category: string;
   status: string;
   sellerId: string;
-};
-
-type CatalogItem = {
-  id: string;
-  name: string;
-  hint: string;
-  categoryId?: string;
-  categoryName?: string;
 };
 
 type ProductsData = {
@@ -42,63 +36,6 @@ function isPlaceholderId(value: string) {
     id.startsWith("category-") ||
     id.startsWith("attribute-")
   );
-}
-
-function parseCatalogItems(
-  payload: unknown,
-  config?: { idKeys?: string[]; nameKeys?: string[]; hintKeys?: string[]; fallbackPrefix?: string }
-) {
-  const idKeys = config?.idKeys ?? ["id", "uuid"];
-  const nameKeys = config?.nameKeys ?? ["name", "title"];
-  const hintKeys = config?.hintKeys ?? ["description"];
-  const listCandidates = [
-    payload,
-    asRecord(payload)?.data,
-    asRecord(payload)?.items,
-    asRecord(payload)?.results,
-    asRecord(payload)?.rows,
-    asRecord(payload)?.productTypes,
-    asRecord(payload)?.product_types,
-    asRecord(payload)?.categories,
-    asRecord(payload)?.attributes,
-  ];
-
-  const rows = listCandidates
-    .flatMap((candidate) => (Array.isArray(candidate) ? candidate : []))
-    .flatMap((row) => (Array.isArray(row) ? row : [row]))
-    .map((row) => asRecord(row))
-    .filter((record): record is Record<string, unknown> => Boolean(record));
-
-  const found = rows
-    .map((record) => ({
-      id: pickString(record, idKeys, "").trim(),
-      name: pickString(record, nameKeys, "").trim(),
-      hint: pickString(record, hintKeys, ""),
-      categoryId: pickString(record, ["category_id", "categoryId"], ""),
-      categoryName: pickString(record, ["category_name", "categoryName"], ""),
-    }))
-    .filter((item) => item.id && item.name);
-
-  if (found.length > 0) {
-    const byId = new Map<string, CatalogItem>();
-    found.forEach((item) => {
-      if (!byId.has(item.id)) byId.set(item.id, item);
-    });
-    return Array.from(byId.values());
-  }
-
-  return asArray(payload)
-    .flatMap((row) => (Array.isArray(row) ? row : [row]))
-    .map((row) => asRecord(row))
-    .filter((record): record is Record<string, unknown> => Boolean(record))
-    .map((record) => ({
-      id: pickString(record, idKeys, "").trim(),
-      name: pickString(record, nameKeys, "").trim(),
-      hint: pickString(record, hintKeys, ""),
-      categoryId: pickString(record, ["category_id", "categoryId"], ""),
-      categoryName: pickString(record, ["category_name", "categoryName"], ""),
-    }))
-    .filter((item) => item.id && item.name);
 }
 
 function cacheProductTypes(types: CatalogItem[]) {
@@ -180,11 +117,6 @@ async function createProductTypeEndpoint(name: string, categoryId: string) {
   });
 }
 
-function isTemporaryProductTypeId(id: string) {
-  const normalized = id.trim().toLowerCase();
-  return normalized.startsWith("tmppt-") || normalized.startsWith("local-");
-}
-
 async function deleteProductTypeEndpoint(id: string): Promise<void> {
   const paths = [
     `/product-types/${id}?hard=true`,
@@ -206,6 +138,9 @@ async function deleteProductTypeEndpoint(id: string): Promise<void> {
 }
 
 export default function AdminProductsPage() {
+  const [viewedProductType, setViewedProductType] = useState<CatalogItem | null>(null);
+  const [productTypeViewError, setProductTypeViewError] = useState("");
+  const productTypeViewRequest = useRef(0);
   const [pendingKey, setPendingKey] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [showProductTypeForm, setShowProductTypeForm] = useState(false);
@@ -471,15 +406,17 @@ export default function AdminProductsPage() {
         fallbackPrefix: "product-type",
       })[0];
       const selectedCategory = resolvedData.categories.find((item) => item.id === categoryId);
-      const createdType =
-        parsedCreatedType ??
-        ({
+      const createdType: CatalogItem = parsedCreatedType ? {
+        ...parsedCreatedType,
+        categoryId: parsedCreatedType.categoryId || categoryId,
+        categoryName: parsedCreatedType.categoryName || selectedCategory?.name || "",
+      } : {
           id: `tmppt-${Date.now().toString(36)}`,
           name,
           hint: selectedCategory?.name ?? "",
           categoryId,
           categoryName: selectedCategory?.name ?? "",
-        } satisfies CatalogItem);
+        };
       setActionMessage("Product type created.");
       setProductTypeForm({ name: "", categoryId: "" });
       setCachedData((prev) => {
@@ -505,16 +442,28 @@ export default function AdminProductsPage() {
     }
   }
 
-  async function viewProductType(id: string) {
+  async function viewProductType(type: CatalogItem) {
+    const request = ++productTypeViewRequest.current;
+    setActionMessage("");
+    setProductTypeViewError("");
+    setViewedProductType(type);
     try {
-      setPendingKey(`get-product-type-${id}`);
-      const payload = await adminFetcher<unknown>(`/product-types/${id}`);
-      window.alert(JSON.stringify(payload, null, 2));
+      setPendingKey(`get-product-type-${type.id}`);
+      const details = await loadProductTypeDetails(type, resolvedData.categories);
+      if (request === productTypeViewRequest.current) setViewedProductType(details);
     } catch (err) {
-      setActionMessage(err instanceof Error ? err.message : "Failed to fetch product type.");
+      if (request === productTypeViewRequest.current) {
+        setProductTypeViewError(err instanceof Error ? err.message : "Failed to load the product type category.");
+      }
     } finally {
-      setPendingKey("");
+      if (request === productTypeViewRequest.current) setPendingKey("");
     }
+  }
+
+  function closeProductTypeView() {
+    productTypeViewRequest.current++;
+    setViewedProductType(null);
+    setPendingKey((key) => key.startsWith("get-product-type-") ? "" : key);
   }
 
   async function upsertProductType(id: string, name: string) {
@@ -633,6 +582,9 @@ export default function AdminProductsPage() {
 
   return (
     <div className="grid gap-6">
+      {viewedProductType ? <ProductTypeDetailsDialog item={viewedProductType}
+        loading={pendingKey === `get-product-type-${viewedProductType.id}`}
+        error={productTypeViewError} onClose={closeProductTypeView} /> : null}
       {error ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           {error instanceof Error ? error.message : "Some admin data could not be refreshed."}
@@ -854,7 +806,7 @@ export default function AdminProductsPage() {
                       <Button
                         variant="ghost"
                         disabled={pendingKey === `get-product-type-${type.id}`}
-                        onClick={() => viewProductType(type.id)}
+                        onClick={() => viewProductType(type)}
                       >
                         View
                       </Button>

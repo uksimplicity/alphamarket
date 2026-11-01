@@ -33,7 +33,10 @@ async function main() {
     throw new Error('Timed out: ' + expression);
   }
   const button = label => `[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(label)})`;
-  const click = label => evaluate(`${button(label)}.click()`);
+  const click = async label => {
+    await wait(`${button(label)}&&!${button(label)}.disabled`);
+    return evaluate(`${button(label)}.click()`);
+  };
   const stat = `document.querySelector('main')?.innerText`;
   try {
     await send('Page.enable'); await send('Runtime.enable');
@@ -41,6 +44,7 @@ async function main() {
     await send('Page.addScriptToEvaluateOnNewDocument', { source: `
       localStorage.setItem('alpha.auth', JSON.stringify({ access_token: 'synthetic-admin', user: { id: 'admin-fixture', first_name: 'Admin', role: 'admin' } }));
       window.__writes = [];
+      window.__catalogReads = [];
       window.__failAction = false;
       let users = JSON.parse(sessionStorage.getItem('admin-fixture-users') || '[{"id":"seller-one","name":"Synthetic Seller","email":"seller@example.test","role":"seller","status":"pending"}]');
       if (!sessionStorage.getItem('admin-fixture-users')) users.push(...Array.from({ length: 25 }, (_, i) => ({ id: 'buyer-' + i, name: 'Synthetic Buyer ' + i, email: 'buyer' + i + '@example.test', role: 'buyer', status: 'pending' })));
@@ -50,6 +54,7 @@ async function main() {
         const url = new URL(typeof input === 'string' ? input : input.url, location.origin);
         if (!url.pathname.startsWith('/api/')) return realFetch(input, init);
         const method = init.method || 'GET';
+        if (method === 'GET' && (url.pathname.includes('product-types') || url.pathname.includes('/categories'))) window.__catalogReads.push(url.pathname);
         if (method !== 'GET') {
           window.__writes.push({ path: url.pathname, method, body: init.body });
           if (window.__failAction) return Response.json({ error: 'Action denied by service' }, { status: 403 });
@@ -72,6 +77,13 @@ async function main() {
           return Response.json({ data: { users: rows, count: rows.length } });
         }
         if (url.pathname === '/api/admin/dashboard') return Response.json({ total_users: 999 });
+        if (url.pathname === '/api/admin/product-types') {
+          if (sessionStorage.getItem('catalog-use-cache')) return Response.json({error:'Catalog offline'}, {status:503});
+          return Response.json({data:{product_types:[{id:'real-type',name:'Kit',category_id:'sports'},{id:'type-detail',name:'Boots'}]}});
+        }
+        if (url.pathname === '/api/admin/product-types/type-detail') return Response.json({data:{id:'type-detail',name:'Boots',category_id:'football'}});
+        if (url.pathname === '/api/admin/categories/raw') return Response.json({data:[{id:'sports',name:'Sportswear'}]});
+        if (url.pathname === '/api/admin/categories/football') return Response.json({data:{id:'football',name:'Football Equipment'}});
         if (url.pathname === '/api/user/profile') return Response.json({ data: { id: 'admin-fixture', role: 'admin' } });
         return Response.json({ data: [] });
       };
@@ -146,6 +158,25 @@ async function main() {
     await wait(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`);
     assert.equal(await evaluate(`document.querySelectorAll('[data-seller-row]').length`), 3);
     console.log('PASS long seller names and emails fit the mobile layout');
+    await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+    await send('Page.navigate', { url: 'http://127.0.0.1:3014/admin/products#product-types' });
+    await wait(`${stat}?.includes('Kit')&&${stat}?.includes('Boots')`);
+    await click('View');
+    await wait(`document.querySelector('dialog[open]')?.textContent.includes('Sportswear')`);
+    assert.equal(await evaluate(`document.querySelector('dialog[open] dd').textContent`), 'Kit');
+    await click('Close');
+    await evaluate(`[...document.querySelectorAll('tbody tr')].find(row=>row.textContent.includes('Boots')).querySelector('button').click()`);
+    await wait(`document.querySelector('dialog[open]')?.textContent.includes('Football Equipment')`);
+    await click('Close');
+    console.log('PASS product type View reveals category names from list mappings and fetched details');
+    await evaluate(`sessionStorage.setItem('catalog-use-cache','yes');localStorage.setItem('alpha.admin.product-types',JSON.stringify([{id:'tmppt-cached',name:'Cached Jerseys',categoryId:'sports',categoryName:'Sportswear'}]));`);
+    await send('Page.reload', { ignoreCache: true });
+    await wait(`${stat}?.includes('Cached Jerseys')`);
+    await click('View');
+    await wait(`document.querySelector('dialog[open]')?.textContent.includes('Sportswear')`);
+    assert.equal(await evaluate(`window.__catalogReads.some(path=>path.includes('tmppt-'))`), false);
+    await click('Close');
+    console.log('PASS cached temporary types reveal their category without sending invalid IDs to the backend');
     assert.deepEqual(errors, []);
   } finally {
     await send('Page.close'); socket.close();
