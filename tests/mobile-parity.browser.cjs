@@ -33,7 +33,15 @@ async function main() {
     const thread=()=>({id:'thread-1',peer:peer(),last_message:rows().at(-1)?.text||'',updated_at:new Date().toISOString()});
     window.__appendReply=()=>{const list=rows();list.push({id:'reply-'+list.length,client_id:'seller-reply-'+list.length,sender_id:'seller-parity',text:'Yes, this is available.',sequence:list.length+1,created_at:new Date().toISOString()});sessionStorage.setItem('parity-chat-rows',JSON.stringify(list));};
     window.__gpsPoint={latitude:7.1,longitude:4.2};
+    window.__geocodeCalls=[];
+    window.__geocodeStatus="OK";
     window.google = { maps: {
+      Geocoder: class {
+        geocode(request, callback) {
+          window.__geocodeCalls.push(request.address);
+          setTimeout(() => callback([{ types: ["street_address"], geometry: { location_type: "ROOFTOP", location: { lat: () => 6.6, lng: () => 3.4 } } }], window.__geocodeStatus), 20);
+        }
+      },
       Map: class {
         setCenter() {}
         addListener() { return { remove() {} }; }
@@ -85,14 +93,19 @@ async function main() {
     await evaluate('__releaseProfile()'); await wait(`document.querySelector('h1')?.textContent==='Address Book'`);
     await click('Add address'); await labelled('Full delivery address','Lekki gate'); await labelled('Delivery phone','08012345678');
     await check(`!document.body.innerText.match(/latitude|longitude|coordinates/i)`,'address editor does not expose coordinate fields');
-    await evaluate('window.__gpsPoint={latitude:6.6,longitude:3.4}');
-    await click('Choose delivery location'); await click('Use my location');
-    await wait(`document.querySelector('dialog[open]')?.innerText.includes('Location selected.')`);
-    await click('Use this delivery point'); await evaluate('window.__gpsPoint={latitude:7.1,longitude:4.2}');
+    await check('__gpsCalls===0', 'typed address save does not request location permission');
+
     await evaluate(`[...document.querySelectorAll('label')].find(l=>l.textContent.includes('Make default')).querySelector('input').click()`);
     await click('Save address'); await wait(`document.body.innerText.includes('Home · Default')`);
     await check(`!document.body.innerText.includes('6.6, 3.4')&&!document.body.innerText.match(/latitude|longitude/i)`,'saved addresses do not display raw coordinates');
-    await click('Edit'); await labelled('Full delivery address','Updated Lekki gate'); await click('Save address');
+    await check(`__geocodeCalls.includes('Lekki gate') && __gpsCalls===0`, 'typed address saves using automatic lookup without GPS');
+    await click('Edit'); await labelled('Full delivery address','Updated Lekki gate');
+    await evaluate('window.__geocodeStatus="ZERO_RESULTS"'); await click('Save address');
+    await wait(`document.querySelector('[role="alert"]')?.innerText.includes('city and state')`);
+    await check(`document.querySelector('textarea').value==='Updated Lekki gate'`, 'failed lookup retains the typed address');
+    await evaluate('window.__geocodeStatus="OK"'); await click('Save address');
+    await wait(`!document.querySelector('textarea')`);
+    await check(`__geocodeCalls.filter(a=>a==='Updated Lekki gate').length===2`, 'editing an address clears its previous point and permits lookup retry');
     await navigate('/dashboard/addresses'); await wait(`document.body.innerText.includes('Updated Lekki gate')`);
     await check(`document.body.innerText.includes('Home · Default')`,'saved address, edited details and default persist across reopening');
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });

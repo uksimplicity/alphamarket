@@ -1,9 +1,10 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthUser } from "@/components/auth/useAuthUser";
 import { accountStamp, checkAccount } from "./localAccountData";
 import { deleteAddress, deliveryPoint, readAddresses, resetAddresses, saveAddress, type AddressBook, type AddressInput, type SavedAddress } from "./addresses";
 import DeliveryLocationButton from "./deliveryLocation";
+import { geocodeDeliveryAddress } from "./geocodeAddress";
 import styles from "./localFeatures.module.css";
 
 export function AddressEditor({ existing, initial, primary = false, onSaved, onCancel }: { existing?: SavedAddress; initial?: Partial<AddressInput>; primary?: boolean; onSaved: (value: SavedAddress) => void; onCancel: () => void }) {
@@ -13,21 +14,34 @@ export function AddressEditor({ existing, initial, primary = false, onSaved, onC
   const [latitude, setLatitude] = useState(String(existing?.latitude ?? initial?.latitude ?? ""));
   const [longitude, setLongitude] = useState(String(existing?.longitude ?? initial?.longitude ?? ""));
   const [isDefault, setDefault] = useState(primary), [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const active = useRef(true), savingRef = useRef(false);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const [stamp] = useState(() => { try { return accountStamp(); } catch { return ""; } });
-  return <form className={styles.form} onSubmit={event => {
+  return <form className={styles.form} onSubmit={async event => {
     event.preventDefault(); setError("");
-    try { checkAccount(stamp); const point = deliveryPoint(latitude, longitude); if (!point) throw new Error("Choose the delivery location on the map or use your current location."); onSaved(saveAddress({ label, address, contact, ...point }, isDefault, existing?.id)); }
-    catch (failure) { setError((failure as Error).message); }
+    if (savingRef.current) return;
+    savingRef.current = true; setSaving(true);
+    try {
+      checkAccount(stamp);
+      const point = deliveryPoint(latitude, longitude) ?? await geocodeDeliveryAddress(address, process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "");
+      if (!active.current) return;
+      checkAccount(stamp);
+      onSaved(saveAddress({ label, address, contact, ...point }, isDefault, existing?.id));
+    } catch (failure) { if (active.current) setError((failure as Error).message); }
+    finally { savingRef.current = false; if (active.current) setSaving(false); }
   }}>
     <h2>{existing ? "Edit address" : "New address"}</h2><p className={styles.muted}>Saved on this browser for your account.</p>
-    <label>Address name<input value={label} onChange={e => setLabel(e.target.value)} required /></label>
-    <label>Full delivery address<textarea autoComplete="street-address" value={address} onChange={e => setAddress(e.target.value)} required /></label>
-    <label>Delivery phone<input type="tel" value={contact} onChange={e => setContact(e.target.value)} /></label>
-    <DeliveryLocationButton point={deliveryPoint(latitude, longitude)} onConfirm={point => { try { checkAccount(stamp); setLatitude(String(point.latitude)); setLongitude(String(point.longitude)); } catch (failure) { setError((failure as Error).message); } }} />
+    <label>Address name<input value={label} disabled={saving} onChange={e => setLabel(e.target.value)} required /></label>
+    <label>Full delivery address<textarea autoComplete="street-address" value={address} disabled={saving} onChange={e => { setAddress(e.target.value); setLatitude(""); setLongitude(""); setError(""); }} required /></label>
+    <label>Delivery phone<input type="tel" value={contact} disabled={saving} onChange={e => setContact(e.target.value)} /></label>
+    <p className={styles.muted}>Your address will be located when you save. You can also choose its exact location on the map.</p>
+    <DeliveryLocationButton disabled={saving} point={deliveryPoint(latitude, longitude)} onConfirm={point => { try { checkAccount(stamp); setLatitude(String(point.latitude)); setLongitude(String(point.longitude)); setError(""); } catch (failure) { setError((failure as Error).message); } }} />
     {deliveryPoint(latitude, longitude) ? <p role="status" className={styles.muted}>Delivery location selected.</p> : null}
-    <label className={styles.check}><input type="checkbox" checked={isDefault} onChange={e => setDefault(e.target.checked)} />Make default address</label>
+    <label className={styles.check}><input type="checkbox" checked={isDefault} disabled={saving} onChange={e => setDefault(e.target.checked)} />Make default address</label>
+    {saving ? <p role="status" className={styles.muted}>Locating your address...</p> : null}
     {error ? <p role="alert" className={styles.error}>{error}</p> : null}
-    <div className={styles.actions}><button type="submit" className={`${styles.button} ${styles.primary}`}>Save address</button><button type="button" className={styles.button} onClick={onCancel}>Cancel</button></div>
+    <div className={styles.actions}><button type="submit" disabled={saving} className={`${styles.button} ${styles.primary}`}>{saving ? "Saving..." : "Save address"}</button><button type="button" className={styles.button} onClick={() => { active.current = false; onCancel(); }}>Cancel</button></div>
   </form>;
 }
 function AddressAccount({ onChoose }: { onChoose?: (value: SavedAddress) => void }) {
