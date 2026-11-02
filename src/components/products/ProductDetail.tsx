@@ -10,6 +10,7 @@ import ShopperIcon from "@/components/marketplace/ShopperIcon";
 import BuyerProductCard from "@/components/dashboard/BuyerProductCard";
 import { canShop, shoppingCategory } from "@/components/dashboard/buyerCatalog";
 import CartAddedModal from "@/components/commerce/CartAddedModal";
+import { sellerPhone, sellerPhoneHref } from "./sellerPhone";
 import styles from "./productDetail.module.css";
 
 export default function ProductDetail({ product, backLink }: { product: Product; backLink?: ReactNode }) {
@@ -18,6 +19,7 @@ export default function ProductDetail({ product, backLink }: { product: Product;
   const [cartModalName, setCartModalName] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [revealedContact, setRevealedContact] = useState("");
   const [store, setStore] = useState<ReturnType<typeof getStoreProfileBySlug>>(null);
   const saved = useSavedProducts(), cartCount = useCartCount();
   const zoom = useRef<HTMLDialogElement>(null), chat = useRef<HTMLDialogElement>(null);
@@ -25,6 +27,9 @@ export default function ProductDetail({ product, backLink }: { product: Product;
   const price = parsePrice(product.price), oldPrice = product.oldPrice ? parsePrice(product.oldPrice) : null;
   const purchasable = canShop(product), selected = saved.products.some(item => item.id === product.id);
   const sellerName = store?.name || product.seller.name;
+  const phone = sellerPhone(product.seller.phone);
+  const contactKey = [product.id, product.seller.id ?? "", phone].join(":");
+  const phoneRevealed = revealedContact === contactKey;
   const related = extendedCatalog.filter(item => item.id !== product.id).sort((a,b) => Number(shoppingCategory(b) === shoppingCategory(product)) - Number(shoppingCategory(a) === shoppingCategory(product))).slice(0, 4);
   useEffect(() => {
     const update = () => setStore(getStoreProfileBySlug(product.seller.slug));
@@ -47,6 +52,7 @@ export default function ProductDetail({ product, backLink }: { product: Product;
         {product.preview ? <div className={styles.previewNote}>You&apos;re exploring a collection preview. This item isn&apos;t available to purchase yet. Browse the marketplace for available seller listings.</div> : null}
         <div className={styles.buyRow}><div className={styles.quantity} aria-label="Choose quantity"><button type="button" aria-label="Decrease quantity" onClick={() => setQuantity(value => Math.max(1,value - 1))} disabled={!purchasable || quantity <= 1}><ShopperIcon name="minus" size={15} /></button><span aria-live="polite">{quantity}</span><button type="button" aria-label="Increase quantity" onClick={() => setQuantity(value => Math.min(product.stock ?? 99, value + 1))} disabled={!purchasable || quantity >= (product.stock ?? 99)}><ShopperIcon name="plus" size={15} /></button></div><button type="button" className={styles.addButton} disabled={!purchasable} onClick={add}><ShopperIcon name="cart" size={19} />{product.preview ? "Preview item" : product.stock === 0 ? "Sold out" : "Add to bag"}</button></div>{product.preview ? <Link href="/dashboard/home#buyer-finds" className={styles.browseLink}>Explore the marketplace<ShopperIcon name="arrow" size={15} /></Link> : null}<div aria-live="polite" className={styles.feedback}>{shareMessage || saveError}</div>
         <div className={styles.seller}><span className={styles.sellerAvatar}>{store?.logoFallbackDataUrl || store?.logoUrl ? <img src={store.logoFallbackDataUrl || store.logoUrl} alt="" width={42} height={42} /> : sellerName.split(/\s+/).slice(0,2).map(item => item[0]).join("")}</span><div><small>{product.preview ? "COLLECTION SELLER" : "SOLD BY"}</small><strong>{sellerName}</strong>{store?.location ? <span>{store.location}</span> : null}</div>{product.seller.slug ? <Link href={`/store/${encodeURIComponent(product.seller.slug)}`}>Visit store<ShopperIcon name="arrow" size={14} /></Link> : null}</div><button type="button" className={styles.chatButton} onClick={() => { if (product.seller.id && !product.preview) window.location.assign(`/dashboard/messages?seller=${encodeURIComponent(product.seller.id)}&product=${encodeURIComponent(product.title)}`); else chat.current?.showModal(); }}><ShopperIcon name="chat" size={18} />Ask the seller a question<ShopperIcon name="arrow" size={15} /></button>
+        {!product.preview ? <div className={styles.phoneContact}><button type="button" className={styles.chatButton} aria-expanded={phoneRevealed} aria-controls="seller-phone-contact" onClick={() => setRevealedContact(phoneRevealed ? "" : contactKey)}><ShopperIcon name="phone" size={18} />{phoneRevealed ? "Hide seller’s phone number" : "Reveal seller’s phone number"}<ShopperIcon name="arrow" size={15} /></button><div id="seller-phone-contact" aria-live="polite">{phoneRevealed ? phone ? <a className={styles.phoneNumber} href={sellerPhoneHref(phone)} aria-label={["Call seller at", phone].join(" ")}><span>{phone}</span><span>Call seller<ShopperIcon name="phone" size={15} /></span></a> : <p className={styles.phoneUnavailable}>The seller’s phone number is unavailable. Use “Ask the seller a question” to contact them.</p> : null}</div></div> : null}
         <div className={styles.serviceNotes}><div><span><ShopperIcon name="truck" size={19} /></span><div><strong>Delivery, without the guesswork.</strong><p>Review delivery details and your total before payment.</p></div></div><div><span><ShopperIcon name="shield" size={19} /></span><div><strong>Keep your payment on Alpha.</strong><p>Track your order and confirm receipt when it arrives.</p></div></div></div>
       </section>
     </div>

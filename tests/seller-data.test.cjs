@@ -1,13 +1,50 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const Module = require('node:module');
-const ts = require('typescript');
-const filename = path.resolve(__dirname, '../src/components/vendor/sellerData.ts');
-const loaded = new Module(filename, module);
-loaded._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, filename);
-const data = loaded.exports;
+const data = require('./support/load-ts.cjs')('src/components/vendor/sellerData.ts');
+
+test('gallery-only products resolve images, category IDs, stock and publication flags', () => {
+  const products = data.parseSellerProducts({ data: { products: [
+    { id: 'gallery', categoryId: 'home', stock_quantity: '8', isPublished: true, media: { cover: '', images: [{ file_url: 'https://images.example/chair.png' }] } },
+    { id: 'draft', category_id: 'home', stockQuantity: 0, is_published: false },
+    { id: 'inventory', inventory: { quantity: '12' }, category: { name: 'Furniture' } },
+  ] } }, 'seller', { home: 'Home & living' });
+  assert.equal(products[0].image, 'https://images.example/chair.png');
+  assert.equal(products[0].category, 'Home & living');
+  assert.equal(products[0].stock, 8);
+  assert.equal(products[0].status, 'publish');
+  assert.equal(products[1].stock, 0);
+  assert.equal(products[1].status, 'draft');
+  assert.equal(products[1].image, '');
+  assert.equal(products[2].stock, 12);
+  assert.equal(products[2].category, 'Furniture');
+});
+
+test('inventory loads later pages, deduplicates products and resolves category names', async () => {
+  const calls = [];
+  const products = await data.loadSellerProducts(async path => {
+    calls.push(path);
+    if (path.includes('resource=categories')) return { data: { categories: [{ id: 'home', name: 'Home' }] } };
+    if (path.includes('offset=0')) return { data: { products: Array.from({ length: 200 }, (_, i) => ({ id: `p-${i}`, category_id: 'home' })) } };
+    return { data: { products: [{ id: 'p-199' }, { id: 'last', stock: 5 }, { id: 'theirs', seller_id: 'other' }] } };
+  }, 'seller');
+  assert.equal(products.length, 201);
+  assert.equal(products[0].category, 'Home');
+  assert.equal(products.at(-1).stock, 5);
+  assert.ok(calls.includes('/api/seller/products?limit=200&offset=200'));
+});
+
+test('category failure preserves products and failed inventory pages are not counted as a full inventory', async () => {
+  const products = await data.loadSellerProducts(async path => {
+    if (path.includes('catalog')) throw new Error('Forbidden');
+    return { data: [{ id: 'one', categoryId: 'missing' }] };
+  }, 'seller');
+  assert.equal(products.length, 1);
+  assert.equal(products[0].category, 'Category unavailable');
+  await assert.rejects(data.loadSellerProducts(async path => {
+    if (path.includes('catalog')) return [];
+    return Array.from({ length: 200 }, (_, i) => ({ id: `p-${i}` }));
+  }, 'seller'), /repeated inventory page/);
+});
 
 test('nested API envelopes preserve orders and exclude another seller', () => {
   const rows = data.parseSellerOrders({ data: { orders: [{ id: 'ours', seller_id: 'seller', payment_status: 'paid' }, { id: 'theirs', seller_id: 'other' }] } }, 'seller');

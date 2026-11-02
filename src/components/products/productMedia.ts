@@ -18,13 +18,13 @@ function mediaValue(value: unknown): string {
   return "";
 }
 
-export function productImage(input: Record<string, unknown>): string {
+export function productImage(input: Record<string, unknown>, fallback = fallbackImage): string {
   const media = input.media && typeof input.media === "object"
     ? input.media as Record<string, unknown> : null;
   const images = Array.isArray(media?.images) ? media.images : [];
-  const raw = [media?.cover, media?.coverUrl, ...images, input.cover, input.image]
+  const raw = [media?.cover, media?.coverUrl, ...images, input.cover, input.cover_image, input.coverImage, input.image, ...(Array.isArray(input.images) ? input.images : [])]
     .map(mediaValue).find(Boolean);
-  if (!raw) return fallbackImage;
+  if (!raw) return fallback;
   if (/^(https?:|data:|blob:)/i.test(raw)) return marketplaceImage(raw);
   if (raw.startsWith("//")) return `https:${raw}`;
   const normalized = encodeURI(raw.replace(/\\/g, "/"));

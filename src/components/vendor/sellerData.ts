@@ -1,3 +1,5 @@
+import { productImage } from "../products/productMedia";
+
 export type SellerProduct = {
   id: string; name: string; category: string; stock: number | null;
   price: number | null; status: string; image: string;
@@ -22,7 +24,7 @@ function number(value: unknown): number | null {
 export function collection(payload: unknown): unknown[] {
   if (Array.isArray(payload)) return payload;
   const row = asRow(payload);
-  for (const key of ["data", "orders", "products", "items", "rows", "results"]) {
+  for (const key of ["data", "orders", "products", "categories", "items", "rows", "results"]) {
     if (Array.isArray(row[key])) return row[key] as unknown[];
     if (row[key] && typeof row[key] === "object") {
       const nested = collection(row[key]);
@@ -35,16 +37,48 @@ function ownedBy(row: Row, sellerId: string): boolean {
   const owner = text(row.seller_id ?? row.sellerId ?? row.vendor_id ?? row.vendorId ?? row.owner_id ?? row.ownerId ?? asRow(row.seller).id);
   return !owner || owner === sellerId;
 }
-export function parseSellerProducts(payload: unknown, sellerId: string): SellerProduct[] {
+// Load every inventory page so counts and stock alerts include the whole store.
+export async function loadSellerProducts(request: (path: string) => Promise<unknown>, sellerId: string): Promise<SellerProduct[]> {
+  async function pages(path: string) {
+    const rows: unknown[] = [];
+    const ids = new Set<string>();
+    for (let offset = 0; offset <= 1e7; offset += 200) {
+      const batch = collection(await request(`${path}${path.includes("?") ? "&" : "?"}limit=200&offset=${offset}`));
+      let added = 0;
+      for (const value of batch) {
+        const row = asRow(value);
+        const id = text(row.id ?? row.product_id ?? row.productId ?? row.category_id ?? row.uuid);
+        if (!id || !ids.has(id)) { rows.push(value); added++; if (id) ids.add(id); }
+      }
+      if (batch.length < 200) return rows;
+      if (!added) throw new Error("The service returned a repeated inventory page.");
+    }
+    throw new Error("The inventory could not be loaded completely.");
+  }
+  const [products, categoryRows] = await Promise.all([
+    pages("/api/seller/products"),
+    pages("/api/seller/catalog?resource=categories").catch(() => []),
+  ]);
+  const categories: Record<string, string> = {};
+  for (const value of categoryRows) {
+    const row = asRow(value), id = text(row.id ?? row.category_id ?? row.categoryId ?? row.uuid);
+    const name = text(row.name ?? row.title ?? row.category_name ?? row.categoryName);
+    if (id && name) categories[id] = name;
+  }
+  return parseSellerProducts(products, sellerId, categories);
+}
+export function parseSellerProducts(payload: unknown, sellerId: string, categories: Record<string, string> = {}): SellerProduct[] {
   return collection(payload).map(asRow).filter(row => ownedBy(row, sellerId)).map(row => {
-    const media = asRow(row.media);
-    const cover = media.cover ?? row.cover_image ?? row.image;
+    const category = asRow(row.category);
+    const categoryId = text(row.category_id ?? row.categoryId ?? category.id);
+    const published = row.isPublished ?? row.is_published;
+    const status = text(row.status).toLowerCase();
     return {
-      id: text(row.id ?? row.product_id ?? row.uuid), name: text(row.name ?? row.title) || "Untitled product",
-      category: text(asRow(row.category).name ?? row.category_name ?? row.categoryName ?? row.category) || "Uncategorized",
-      stock: number(row.stock ?? row.quantity), price: number(row.base_price ?? row.basePrice ?? row.price),
-      status: text(row.status).toLowerCase() || "unknown",
-      image: typeof cover === "string" ? cover : text(asRow(cover).url),
+      id: text(row.id ?? row.product_id ?? row.productId ?? row.uuid), name: text(row.name ?? row.title) || "Untitled product",
+      category: text(category.name) || text(row.category_name) || text(row.categoryName) || categories[categoryId] || categories[text(row.category)] || text(row.category) || (categoryId ? "Category unavailable" : "Uncategorized"),
+      stock: number(row.stock ?? row.quantity ?? row.stock_quantity ?? row.stockQuantity ?? asRow(row.inventory).stock ?? asRow(row.inventory).quantity), price: number(row.base_price ?? row.basePrice ?? row.price),
+      status: status || (published === true ? "publish" : published === false ? "draft" : "unknown"),
+      image: productImage(row, ""),
     };
   }).filter(row => row.id);
 }

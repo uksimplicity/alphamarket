@@ -15,7 +15,7 @@ export type Product = {
   images?: string[];
   condition?: string;
   preview?: boolean;
-  seller: { name: string; slug: string; id?: string };
+  seller: { name: string; slug: string; id?: string; phone?: string };
 };
 
 const baseProducts: Record<string, Product> = {

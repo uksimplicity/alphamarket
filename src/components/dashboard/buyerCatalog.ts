@@ -1,5 +1,6 @@
 import type { Product } from "@/components/products/catalog";
 import { productImage } from "@/components/products/productMedia";
+import { sellerPhone } from "@/components/products/sellerPhone";
 
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (...values: unknown[]) => values.find(value => typeof value === "string" && value.trim()) as string | undefined ?? "";
@@ -36,7 +37,7 @@ export function buyerProducts(payload: unknown): Product[] {
     const media = record(value.media);
     const images = Array.isArray(media.images) ? media.images.filter(image => typeof image === "string" || Object.keys(record(image)).length).map(image => productImage({ media: { cover: image } })) : [];
     const category = typeof value.category === "string" ? value.category : text(record(value.category).name, value.category_name);
-    return [{ id, title: text(value.name, value.title) || "Untitled product", price: Number.isFinite(price) && price >= 0 ? String(price) : "", image: productImage(value), images, rating: text(value.rating, value.average_rating), reviews: String(value.review_count ?? value.reviews_count ?? 0), description: text(value.shortDescription, value.short_description, value.description) || "The seller hasn't added a description yet.", seller: { id: text(seller.id, seller.user_id, value.seller_id), name: text(seller.name, value.seller_name) || "Marketplace seller", slug: text(seller.slug, value.seller_slug) }, category, stock, condition: text(value.condition), preview: false } satisfies Product];
+    return [{ id, title: text(value.name, value.title) || "Untitled product", price: Number.isFinite(price) && price >= 0 ? String(price) : "", image: productImage(value), images, rating: text(value.rating, value.average_rating), reviews: String(value.review_count ?? value.reviews_count ?? 0), description: text(value.shortDescription, value.short_description, value.description) || "The seller hasn't added a description yet.", seller: { id: text(seller.id, seller.user_id, value.seller_id), name: text(seller.name, value.seller_name) || "Marketplace seller", slug: text(seller.slug, value.seller_slug), phone: sellerPhone(seller.phone, seller.phone_number, seller.phoneNumber, value.seller_phone, value.seller_phone_number, value.sellerPhone, value.sellerPhoneNumber) }, category, stock, condition: text(value.condition), preview: false } satisfies Product];
   });
 }
 export function shoppingCategory(product: Product) {

@@ -6,12 +6,17 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { getAuth, getDisplayName } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
 import Icon, { type AdminIconName } from "@/components/admin/AdminIcon";
-import { asRow, humanize, isPaid, money, needsFulfillment, orderTone, parseSellerOrders, parseSellerProducts, salesSeries, scopedOrders, type SellerOrder, type SellerProduct } from "./sellerData";
+import { asRow, humanize, isPaid, loadSellerProducts, money, needsFulfillment, orderTone, parseSellerOrders, salesSeries, scopedOrders, type SellerOrder, type SellerProduct } from "./sellerData";
 import styles from "./sellerDashboard.module.css";
 
 type Snapshot = { owner: string; products: SellerProduct[] | null; orders: SellerOrder[] | null; errors: string[]; updatedAt: Date | null };
 const empty: Snapshot = { owner: "", products: null, orders: null, errors: [], updatedAt: null };
 const statusLabel = (status: string) => ["publish", "published"].includes(status) ? "Live" : humanize(status);
+
+function ProductThumbnail({ image }: { image: string }) {
+  const [failed, setFailed] = useState(false);
+  return image && !failed ? <img src={image} alt="" onError={() => setFailed(true)} /> : <Icon name="catalog" size={22} />;
+}
 
 export default function VendorDashboard() {
   const user = useAuthUser();
@@ -48,13 +53,13 @@ export default function VendorDashboard() {
         return payload;
       }
       const results = await Promise.allSettled([
-        request("/api/seller/products?limit=200&offset=0"), request("/api/seller/orders?limit=200&offset=0"),
+        loadSellerProducts(request, owner), request("/api/seller/orders?limit=200&offset=0"),
       ]);
       if (controller.signal.aborted) return;
       setSnapshot(previous => {
         const next = previous.owner === owner ? { ...previous } : { ...empty, owner };
         const errors: string[] = [];
-        if (results[0].status === "fulfilled") next.products = parseSellerProducts(results[0].value, owner);
+        if (results[0].status === "fulfilled") next.products = results[0].value;
         else errors.push("Products could not be refreshed. " + (results[0].reason instanceof Error ? results[0].reason.message : "Please try again."));
         if (results[1].status === "fulfilled") next.orders = parseSellerOrders(results[1].value, owner);
         else errors.push("Orders could not be refreshed. " + (results[1].reason instanceof Error ? results[1].reason.message : "Please try again."));
@@ -114,7 +119,7 @@ export default function VendorDashboard() {
   const metrics: Array<{ title: string; value: string; note: string; icon: AdminIconName; href: string; color: string }> = [
     { title: "Paid sales", value: current.orders === null ? "—" : money(amountMissing ? null : paidValue), note: amountMissing ? "Some paid orders have no reported amount" : `Confirmed payments · last ${range} days`, icon: "chart", href: "#performance", color: "blue" },
     { title: "Orders to fulfill", value: current.orders === null ? "—" : String(fulfillment.length), note: "Paid orders awaiting dispatch", icon: "orders", href: "/vendor/orders", color: "amber" },
-    { title: "Live products", value: current.products === null ? "—" : String(live.length), note: current.products === null ? "Your published storefront listings" : `${drafts.length} drafts ready for your attention`, icon: "catalog", href: "/vendor/products", color: "violet" },
+    { title: "Total products", value: current.products === null ? "—" : String(products.length), note: current.products === null ? "Your store listings" : `${live.length} live · ${drafts.length} drafts`, icon: "catalog", href: "/vendor/products", color: "violet" },
     { title: "Stock alerts", value: current.products === null ? "—" : String(stockAlerts.length), note: current.products === null ? "Review stock availability" : `${outOfStock.length} out of stock · restock to keep selling`, icon: "alert", href: "/vendor/products/stock", color: "rose" },
   ];
 
@@ -145,11 +150,11 @@ export default function VendorDashboard() {
     </section>
     <div className={styles.bottomGrid}>
       <section className={styles.panel} id="products"><div className={styles.panelHeader}><div><h2>Your products</h2><p>A little upkeep. A better storefront.</p></div><Link className={styles.textLink} to="/vendor/products">Manage products <Icon name="chevron" size={13} /></Link></div><div className={styles.productFilters}><label><Icon name="search" size={15} /><input value={query} onChange={event => searchProducts(event.target.value)} aria-label="Filter dashboard products" placeholder="Find a product..." /></label><select aria-label="Product view" value={productFilter} onChange={event => setProductFilter(event.target.value)}><option value="all">All products</option><option value="low">Stock alerts</option><option value="draft">Drafts</option></select></div>
-        {filteredProducts.length ? <div className={styles.productList}>{filteredProducts.map(product => <Link to={`/vendor/products/${encodeURIComponent(product.id)}`} key={product.id} className={styles.productRow}><span className={styles.productThumb}>{product.image ? <img src={product.image} alt="" onError={event => { event.currentTarget.style.display = "none"; }} /> : <Icon name="catalog" size={22} />}</span><span className={styles.productName}><strong>{product.name}</strong><small>{product.category}</small></span><span className={styles.productStock}>{product.stock === null ? "Stock unreported" : `${product.stock} in stock`}</span><span className={`${styles.pill} ${styles[orderTone(product.status)]}`}>{statusLabel(product.status)}</span><Icon name="chevron" size={14} /></Link>)}</div> : <div className={styles.tableEmpty}><Icon name="catalog" size={27} /><strong>{query || productFilter !== "all" ? "No matching products" : current.products === null ? refreshing ? "Loading your products..." : "Products are unavailable" : "Give your store something to show."}</strong><p>{query || productFilter !== "all" ? "Try a different search or product view." : "Add your first product and make your store your own."}</p><Link className={styles.textLink} to="/vendor/products/create"><Icon name="plus" size={14} />Add product</Link></div>}
+        {filteredProducts.length ? <div className={styles.productList}>{filteredProducts.map(product => <Link to={`/vendor/products/${encodeURIComponent(product.id)}`} key={product.id} className={styles.productRow}><span className={styles.productThumb}><ProductThumbnail key={product.image} image={product.image} /></span><span className={styles.productName}><strong>{product.name}</strong><small>{product.category}</small></span><span className={styles.productStock}>{product.stock === null ? "Stock unreported" : `${product.stock} in stock`}</span><span className={`${styles.pill} ${styles[orderTone(product.status)]}`}>{statusLabel(product.status)}</span><Icon name="chevron" size={14} /></Link>)}</div> : <div className={styles.tableEmpty}><Icon name="catalog" size={27} /><strong>{query || productFilter !== "all" ? "No matching products" : current.products === null ? refreshing ? "Loading your products..." : "Products are unavailable" : "Give your store something to show."}</strong><p>{query || productFilter !== "all" ? "Try a different search or product view." : "Add your first product and make your store your own."}</p><Link className={styles.textLink} to="/vendor/products/create"><Icon name="plus" size={14} />Add product</Link></div>}
       </section>
       <div className={styles.sideStack}><section className={styles.panel}><div className={styles.panelHeader}><div><h2>Inventory health</h2><p>Keep your best sellers in stock.</p></div><Icon name="catalog" size={19} /></div><div className={styles.stockHeadline}><strong>{current.products === null ? "—" : inventoryKnown.length}</strong><span>listings with stock reported</span></div><div className={styles.stockBar} aria-hidden="true">{stockGroups.map(group => <span key={group.tone} className={styles[group.tone]} style={{ width: `${inventoryKnown.length ? group.count / inventoryKnown.length * 100 : 0}%` }} />)}</div><div className={styles.stockLegend}>{stockGroups.map(group => <div key={group.tone}><span><i className={styles[group.tone]} />{group.label}</span><strong>{current.products === null ? "—" : group.count}</strong></div>)}</div><Link to="/vendor/products/stock" className={styles.stockLink}>Manage your inventory <Icon name="chevron" size={14} /></Link></section>
       <section className={styles.escrowCard} id="payments"><span className={styles.escrowMark}><svg width="21" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M12 2 3 6v6c0 5 9 10 9 10s9-5 9-10V6l-9-4Z" /><path d="m8 12 3 3 5-6" /></svg></span><div><span className={styles.escrowEyebrow}>PAYMENTS & ESCROW</span><h2>Paid isn’t the same as released.</h2><p>Customer payment and the release of funds are separate steps. Review each order’s payment and delivery status.</p><Link to="/vendor/orders">Review your orders <Icon name="chevron" size={13} /></Link><Link to="/vendor/payments">Manage payouts <Icon name="chevron" size={13} /></Link><small>Available funds and withdrawal history are in Payments &amp; payouts.</small></div></section></div>
     </div>
-    <p className={styles.dataNote}>Overview uses up to 200 recent orders and 200 product records. Sales dates follow your device’s local time. Unknown payment or stock values are not counted as confirmed sales or stock alerts.</p>
+    <p className={styles.dataNote}>Overview uses your full product inventory and up to 200 recent orders. Sales dates follow your device’s local time. Unknown payment or stock values are not counted as confirmed sales or stock alerts.</p>
   </div>;
 }
