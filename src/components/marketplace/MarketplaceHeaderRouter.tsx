@@ -1,13 +1,14 @@
 "use client";
 
 import { Link } from "react-router-dom";
+import NextLink from "next/link";
 import MarketplaceHeaderBase, {
   type LinkComponent,
 } from "@/components/marketplace/MarketplaceHeaderBase";
 
 const RouterLinkAdapter: LinkComponent = ({ href, ...rest }) => {
-  if (href.startsWith("/dashboard")) {
-    return <a href={href} {...rest} />;
+  if (["/dashboard", "/admin", "/products/", "/store/"].some(path => href.startsWith(path))) {
+    return <NextLink href={href} {...rest} />;
   }
   return <Link to={href} {...rest} />;
 };

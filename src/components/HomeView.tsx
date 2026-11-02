@@ -345,6 +345,7 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
   const isBackground = mode === "background";
 
   useEffect(() => {
+    if (isBackground) return;
     let mounted = true;
 
     async function loadLiveProducts() {
@@ -377,7 +378,7 @@ export default function HomeView({ mode = "default" }: HomeViewProps) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [isBackground]);
 
   useEffect(() => {
     function loadLocalProducts() {

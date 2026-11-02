@@ -1,0 +1,5 @@
+.pending { display: grid; gap: 16px; padding: 24px; min-height: 240px; opacity: 0; animation: reveal 0s 180ms forwards; }
+.pending > div { background: #f1f4f9; border-radius: 12px; min-height: 56px; }
+.pending > div:first-child { width: 50%; min-height: 24px; }
+@keyframes reveal { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .pending { animation: none; opacity: 1; } }

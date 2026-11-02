@@ -89,7 +89,7 @@ async function main() {
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
     await navigate('/dashboard/addresses?slow=1');
     await wait(`typeof __releaseProfile==='function'`);
-    await check(`!document.querySelector('h1')?.textContent.includes('Address Book') && document.body.innerText.includes('Checking your sign-in')`,'private workspace waits for backend session verification');
+    await check(`!document.querySelector('h1')?.textContent.includes('Address Book') && !!document.querySelector('[aria-label="Loading page"]')`,'private workspace waits for backend session verification');
     await evaluate('__releaseProfile()'); await wait(`document.querySelector('h1')?.textContent==='Address Book'`);
     await click('Add address'); await labelled('Full delivery address','Lekki gate'); await labelled('Delivery phone','08012345678');
     await check(`!document.body.innerText.match(/latitude|longitude|coordinates/i)`,'address editor does not expose coordinate fields');

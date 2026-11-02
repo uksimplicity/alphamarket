@@ -3,18 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAuth } from "@/components/auth/authStorage";
+import { collection as normalizeList } from "@/components/vendor/sellerData";
+import { productImage } from "./productMedia";
+import ProductThumbnail from "./ProductThumbnail";
 import "@/components/products/ProductReview.css";
 
-function normalizeList(payload) {
-  if (Array.isArray(payload)) return payload;
-  if (payload && typeof payload === "object") {
-    const candidates = [payload.data, payload.products, payload.items, payload.rows];
-    for (const candidate of candidates) {
-      if (Array.isArray(candidate)) return candidate;
-    }
-  }
-  return [];
-}
 
 function Stars({ value }) {
   return (
@@ -74,6 +67,7 @@ export default function ProductReview() {
               id: `${id}-${index}`,
               displayId: item?.displayId || item?.code || `#${String(id).slice(-5)}`,
               product: item?.name || item?.title || "Product",
+              image: productImage(item, ""),
               vendor: item?.seller?.name || item?.vendorName || "-",
               review: hasReview ? reviewText : "Rating available, no written review.",
               rating: hasRating ? Math.max(1, Math.min(5, Math.round(rating))) : 0,
@@ -136,7 +130,7 @@ export default function ProductReview() {
                     <td>{row.displayId}</td>
                     <td>
                       <div className="product-cell">
-                        <span className="product-thumb" aria-hidden="true" />
+                        <ProductThumbnail image={row.image} />
                         <span className="product-name">{row.product}</span>
                       </div>
                     </td>

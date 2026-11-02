@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getAuth } from "@/components/auth/authStorage";
+import { productImage } from "@/components/products/productMedia";
 import "@/components/products/CreateProduct.css";
 
 const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -100,7 +101,7 @@ export default function VendorProductDetail() {
     if (!summary?.media) return [];
     const cover = summary.media?.cover || summary.media?.coverUrl;
     const images = Array.isArray(summary.media?.images) ? summary.media.images : [];
-    return [cover, ...images].filter((url): url is string => typeof url === "string" && !!url);
+    return [...new Set([cover, ...images].map(image => productImage({ image }, "")).filter(Boolean))];
   }, [summary]);
 
   const discount = record(Array.isArray(product?.discounts) ? product.discounts[0] : null);

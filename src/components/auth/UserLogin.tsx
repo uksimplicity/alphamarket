@@ -10,6 +10,7 @@ import { authGeneration, clearAuth, setAuth } from "./authStorage";
 export default function UserLogin() {
   const navigate = useNavigate();
   const router = useRouter();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -145,9 +146,9 @@ export default function UserLogin() {
               "super_admin",
             ]);
             if (role && adminRoles.has(role)) {
-              window.location.replace("/admin/dashboard");
+              router.replace("/admin/dashboard");
             } else {
-              window.location.replace("/dashboard/home");
+              router.replace("/dashboard/home");
             }
             redirecting = true;
           } catch (err) {

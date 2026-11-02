@@ -2,18 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
+import { collection as normalizeList } from "@/components/vendor/sellerData";
+import { productImage } from "./productMedia";
+import ProductThumbnail from "./ProductThumbnail";
 import "@/components/products/ProductStock.css";
 
-function normalizeList(payload) {
-  if (Array.isArray(payload)) return payload;
-  if (payload && typeof payload === "object") {
-    const candidates = [payload.data, payload.products, payload.items, payload.rows];
-    for (const candidate of candidates) {
-      if (Array.isArray(candidate)) return candidate;
-    }
-  }
-  return [];
-}
 
 function toNumber(value, fallback = 0) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -67,6 +60,7 @@ export default function ProductStock({ onAddStock = () => {}, onView = (_id) => 
             id,
             displayId: item?.displayId || item?.code || `#${String(id).slice(-5)}`,
             product: item?.name || item?.title || "Product",
+              image: productImage(item, ""),
             category:
               item?.category?.name ||
               item?.categoryName ||
@@ -158,7 +152,7 @@ export default function ProductStock({ onAddStock = () => {}, onView = (_id) => 
                     <td>{row.displayId}</td>
                     <td>
                       <div className="product-cell">
-                        <span className="product-thumb" aria-hidden="true" />
+                        <ProductThumbnail image={row.image} />
                         <span className="product-name">{row.product}</span>
                       </div>
                     </td>

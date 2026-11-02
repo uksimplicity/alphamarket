@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
+import { collection as normalizeList } from "@/components/vendor/sellerData";
+import { productImage } from "./productMedia";
+import ProductThumbnail from "./ProductThumbnail";
 import { useAdminCategoryNames } from "@/components/marketplace/useAdminCategoryNames";
 
 const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
-const REALTIME_POLL_INTERVAL_MS = 2000;
+const REALTIME_POLL_INTERVAL_MS = 30000;
 
 function buildAuthorizationHeader(token) {
   const raw = String(token ?? "").trim();
@@ -34,12 +37,6 @@ export default function ProductList({
   const consecutiveSilentFailuresRef = useRef(0);
   const adminCategoryNames = useAdminCategoryNames();
 
-  const normalizeList = (payload) => {
-    const list = Array.isArray(payload)
-      ? payload
-      : payload?.data || payload?.products || payload?.items || [];
-    return Array.isArray(list) ? list : [];
-  };
 
   const formatPrice = useCallback((value) => {
     if (value === null || value === undefined || value === "") return "-";
@@ -79,6 +76,7 @@ export default function ProductList({
       id,
       displayId,
       name: item?.name || item?.title || "Product",
+      image: productImage(item, ""),
       category:
         item?.category?.name ||
         item?.categoryName ||
@@ -168,7 +166,7 @@ export default function ProductList({
       }
     };
     const intervalId = window.setInterval(() => {
-      void loadProducts({ silent: true });
+      if (document.visibilityState !== "hidden") void loadProducts({ silent: true });
     }, REALTIME_POLL_INTERVAL_MS);
 
     window.addEventListener(LOCAL_PRODUCTS_UPDATED_EVENT, handleProductsUpdated);
@@ -360,7 +358,7 @@ export default function ProductList({
                     <td>{product.displayId}</td>
                     <td>
                       <div className="product-cell">
-                        <span className="product-thumb" aria-hidden="true" />
+                        <ProductThumbnail image={product.image} />
                         <span className="product-name">{product.name}</span>
                       </div>
                     </td>

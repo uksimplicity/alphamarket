@@ -11,6 +11,7 @@ import BuyerProductCard from "@/components/dashboard/BuyerProductCard";
 import { canShop, shoppingCategory } from "@/components/dashboard/buyerCatalog";
 import CartAddedModal from "@/components/commerce/CartAddedModal";
 import { sellerPhone, sellerPhoneHref } from "./sellerPhone";
+import { marketplaceImage } from "./productMedia";
 import styles from "./productDetail.module.css";
 
 export default function ProductDetail({ product, backLink }: { product: Product; backLink?: ReactNode }) {
@@ -23,7 +24,7 @@ export default function ProductDetail({ product, backLink }: { product: Product;
   const [store, setStore] = useState<ReturnType<typeof getStoreProfileBySlug>>(null);
   const saved = useSavedProducts(), cartCount = useCartCount();
   const zoom = useRef<HTMLDialogElement>(null), chat = useRef<HTMLDialogElement>(null);
-  const images = useMemo(() => [...new Set([product.image, ...(product.images ?? [])].filter(Boolean))], [product.image, product.images]);
+  const images = useMemo(() => [...new Set([product.image, ...(product.images ?? [])].filter(Boolean).map(marketplaceImage))], [product.image, product.images]);
   const price = parsePrice(product.price), oldPrice = product.oldPrice ? parsePrice(product.oldPrice) : null;
   const purchasable = canShop(product), selected = saved.products.some(item => item.id === product.id);
   const sellerName = store?.name || product.seller.name;

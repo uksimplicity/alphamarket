@@ -52,3 +52,8 @@ function getServerSnapshot(): AuthUser | null {
 export function useAuthUser() {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
+
+// Avoid presenting a signed-out screen while the saved session hydrates.
+export function useAuthReady() {
+  return useSyncExternalStore(subscribe, () => true, () => false);
+}
