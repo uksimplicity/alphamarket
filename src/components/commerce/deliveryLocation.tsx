@@ -34,23 +34,22 @@ function MapPicker({ point, onSelect, onError }: { point: DeliveryPoint | null; 
 
 function Picker({ initial, close, onConfirm }: { initial: DeliveryPoint | null; close: () => void; onConfirm: (point: DeliveryPoint) => void }) {
   const dialog = useRef<HTMLDialogElement>(null), alive = useRef(true), request = useRef(0);
-  const [point, setPoint] = useState(initial), [accuracy, setAccuracy] = useState<number | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const [latitude, setLatitude] = useState(String(initial?.latitude ?? "")), [longitude, setLongitude] = useState(String(initial?.longitude ?? ""));
+  const [point, setPoint] = useState(initial), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [stamp] = useState(() => { try { return accountStamp(); } catch { return ""; } });
   useEffect(() => { alive.current = true; dialog.current?.showModal(); return () => { alive.current = false; }; }, []);
-  function select(next: DeliveryPoint) { setPoint(next); setLatitude(String(next.latitude)); setLongitude(String(next.longitude)); setAccuracy(null); }
+  function select(next: DeliveryPoint) { setPoint(next); }
   function locate() {
-    if (!navigator.geolocation) { setError("Location is unavailable. Enter the delivery coordinates."); return; }
+    if (!navigator.geolocation) { setError("Location access is unavailable. Choose the location on the map."); return; }
     const attempt = ++request.current;
     setBusy(true); setError("");
     navigator.geolocation.getCurrentPosition(position => {
       if (!alive.current || attempt !== request.current) return;
-      try { checkAccount(stamp); const next = deliveryPoint(String(position.coords.latitude), String(position.coords.longitude)); if (!next) throw new Error("Your location could not be determined."); select(next); setAccuracy(position.coords.accuracy); }
+      try { checkAccount(stamp); const next = deliveryPoint(String(position.coords.latitude), String(position.coords.longitude)); if (!next) throw new Error("Your location could not be determined."); select(next); }
       catch (failure) { setError((failure as Error).message); }
       finally { setBusy(false); }
     }, failure => {
       if (!alive.current || attempt !== request.current) return;
-      setBusy(false); setError(failure.code === 1 ? "Allow location access in your browser settings, or enter coordinates." : failure.code === 3 ? "Location took too long. Try again or enter coordinates." : "Your location is unavailable. Try again or enter coordinates.");
+      setBusy(false); setError(failure.code === 1 ? "Allow location access in your browser settings, or choose the location on the map." : failure.code === 3 ? "Location took too long. Try again or choose the location on the map." : "Your location is unavailable. Try again or choose the location on the map.");
     }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
   }
   return <dialog ref={dialog} className={styles.dialog} onCancel={event => { event.preventDefault(); close(); }}>
@@ -58,8 +57,8 @@ function Picker({ initial, close, onConfirm }: { initial: DeliveryPoint | null; 
     <p className={`${styles.muted} mt-2`}>Check that this point matches the delivery address before using it.</p>
     {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ? <MapPicker point={point} onSelect={select} onError={setError} /> : null}
     <button type="button" className={`${styles.button} mt-4`} onClick={locate} disabled={busy}>{busy ? "Finding location..." : "Use my location"}</button>
-    <div className={`${styles.form} ${styles.coordinates}`}><label>Delivery latitude<input aria-label="Delivery latitude" type="number" step="any" min="-90" max="90" value={latitude} onChange={e => { setLatitude(e.target.value); setPoint(deliveryPoint(e.target.value, longitude)); setAccuracy(null); }} /></label><label>Delivery longitude<input aria-label="Delivery longitude" type="number" step="any" min="-180" max="180" value={longitude} onChange={e => { setLongitude(e.target.value); setPoint(deliveryPoint(latitude, e.target.value)); setAccuracy(null); }} /></label></div>
-    {point ? <p className={styles.point}>Latitude: {point.latitude.toFixed(6)} · Longitude: {point.longitude.toFixed(6)}{accuracy !== null ? ` · GPS accuracy: about ${Math.round(accuracy)} metres` : ""}</p> : null}
+
+    {point ? <p role="status" className={styles.point}>Location selected. Confirm that it matches the address.</p> : null}
     {error ? <p role="alert" className={styles.error}>{error}</p> : null}
     <div className={styles.actions}><button type="button" className={`${styles.button} ${styles.primary}`} disabled={!point || busy} onClick={() => { if (!point) return; try { checkAccount(stamp); onConfirm(point); close(); } catch (failure) { setError((failure as Error).message); } }}>Use this delivery point</button><button type="button" className={styles.button} onClick={close}>Cancel</button></div>
   </dialog>;

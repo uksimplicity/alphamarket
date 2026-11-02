@@ -15,9 +15,9 @@ export function loadGoogleMaps(key: string): Promise<GoogleMapApi> {
     const script = document.createElement("script");
     script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&loading=async&callback=__alphaMapsReady`;
     script.async = true;
-    const timeout = setTimeout(() => { script.remove(); pending = undefined; reject(new Error("The map could not be loaded. Use your location or enter coordinates.")); }, 15000);
-    callbacks.__alphaMapsReady = () => { clearTimeout(timeout); if (google()?.Map) resolve(google()!); else { pending = undefined; reject(new Error("The map is unavailable. Use your location or enter coordinates.")); } };
-    script.onerror = () => { clearTimeout(timeout); script.remove(); pending = undefined; reject(new Error("The map could not be loaded. Use your location or enter coordinates.")); };
+    const timeout = setTimeout(() => { script.remove(); pending = undefined; reject(new Error("The map could not be loaded. Use your current location or try again.")); }, 15000);
+    callbacks.__alphaMapsReady = () => { clearTimeout(timeout); if (google()?.Map) resolve(google()!); else { pending = undefined; reject(new Error("The map is unavailable. Use your current location or try again.")); } };
+    script.onerror = () => { clearTimeout(timeout); script.remove(); pending = undefined; reject(new Error("The map could not be loaded. Use your current location or try again.")); };
     document.head.appendChild(script);
   });
   return pending;

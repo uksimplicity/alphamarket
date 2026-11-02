@@ -32,7 +32,20 @@ async function main() {
     const rows=()=>JSON.parse(sessionStorage.getItem('parity-chat-rows')||'[]');
     const thread=()=>({id:'thread-1',peer:peer(),last_message:rows().at(-1)?.text||'',updated_at:new Date().toISOString()});
     window.__appendReply=()=>{const list=rows();list.push({id:'reply-'+list.length,client_id:'seller-reply-'+list.length,sender_id:'seller-parity',text:'Yes, this is available.',sequence:list.length+1,created_at:new Date().toISOString()});sessionStorage.setItem('parity-chat-rows',JSON.stringify(list));};
-    Object.defineProperty(navigator,'geolocation',{configurable:true,value:{getCurrentPosition(success){window.__gpsCalls++;if(window.__delayGps){window.__finishGps=()=>success({coords:{latitude:10,longitude:5,accuracy:8}});return;}setTimeout(()=>success({coords:{latitude:7.1,longitude:4.2,accuracy:8}}),20);}}});
+    window.__gpsPoint={latitude:7.1,longitude:4.2};
+    window.google = { maps: {
+      Map: class {
+        setCenter() {}
+        addListener() { return { remove() {} }; }
+      },
+      Marker: class {
+        setPosition() {}
+        setVisible() {}
+        setMap() {}
+        addListener() { return { remove() {} }; }
+      },
+    } };
+    Object.defineProperty(navigator,'geolocation',{configurable:true,value:{getCurrentPosition(success){window.__gpsCalls++;if(window.__delayGps){window.__finishGps=()=>success({coords:{latitude:10,longitude:5,accuracy:8}});return;}setTimeout(()=>success({coords:{...window.__gpsPoint,accuracy:8}}),20);}}});
     window.fetch=async(input,init={})=>{
       const url=typeof input==='string'?input:input.url;
       if(!url.startsWith('/api/'))return actualFetch(input,init);
@@ -70,9 +83,15 @@ async function main() {
     await wait(`typeof __releaseProfile==='function'`);
     await check(`!document.querySelector('h1')?.textContent.includes('Address Book') && document.body.innerText.includes('Checking your sign-in')`,'private workspace waits for backend session verification');
     await evaluate('__releaseProfile()'); await wait(`document.querySelector('h1')?.textContent==='Address Book'`);
-    await click('Add address'); await labelled('Full delivery address','Lekki gate'); await labelled('Delivery phone','08012345678'); await labelled('Latitude','6.6'); await labelled('Longitude','3.4');
+    await click('Add address'); await labelled('Full delivery address','Lekki gate'); await labelled('Delivery phone','08012345678');
+    await check(`!document.body.innerText.match(/latitude|longitude|coordinates/i)`,'address editor does not expose coordinate fields');
+    await evaluate('window.__gpsPoint={latitude:6.6,longitude:3.4}');
+    await click('Choose delivery location'); await click('Use my location');
+    await wait(`document.querySelector('dialog[open]')?.innerText.includes('Location selected.')`);
+    await click('Use this delivery point'); await evaluate('window.__gpsPoint={latitude:7.1,longitude:4.2}');
     await evaluate(`[...document.querySelectorAll('label')].find(l=>l.textContent.includes('Make default')).querySelector('input').click()`);
     await click('Save address'); await wait(`document.body.innerText.includes('Home · Default')`);
+    await check(`!document.body.innerText.includes('6.6, 3.4')&&!document.body.innerText.match(/latitude|longitude/i)`,'saved addresses do not display raw coordinates');
     await click('Edit'); await labelled('Full delivery address','Updated Lekki gate'); await click('Save address');
     await navigate('/dashboard/addresses'); await wait(`document.body.innerText.includes('Updated Lekki gate')`);
     await check(`document.body.innerText.includes('Home · Default')`,'saved address, edited details and default persist across reopening');
@@ -86,14 +105,18 @@ async function main() {
     await check(`document.querySelector('textarea[autocomplete="street-address"]').value===''`,'default address is not silently applied to checkout');
     await click('Saved addresses'); await wait(`document.querySelector('dialog[open]')?.innerText.includes('Updated Lekki gate')`); await click('Use address'); await wait(`!document.querySelector('dialog[open]')`);
     await check(`document.querySelector('textarea[autocomplete="street-address"]').value==='Updated Lekki gate'&&document.querySelector('input[autocomplete="tel"]').value==='08012345678'`,'selected address and phone populate checkout');
+    await check(`!document.body.innerText.match(/latitude|longitude|coordinates/i)`,'checkout keeps coordinates internal');
+    await evaluate('window.__gpsCalls=0');
     await click('Choose delivery location'); await wait(`!!document.querySelector('dialog[open]')`); await check(`__gpsCalls===0`,'opening the picker does not request GPS');
-    await click('Use my location'); await wait(`document.querySelector('dialog[open]')?.innerText.includes('7.100000')`);
-    await check(`[...document.querySelectorAll('label')].find(l=>l.textContent.trim()==='Latitude').querySelector('input').value==='6.6'`,'GPS selection remains a draft until explicit confirmation');
+    await check(`!document.querySelector('dialog[open] input[type="number"]')&&!document.querySelector('dialog[open]').innerText.match(/latitude|longitude|coordinates/i)`,'shared picker has no numeric coordinate input or readout');
+    await click('Use my location'); await wait(`!document.querySelector('dialog[open]').innerText.includes('Finding location...')`);
+    await check(`document.querySelector('dialog[open]').innerText.includes('Location selected.')`,'GPS selection waits for explicit confirmation');
     await click('Use this delivery point'); await wait(`!document.querySelector('dialog[open]')`);
-    await click('Choose delivery location'); await input('input[aria-label="Delivery latitude"]','8'); await click('Cancel');
-    await check(`[...document.querySelectorAll('label')].find(l=>l.textContent.trim()==='Latitude').querySelector('input').value==='7.1'`,'cancelling a changed delivery point preserves the confirmed location');
+    await evaluate('window.__gpsPoint={latitude:8,longitude:4.2}');
+    await click('Choose delivery location'); await click('Use my location'); await wait(`!document.querySelector('dialog[open]').innerText.includes('Finding location...')`); await click('Cancel');
+    await check(`document.body.innerText.includes('Delivery location selected.')`,'cancelling the picker preserves the confirmed delivery location');
     await click('Choose delivery location'); await evaluate('window.__delayGps=true'); await click('Use my location'); await click('Cancel'); await evaluate('__finishGps()');
-    await check(`[...document.querySelectorAll('label')].find(l=>l.textContent.trim()==='Latitude').querySelector('input').value==='7.1'`,'late GPS results cannot update a cancelled picker');
+    await check(`!document.querySelector('dialog[open]')&&document.body.innerText.includes('Delivery location selected.')`,'late GPS results cannot reopen a cancelled picker');
     await evaluate(`document.querySelector('input[type="checkbox"]').click()`); await click('Pay Now'); await wait(`document.body.innerText.includes('Intentional QA payment stop.')`);
     await check(`(()=>{const request=__calls.find(c=>c.url==='/api/buyer/orders');return request.body.dropoff_address==='Updated Lekki gate'&&request.body.dropoff_lat===7.1&&request.body.dropoff_lng===4.2&&request.body.dropoff_contact==='08012345678';})()`,'reviewed coordinates and saved address reach the existing order request');
     await navigate('/dashboard/orders'); await wait(`document.body.innerText.includes('Leave review')`); await click('Leave review'); await wait(`!!document.querySelector('dialog[open]')`); await aria('4 stars'); await input('dialog textarea','Arrived safely'); await click('Save draft'); await wait(`!document.querySelector('dialog[open]')`); await click('Leave review');

@@ -16,7 +16,7 @@ export function AddressEditor({ existing, initial, primary = false, onSaved, onC
   const [stamp] = useState(() => { try { return accountStamp(); } catch { return ""; } });
   return <form className={styles.form} onSubmit={event => {
     event.preventDefault(); setError("");
-    try { checkAccount(stamp); const point = deliveryPoint(latitude, longitude); if (!point) throw new Error("Choose a delivery point or enter valid coordinates."); onSaved(saveAddress({ label, address, contact, ...point }, isDefault, existing?.id)); }
+    try { checkAccount(stamp); const point = deliveryPoint(latitude, longitude); if (!point) throw new Error("Choose the delivery location on the map or use your current location."); onSaved(saveAddress({ label, address, contact, ...point }, isDefault, existing?.id)); }
     catch (failure) { setError((failure as Error).message); }
   }}>
     <h2>{existing ? "Edit address" : "New address"}</h2><p className={styles.muted}>Saved on this browser for your account.</p>
@@ -24,7 +24,7 @@ export function AddressEditor({ existing, initial, primary = false, onSaved, onC
     <label>Full delivery address<textarea autoComplete="street-address" value={address} onChange={e => setAddress(e.target.value)} required /></label>
     <label>Delivery phone<input type="tel" value={contact} onChange={e => setContact(e.target.value)} /></label>
     <DeliveryLocationButton point={deliveryPoint(latitude, longitude)} onConfirm={point => { try { checkAccount(stamp); setLatitude(String(point.latitude)); setLongitude(String(point.longitude)); } catch (failure) { setError((failure as Error).message); } }} />
-    <div className={styles.coordinates}><label>Latitude<input type="number" step="any" min="-90" max="90" value={latitude} onChange={e => setLatitude(e.target.value)} required /></label><label>Longitude<input type="number" step="any" min="-180" max="180" value={longitude} onChange={e => setLongitude(e.target.value)} required /></label></div>
+    {deliveryPoint(latitude, longitude) ? <p role="status" className={styles.muted}>Delivery location selected.</p> : null}
     <label className={styles.check}><input type="checkbox" checked={isDefault} onChange={e => setDefault(e.target.checked)} />Make default address</label>
     {error ? <p role="alert" className={styles.error}>{error}</p> : null}
     <div className={styles.actions}><button type="submit" className={`${styles.button} ${styles.primary}`}>Save address</button><button type="button" className={styles.button} onClick={onCancel}>Cancel</button></div>
@@ -44,7 +44,7 @@ function AddressAccount({ onChoose }: { onChoose?: (value: SavedAddress) => void
     {error ? <div role="alert" className={styles.error}><p>{error}</p><div className={styles.actions}><button type="button" className={styles.button} onClick={load}>Retry</button>{!book ? <button type="button" className={styles.button} onClick={() => remove()}>Reset saved addresses</button> : null}</div></div> : null}
     {editing ? <AddressEditor key={typeof editing === "string" ? "new" : editing.id} existing={typeof editing === "string" ? undefined : editing} primary={typeof editing !== "string" && editing.id === book?.defaultId} onCancel={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} /> : book ? <>
       {!book.addresses.length ? <p className="py-6">No saved addresses yet.</p> : null}
-      {book.addresses.map(row => <article key={row.id} className={styles.address}><strong>{row.label}{row.id === book.defaultId ? " · Default" : ""}</strong><p>{row.address}</p>{row.contact ? <p>{row.contact}</p> : null}<p className={styles.muted}>{row.latitude}, {row.longitude}</p><div className={styles.actions}>{onChoose ? <button type="button" className={`${styles.button} ${styles.primary}`} onClick={() => onChoose(row)}>Use address</button> : null}<button type="button" className={styles.button} onClick={() => setEditing(row)}>Edit</button><button type="button" className={styles.button} onClick={() => remove(row.id)}>Delete</button></div></article>)}
+      {book.addresses.map(row => <article key={row.id} className={styles.address}><strong>{row.label}{row.id === book.defaultId ? " · Default" : ""}</strong><p>{row.address}</p>{row.contact ? <p>{row.contact}</p> : null}<div className={styles.actions}>{onChoose ? <button type="button" className={`${styles.button} ${styles.primary}`} onClick={() => onChoose(row)}>Use address</button> : null}<button type="button" className={styles.button} onClick={() => setEditing(row)}>Edit</button><button type="button" className={styles.button} onClick={() => remove(row.id)}>Delete</button></div></article>)}
       <button type="button" className={`${styles.button} ${styles.primary} mt-5`} onClick={() => setEditing("new")}>Add address</button>
     </> : !error ? <p role="status">Loading saved addresses...</p> : null}
   </section>;

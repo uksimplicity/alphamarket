@@ -129,11 +129,8 @@ export default function CheckoutPage() {
               <label>Full delivery address<textarea autoComplete="street-address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Street address, city and state" /></label>
               <label>Contact phone number<input type="tel" autoComplete="tel" value={contact} onChange={(event) => setContact(event.target.value)} /></label>
               <DeliveryLocationButton point={deliveryPoint(latitude, longitude)} onConfirm={point => { setLatitude(String(point.latitude)); setLongitude(String(point.longitude)); }} disabled={loading || Boolean(pending)} />
-              <p className={styles.mutedText}>Use your current location only if you are at the delivery address, or enter its coordinates.</p>
-              <div className={styles.coordinateFields}>
-                <label>Latitude<input type="number" step="any" min="-90" max="90" value={latitude} onChange={(event) => setLatitude(event.target.value)} /></label>
-                <label>Longitude<input type="number" step="any" min="-180" max="180" value={longitude} onChange={(event) => setLongitude(event.target.value)} /></label>
-              </div>
+              <p className={styles.mutedText}>Choose the delivery point on the map, or use your current location if you are at the delivery address.</p>
+              {deliveryPoint(latitude, longitude) ? <p role="status" className={styles.mutedText}>Delivery location selected.</p> : null}
             </fieldset>
           </div></Card>
           <Card><div className={styles.checkoutCard}>

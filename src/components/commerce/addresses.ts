@@ -18,7 +18,7 @@ function valid(value: unknown): value is AddressBook {
 export const readAddresses = () => readAccountData("addresses", () => ({ addresses: [], defaultId: null } as AddressBook), valid);
 export function saveAddress(input: AddressInput, makeDefault: boolean, id?: string) {
   const book = readAddresses();
-  if (!input.label.trim() || !input.address.trim() || !deliveryPoint(String(input.latitude), String(input.longitude))) throw new Error("Enter an address name, full address and valid coordinates.");
+  if (!input.label.trim() || !input.address.trim() || !deliveryPoint(String(input.latitude), String(input.longitude))) throw new Error("Enter an address name, full address and choose a delivery location.");
   if (id && !book.addresses.some(a => a.id === id)) throw new Error("This saved address no longer exists.");
   const row: SavedAddress = { ...input, id: id || crypto.randomUUID(), label: input.label.trim(), address: input.address.trim(), contact: input.contact.trim() };
   const next = { addresses: id ? book.addresses.map(a => a.id === id ? row : a) : [...book.addresses, row], defaultId: makeDefault ? row.id : book.defaultId === row.id ? null : book.defaultId };
