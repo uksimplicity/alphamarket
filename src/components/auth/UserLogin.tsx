@@ -10,7 +10,6 @@ import { authGeneration, clearAuth, setAuth } from "./authStorage";
 export default function UserLogin() {
   const navigate = useNavigate();
   const router = useRouter();
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
