@@ -28,15 +28,20 @@ async function main() {
     __products[0].location='Ikeja, Lagos';
     __products[1].seller.location='Wuse 2, Abuja';
     __products[2].seller.location='A long seller location in the Central Business District, Victoria Island, Lagos';
+    if(options.has('seller-names')) __products.slice(0,3).forEach((product,index)=>{product.seller={...product.seller,id:'directory-'+index,name:undefined};product.seller_id='directory-'+index;});
     const realFetch=window.fetch.bind(window);
     window.fetch=async(input,init={})=>{
       const url=typeof input==='string'?input:input.url;
       if(!url.startsWith('/api/'))return realFetch(input,init);
       __calls.push({url,method:init.method||'GET'});
-      if(url.startsWith('/api/products/public/')) { const id=decodeURIComponent(url.split('/').pop()); const item=__products.find(product=>product.id===id); return item?Response.json({data:{...item,title:item.name,price:String(item.base_price),preview:false,images:item.media?.images||[],rating:'',reviews:'0'}}):Response.json({error:'Missing'},{status:404}); }
+      if(url==='/api/chat/sellers') {
+        if(options.has('seller-directory-failure')) return Response.json({error:'Directory unavailable'},{status:503});
+        return Response.json({sellers:init.headers?.Authorization?.includes('other-token')?[]:[{id:'directory-0',name:'Verified First Seller',role:'seller'},{id:'directory-1',name:'Verified Second Seller',role:'seller'}]});
+      }
+      if(url.startsWith('/api/products/public/')) { const id=decodeURIComponent(url.split('/').pop()); const item=__products.find(product=>product.id===id); return item?Response.json({data:{...item,seller:{...item.seller,name:item.seller.name||'Marketplace seller'},title:item.name,price:String(item.base_price),preview:false,images:item.media?.images||[],rating:'',reviews:'0'}}):Response.json({error:'Missing'},{status:404}); }
       if(url.startsWith('/api/products/public')) { const query=new URL(url,location.origin).searchParams,offset=Number(query.get('offset')||0),limit=Number(query.get('limit')||24),search=(query.get('search')||'').toLowerCase(); const rows=__empty?[]:__products.filter(product=>product.name.toLowerCase().includes(search)); return __fail||window.__failMore&&offset>0?Response.json({error:'Unavailable'},{status:503}):Response.json({success:true,data:{products:rows.slice(offset,offset+limit),total:rows.length,offset,limit}}); }
 
-      if(url.startsWith('/api/user/profile'))return Response.json({data:{id:'buyer-preview',first_name:'Amara',last_name:'Okafor',email:'preview@example.test'}});
+      if(url.startsWith('/api/user/profile'))return Response.json({data:init.headers?.Authorization?.includes('other-token')?{id:'other-buyer',role:'buyer',first_name:'New',email:'other@example.test'}:{id:'buyer-preview',role:'buyer',first_name:'Amara',last_name:'Okafor',email:'preview@example.test'}});
       if(url.startsWith('/api/user/orders')) { if(init.headers?.Authorization?.includes('other-token'))return Response.json({data:{orders:[]}}); return Response.json({data:{orders:[{id:'order-in-transit',buyer_id:'buyer-preview',status:'shipped',payment_status:'paid',total_amount:2500,created_at:'2026-10-29T10:00:00Z',seller_name:'The Everyday Store',items:[{product_id:'live-0',product_name:'Everyday Headphones',quantity:1}]},{id:'order-delivered',buyer_id:'buyer-preview',status:'delivered',payment_status:'paid',total_amount:4000,created_at:'2026-10-27T10:00:00Z',items:[{product_id:'live-1',product_name:'Previous good find',quantity:1}]}]}}); }
       return Response.json({data:[]});
     };
@@ -44,6 +49,7 @@ async function main() {
   try {
     await send('Page.enable'); await send('Runtime.enable'); await send('Page.addScriptToEvaluateOnNewDocument',{source:fixtures});
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
+    if (!process.argv.includes('--seller-names-only')) {
     await navigate('/dashboard/home');
     await wait(`document.body.innerText.includes('Welcome back, Amara') && document.querySelectorAll('article').length===8`);
     await check(`document.querySelector('article [aria-label="Seller location: Ikeja, Lagos"]')?.textContent==='Ikeja, Lagos' && document.querySelector('article [aria-label="Seller location: Wuse 2, Abuja"]')?.textContent==='Wuse 2, Abuja'`,'seller locations are visible directly on product cards');
@@ -94,6 +100,20 @@ async function main() {
     await check(`document.querySelector('article').innerText.includes('Catalog find 0')`,'failed later page keeps the already loaded catalog');
     await evaluate('window.__failMore=false'); await click('Try again'); await wait(`document.querySelectorAll('article').length===32`);
     await check(`new Set([...document.querySelectorAll('article')].map(item=>item.querySelector('a[href^="/products/"]').getAttribute('href'))).size===32`,'retry appends unique product IDs without duplicating previous pages');
+    }
+    await navigate('/dashboard/home?seller-names=1');
+    await wait(`document.querySelectorAll('article').length===8 && document.querySelector('article').innerText.includes('Verified First Seller')`);
+    await check(`document.querySelectorAll('article')[1].innerText.includes('Verified Second Seller') && document.querySelectorAll('article')[2].innerText.includes('Marketplace seller') && document.querySelectorAll('article')[3].innerText.includes('The Everyday Store')`,'seller names match exact account IDs while unknown IDs and existing catalog names stay intact');
+    await check(`__calls.filter(call=>call.url==='/api/chat/sellers').length===1 && !__calls.some(call=>call.url.startsWith('/api/chat/')&&call.method!=='GET')`,'cards share one read-only directory lookup without creating a chat session or conversation');
+    await evaluate(`localStorage.setItem('alpha.auth',JSON.stringify({access_token:'other-token',user:{id:'other-buyer',role:'buyer',first_name:'New'}}));window.dispatchEvent(new Event('alpha-auth-updated'));`);
+    await wait(`document.querySelector('article')?.innerText.includes('Marketplace seller') && __calls.filter(call=>call.url==='/api/chat/sellers').length>=2`);
+    await check(`!document.querySelector('article').innerText.includes('Verified First Seller')`,'account switching does not retain another buyer session directory');
+    await navigate('/products/live-0?seller-names=1');
+    await wait(`document.querySelector('h1')?.textContent==='Everyday Headphones' && document.body.innerText.includes('Verified First Seller')`);
+    await check(`__calls.filter(call=>call.url==='/api/chat/sellers').length===1`,'product details resolve the seller name without requiring a dashboard query provider');
+    await navigate('/dashboard/home?seller-names=1&seller-directory-failure=1');
+    await wait(`document.querySelectorAll('article').length===8 && __calls.some(call=>call.url==='/api/chat/sellers')`);
+    await check(`document.querySelector('article').innerText.includes('Marketplace seller') && document.querySelector('button[aria-label="Add Everyday Headphones to cart"]')!==null`,'directory failure preserves available products and cart actions');
     assert.deepEqual(errors,[]); console.log(checks+' buyer browser checks passed.');
   } finally { await send('Page.close').catch(()=>{}); socket.close(); }
 }

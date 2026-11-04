@@ -11,6 +11,7 @@ import BuyerProductCard from "@/components/dashboard/BuyerProductCard";
 import { canShop, shoppingCategory } from "@/components/dashboard/buyerCatalog";
 import CartAddedModal from "@/components/commerce/CartAddedModal";
 import { sellerPhone, sellerPhoneHref } from "./sellerPhone";
+import { useSellerName } from "@/components/dashboard/useSellerName";
 import { marketplaceImage } from "./productMedia";
 import styles from "./productDetail.module.css";
 
@@ -27,7 +28,8 @@ export default function ProductDetail({ product, backLink }: { product: Product;
   const images = useMemo(() => [...new Set([product.image, ...(product.images ?? [])].filter(Boolean).map(marketplaceImage))], [product.image, product.images]);
   const price = parsePrice(product.price), oldPrice = product.oldPrice ? parsePrice(product.oldPrice) : null;
   const purchasable = canShop(product), selected = saved.products.some(item => item.id === product.id);
-  const sellerName = store?.name || product.seller.name;
+  const accountName = useSellerName(product.seller, product.preview);
+  const sellerName = store?.name || accountName;
   const phone = sellerPhone(product.seller.phone);
   const contactKey = [product.id, product.seller.id ?? "", phone].join(":");
   const phoneRevealed = revealedContact === contactKey;

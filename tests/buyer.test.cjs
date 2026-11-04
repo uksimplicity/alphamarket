@@ -12,6 +12,21 @@ function load(relative) {
   loaded._compile(compiled.outputText, filename); return loaded.exports;
 }
 const buyer = load('src/components/dashboard/buyerCatalog.ts');
+const sellerNames = load('src/components/dashboard/sellerNames.ts');
+
+test('seller lookup matches account IDs and preserves names already returned by the catalog', () => {
+  const directory = [
+    { id: 'seller-one', name: '  First Store  ', role: 'seller' },
+    { id: 'seller-two', name: 'Second Store', role: 'seller' },
+    { id: 'buyer-id', name: 'Buyer Name', role: 'buyer' },
+  ];
+  const seller = { id: 'seller-one', name: 'Marketplace seller', slug: '' };
+  assert.equal(sellerNames.resolveSellerName(seller, directory), 'First Store');
+  assert.equal(sellerNames.resolveSellerName({ ...seller, id: 'seller-two' }, directory), 'Second Store');
+  assert.equal(sellerNames.resolveSellerName({ ...seller, name: 'Catalog Store' }, directory), 'Catalog Store');
+  for (const id of ['unknown', '', 'buyer-id']) assert.equal(sellerNames.resolveSellerName({ ...seller, id }, directory), 'Marketplace seller');
+  assert.equal(sellerNames.resolveSellerName(seller), 'Marketplace seller');
+});
 test('buyer listings use public response envelopes and never invent price, stock or ratings', () => {
   const [product] = buyer.buyerProducts({ success: true, data: { products: [{ id: 'live', name: 'Live product', seller: { name: 'Store', slug: 'store' } }] } });
   assert.equal(product.price, ''); assert.equal(product.stock, null); assert.equal(product.rating, ''); assert.equal(product.preview, false); assert.equal(buyer.canShop(product), false);
