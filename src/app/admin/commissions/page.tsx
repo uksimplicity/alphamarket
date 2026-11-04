@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
+import CommissionSettings from "@/components/admin/CommissionSettings";
 
 type CommissionRow = {
   id: string;
@@ -22,7 +23,7 @@ function pretty(value: unknown) {
   }
 }
 
-export default function AdminCommissionsPage() {
+function CommissionRecords() {
   const [filters, setFilters] = useState({ status: "", riderId: "", orderId: "", deliveryId: "" });
   const [selectedId, setSelectedId] = useState("");
   const [selectedDeliveryId, setSelectedDeliveryId] = useState("");
@@ -233,4 +234,8 @@ export default function AdminCommissionsPage() {
       </Card>
     </div>
   );
+}
+
+export default function AdminCommissionsPage() {
+  return <div className="grid gap-6"><CommissionSettings /><CommissionRecords /></div>;
 }
