@@ -50,9 +50,10 @@ async function main() {
     await input('input[name="brandName"]','  Acme  ');
     await input('select[name="brand"]','brand-1');
     assert.equal(await evaluate(`document.querySelector('select[name="brand"]').value==='brand-1'&&!document.body.innerText.includes('Brand selection is temporarily disabled')`), true);
-    assert.equal(await evaluate(`document.querySelector('input[name="brandName"]') === null`), true);
+    assert.equal(await evaluate(`document.querySelector('input[name="brandName"]').disabled && document.querySelector('#product-brand-name-help').textContent.includes('Select No brand')`), true);
     console.log('PASS seller creation allows choosing a real brand');
     await input('select[name="brand"]','');
+    assert.equal(await evaluate(`document.querySelector('input[name="brandName"]').disabled`), false);
     assert.equal(await evaluate(`document.querySelector('input[name="brandName"]').value`), '  Acme  ');
     await evaluate(`document.querySelector('form.create-form').requestSubmit()`);
     await wait(`document.body.innerText.includes('Product name is required.')`);

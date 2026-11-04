@@ -138,7 +138,9 @@ for (const scenario of [
     const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Synthetic rejection' }, { status: 400 }));
     const cleanup = await prepareProduct(harness, scenario.fields);
     const tree = harness.render();
-    assert.equal(nodes(tree, node => node.props?.name === 'brandName').length, scenario.fields.brand ? 0 : 1);
+    const brandNameInput = nodes(tree, node => node.props?.name === 'brandName')[0];
+    assert.ok(brandNameInput, 'The optional brand-name field remains visible');
+    assert.equal(brandNameInput.props.disabled, Boolean(scenario.fields.brand));
     await nodes(tree, node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
     const writes = harness.calls.filter(call => call.init?.method === 'POST');
     assert.equal(writes.length, 1);

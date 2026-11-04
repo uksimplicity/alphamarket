@@ -934,7 +934,6 @@ export default function CreateProduct({ mode = "seller" }) {
                   <div className="mt-2 text-xs text-slate-500">No brands available yet.</div>
                 ) : null}
               </div>
-              {!form.brand ? (
                 <div className="field">
                   <label htmlFor="product-brand-name">Brand name (optional)</label>
                   <input
@@ -943,15 +942,16 @@ export default function CreateProduct({ mode = "seller" }) {
                     value={form.brandName}
                     onChange={handleChange}
                     maxLength={150}
-                    disabled={loading}
+                    disabled={loading || Boolean(form.brand)}
                     aria-describedby="product-brand-name-help"
                     placeholder="e.g. Apple"
                   />
                   <p id="product-brand-name-help" className="mt-2 text-xs text-slate-500">
-                    Enter a brand if it isn&apos;t listed. Leave blank to identify it from the product name.
+                    {form.brand
+                      ? "Select No brand above to enter a different brand name."
+                      : "Enter a brand if it isn't listed. Leave blank to identify it from the product name."}
                   </p>
                 </div>
-              ) : null}
               <div className="field">
                 <label>Base Price</label>
                 <input
