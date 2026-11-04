@@ -12,6 +12,14 @@ Implemented behavior:
 - A live product's “Ask the seller a question” link passes its product ID.
   “Message seller” opens or creates the product conversation using
   { "type": "product", "context_id": "..." }. Opening Messages alone sends nothing.
+- The open buyer/seller conversation displays the product referenced by its
+  backend context_id above the messages: image, current listing title/price and
+  a product link. It resolves details through the existing public product lookup,
+  including for sellers opening inbox threads without product URL parameters.
+  Conversation detail refreshes can supply or change the reference. Lookup
+  failure is retryable; missing references and removed/unpublished listings have
+  explicit unavailable states and never disable chat. No reference is guessed
+  from message text and no conversation/message is created by product lookup.
 - History loads newest-first backend pages and displays them oldest-first.
   “Load older messages” uses the oldest created_at as before. Visible polling
   catches up across missed pages and merges by message ID.
@@ -53,3 +61,11 @@ To test after deployment: sign in as a buyer, open a live product owned by
 another seller, choose “Ask the seller a question”, click “Message seller” and send
 a test message. Sign in as that seller on another browser and open Messages to
 reply. Confirm both histories and unread counts refresh.
+
+Product-reference follow-up: production build and TypeScript passed, along with
+18 chat/catalog unit/API checks and 18 production-chat browser checks. Added
+browser coverage verifies buyer/seller product image/title/current price/link,
+opening a seller thread without product URL parameters, lookup retry without
+new conversations, removed products, missing backend references and preserving
+chat when product lookup fails. Application API responses were synthetic; no
+real messages were sent by these checks.

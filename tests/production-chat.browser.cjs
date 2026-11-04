@@ -20,11 +20,11 @@ async function main() {
   async function screenshot(name) { const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }); fs.writeFileSync(path.resolve(__dirname, '..', name), Buffer.from(shot.data, 'base64')); }
   const fixtures = `
     if (!sessionStorage.getItem('production-chat-ready')) { sessionStorage.setItem('production-chat-ready','1'); sessionStorage.removeItem('production-chat-rows'); sessionStorage.removeItem('production-thread'); localStorage.setItem('alpha.auth',JSON.stringify({access_token:'buyer-token',user:{id:'buyer-chat',role:'buyer',first_name:'Buyer'}})); }
-    window.__calls=[];window.__failSend=false;window.__closed=false;
+    window.__calls=[];window.__failSend=false;window.__closed=false;window.__productUnavailable=false;window.__productFailure=false;window.__noProductReference=false;
     const realFetch=window.fetch.bind(window);
     const current=()=>JSON.parse(localStorage.getItem('alpha.auth')||'null')?.user;
     const rows=()=>JSON.parse(sessionStorage.getItem('production-chat-rows')||'[]');
-    const thread=()=>({id:'thread-1',type:'product',status:window.__closed?'closed':'open',context_id:'product-1',participants:[{user_id:'buyer-chat',role:'buyer',name:'Buyer Chat'},{user_id:'seller-chat',role:'seller',name:'Seller Chat'}],last_message_preview:rows().at(-1)?.body||'',last_message_at:rows().at(-1)?.created_at||'2026-11-04T10:00:00Z',created_at:'2026-11-04T10:00:00Z',unread_count:1});
+    const thread=()=>({id:'thread-1',type:'product',status:window.__closed?'closed':'open',context_id:window.__noProductReference?'':'product-1',participants:[{user_id:'buyer-chat',role:'buyer',name:'Buyer Chat'},{user_id:'seller-chat',role:'seller',name:'Seller Chat'}],last_message_preview:rows().at(-1)?.body||'',last_message_at:rows().at(-1)?.created_at||'2026-11-04T10:00:00Z',created_at:'2026-11-04T10:00:00Z',unread_count:1});
     window.__older=()=>{const old=Array.from({length:35},(_,i)=>({id:'old-'+i,conversation_id:'thread-1',sender_id:'seller-chat',type:'text',body:'Earlier '+i,created_at:new Date(Date.UTC(2026,0,1,0,i)).toISOString()}));sessionStorage.setItem('production-chat-rows',JSON.stringify([...old,...rows()]));};
     window.fetch=async(input,init={})=>{
       const url=typeof input==='string'?input:input.url;
@@ -32,6 +32,11 @@ async function main() {
       const body=init.body?JSON.parse(init.body):undefined;
       __calls.push({url,method:init.method||'GET',body});
       if(url==='/api/user/profile')return Response.json({data:current()});
+      if(url==='/api/products/public/product-1'){
+        if(__productUnavailable)return Response.json({error:'Unavailable'},{status:404});
+        if(__productFailure)return Response.json({error:'Temporary error'},{status:503});
+        return Response.json({data:{id:'product-1',title:'Samsung',image:'/buyer/buyer-tech.jpg',price:'98776.78',seller:{id:'seller-chat',name:'Seller Chat'}}});
+      }
       if(url==='/api/chat/conversations'&&init.method==='POST'){sessionStorage.setItem('production-thread','1');return Response.json({success:true,data:thread()},{status:201});}
       if(url.startsWith('/api/chat/conversations?'))return Response.json({success:true,data:sessionStorage.getItem('production-thread')&&current().id!=='other-chat'?[thread()]:[],meta:{limit:20,offset:0,total:sessionStorage.getItem('production-thread')&&current().id!=='other-chat'?1:0}});
       if(url==='/api/chat/conversations/thread-1')return Response.json({success:true,data:thread()});
@@ -55,6 +60,8 @@ async function main() {
     await wait("document.body.innerText.includes('Message seller')");
     await check("!__calls.some(c=>c.method==='POST')",'opening product messages does not create or send automatically');
     await click('Message seller');await wait("!!document.querySelector('#chat-message') && !document.querySelector('[role=status]')");
+    await wait("document.querySelector('[aria-label=\"Product discussed\"]')?.innerText.includes('Samsung')");
+    await check("(()=>{const card=document.querySelector('[aria-label=\"Product discussed\"]');return card.querySelector('a[href=\"/products/product-1\"]')?.textContent==='Samsung'&&!!card.querySelector('img')&&card.innerText.includes('98,776.78')})()",'buyer conversation identifies the actual referenced product with image, price and link');
     await check("document.querySelector('#chat-message').value==='' && __calls.some(c=>c.url==='/api/chat/conversations'&&c.body.type==='product'&&c.body.context_id==='product-1'&&!('message' in c.body))",'starts a product conversation with an empty composer and no default message');
     await input('#chat-message','Is this available?');await evaluate('window.__failSend=true');await click('Send');
     await wait("document.body.innerText.includes('Connection interrupted.')");
@@ -89,6 +96,19 @@ async function main() {
     await wait("!!document.querySelector('#chat-message')");
     await input('#chat-message','Seller reply');await click('Send');await wait("[...document.querySelectorAll('article[data-mine=true]')].some(m=>m.innerText.includes('Seller reply'))");
     await check("document.body.innerText.includes('Seller reply')",'seller inbox reads the backend conversation and sends a reply');
+    await wait("document.querySelector('[aria-label=\"Product discussed\"]')?.innerText.includes('Samsung')");
+    await check("!!document.querySelector('[aria-label=\"Product discussed\"] a[href=\"/products/product-1\"]')",'seller inbox shows the product when opening an existing conversation without a product URL parameter');
+    await evaluate('window.__productFailure=true');await aria('Back to conversations');await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Buyer Chat')).click()");
+    await wait("document.body.innerText.includes('Product details could not be loaded.')");
+    await check("!!document.querySelector('#chat-message')&&document.body.innerText.includes('Seller reply')",'product lookup failure preserves chat history and composing');
+    await evaluate('window.__productFailure=false');await click('Retry product details');await wait("document.querySelector('[aria-label=\"Product discussed\"]')?.innerText.includes('Samsung')");
+    await check("!!document.querySelector('[aria-label=\"Product discussed\"] img')",'product reference can be retried without starting another conversation');
+    await evaluate('window.__productUnavailable=true');await aria('Back to conversations');await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Buyer Chat')).click()");
+    await wait("document.body.innerText.includes('This product is no longer available.')");
+    await check("!!document.querySelector('#chat-message')&&!document.querySelector('[aria-label=\"Product discussed\"] a')",'removed listings show an unavailable reference while the conversation remains usable');
+    await evaluate('window.__noProductReference=true');await aria('Back to conversations');await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Buyer Chat')).click()");
+    await wait("document.body.innerText.includes('No product reference was provided for this conversation.')");
+    await check("!document.querySelector('[aria-label=\"Product discussed\"] a')",'missing backend context never invents a product reference from message text');
     await check("!__calls.some(c=>c.url==='/api/chat/session')",'messaging no longer registers a presentation session');
     assert.deepEqual(errors,[]);console.log(checks+' production chat browser checks passed.');
   } finally {await send('Page.close').catch(()=>{});socket.close();}

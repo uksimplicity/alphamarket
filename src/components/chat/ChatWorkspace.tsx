@@ -5,6 +5,7 @@ import { useAuthUser } from "@/components/auth/useAuthUser";
 import ShopperIcon from "@/components/marketplace/ShopperIcon";
 import { ChatClient, mergeMessages, mergeThreads, type ChatMessage, type ChatThread } from "./chatClient";
 import styles from "./chat.module.css";
+import ConversationProduct from "./ConversationProduct";
 const failureText = (error: unknown) => error instanceof Error ? error.message : "Messages could not be loaded. Please retry.";
 
 function Conversation({ client, thread, back, onRead }: { client: ChatClient; thread: ChatThread; back: () => void; onRead: (id: string) => void }) {
@@ -12,6 +13,7 @@ function Conversation({ client, thread, back, onRead }: { client: ChatClient; th
   const [loading, setLoading] = useState(true), [sending, setSending] = useState(false), [error, setError] = useState(""), [sendError, setSendError] = useState("");
   const [status, setStatus] = useState(thread.status), [hasOlder, setHasOlder] = useState(false), [olderLoading, setOlderLoading] = useState(false), [revision, setRevision] = useState(0);
   const [review, setReview] = useState(false);
+  const [context, setContext] = useState({ type: thread.type, id: thread.contextId });
   const rows = useRef<ChatMessage[]>([]), sendingRef = useRef(false), olderLock = useRef(false), end = useRef<HTMLDivElement>(null);
   const lifetime = useRef<AbortController | null>(null), readCallback = useRef(onRead), lastRead = useRef<string | null>(null);
   useEffect(() => { readCallback.current = onRead; }, [onRead]);
@@ -29,6 +31,7 @@ function Conversation({ client, thread, back, onRead }: { client: ChatClient; th
         const detail = await client.thread(thread.id, controller.signal);
         if (controller.signal.aborted) return;
         setStatus(detail.status);
+        setContext(previous => previous.type === detail.type && previous.id === detail.contextId ? previous : { type: detail.type, id: detail.contextId });
         const known = new Set(rows.current.map(m => m.id));
         let before = "", incoming: ChatMessage[] = [];
         for (let page = 0; page < 50; page++) {
@@ -86,6 +89,7 @@ function Conversation({ client, thread, back, onRead }: { client: ChatClient; th
   }
   return <section className={styles.conversation} aria-label={"Conversation with " + thread.peer.name}>
     <header className={styles.threadHeader}><button type="button" className={styles.back} onClick={back} aria-label="Back to conversations">{"\u2190"}</button><span className={styles.avatar}><ShopperIcon name="user" /></span><div><h2>{thread.peer.name}</h2><p>{thread.type} conversation · {status}</p></div><button type="button" disabled={sending} onClick={() => setRevision(r => r + 1)} aria-label="Refresh messages"><ShopperIcon name="refresh" size={18} /></button></header>
+    {context.type === "product" ? <ConversationProduct client={client} productId={context.id} /> : null}
     {loading ? <p role="status" className={styles.notice}>Loading messages...</p> : null}
     {error ? <p role="alert" className={styles.error}>{error}</p> : null}
     <div className={styles.messages} aria-label="Message history">
