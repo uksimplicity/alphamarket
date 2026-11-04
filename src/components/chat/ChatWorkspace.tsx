@@ -7,8 +7,8 @@ import { ChatClient, mergeMessages, mergeThreads, type ChatMessage, type ChatThr
 import styles from "./chat.module.css";
 const failureText = (error: unknown) => error instanceof Error ? error.message : "Messages could not be loaded. Please retry.";
 
-function Conversation({ client, thread, back, introduction, onRead }: { client: ChatClient; thread: ChatThread; back: () => void; introduction?: string; onRead: (id: string) => void }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]), [text, setText] = useState(introduction || "");
+function Conversation({ client, thread, back, onRead }: { client: ChatClient; thread: ChatThread; back: () => void; onRead: (id: string) => void }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]), [text, setText] = useState("");
   const [loading, setLoading] = useState(true), [sending, setSending] = useState(false), [error, setError] = useState(""), [sendError, setSendError] = useState("");
   const [status, setStatus] = useState(thread.status), [hasOlder, setHasOlder] = useState(false), [olderLoading, setOlderLoading] = useState(false), [revision, setRevision] = useState(0);
   const [review, setReview] = useState(false);
@@ -148,7 +148,7 @@ function AccountChat({ productId, productTitle }: { productId?: string; productT
       <nav aria-label="Conversation list">{threads.map(thread => <button type="button" key={thread.id} className={styles.thread} aria-pressed={selected?.id === thread.id} onClick={() => setSelected(thread)}><span className={styles.avatar}><ShopperIcon name="user" size={19} /></span><span><strong>{thread.peer.name}</strong><small>{thread.last_message || thread.type + " conversation"}</small><small>{thread.status}{thread.unread > 0 ? " · " + thread.unread + " unread" : ""}</small></span><ShopperIcon name="arrow" size={16} /></button>)}</nav>
       {threads.length < total ? <button type="button" className={styles.notice} disabled={loading || starting} onClick={() => { setLoading(true); setPages(p => p + 1); }}>Load more conversations</button> : null}
     </aside>
-    {selected ? <Conversation key={selected.id} client={client} thread={selected} back={() => setSelected(null)} onRead={id => setThreads(previous => previous.map(t => t.id === id ? { ...t, unread: 0 } : t))} introduction={productId === selected.contextId && productTitle ? "Hi, I'd like to ask about " + productTitle + "." : undefined} /> : <section className={styles.placeholder}><ShopperIcon name="chat" size={48} /><h2>A conversation starts here.</h2><p>Choose a conversation, or open a product to contact its seller.</p></section>}
+    {selected ? <Conversation key={selected.id} client={client} thread={selected} back={() => setSelected(null)} onRead={id => setThreads(previous => previous.map(t => t.id === id ? { ...t, unread: 0 } : t))} /> : <section className={styles.placeholder}><ShopperIcon name="chat" size={48} /><h2>A conversation starts here.</h2><p>Choose a conversation, or open a product to contact its seller.</p></section>}
   </div>;
 }
 export default function ChatWorkspace(props: { productId?: string; productTitle?: string }) {

@@ -54,8 +54,8 @@ async function main() {
     await navigate('/dashboard/messages?productId=product-1&product=Test%20product');
     await wait("document.body.innerText.includes('Message seller')");
     await check("!__calls.some(c=>c.method==='POST')",'opening product messages does not create or send automatically');
-    await click('Message seller');await wait("!!document.querySelector('#chat-message') && !document.querySelector('#chat-message')?.closest('form').querySelector('button[type=submit]').disabled");
-    await check("__calls.some(c=>c.url==='/api/chat/conversations'&&c.body.type==='product'&&c.body.context_id==='product-1')",'starts a product conversation with its real context ID');
+    await click('Message seller');await wait("!!document.querySelector('#chat-message') && !document.querySelector('[role=status]')");
+    await check("document.querySelector('#chat-message').value==='' && __calls.some(c=>c.url==='/api/chat/conversations'&&c.body.type==='product'&&c.body.context_id==='product-1'&&!('message' in c.body))",'starts a product conversation with an empty composer and no default message');
     await input('#chat-message','Is this available?');await evaluate('window.__failSend=true');await click('Send');
     await wait("document.body.innerText.includes('Connection interrupted.')");
     await check("document.querySelector('#chat-message').value==='Is this available?'&&document.querySelectorAll('article').length===0",'failed send retains the draft without inventing a delivered bubble');
