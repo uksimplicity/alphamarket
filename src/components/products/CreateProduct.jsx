@@ -12,6 +12,7 @@ const initialForm = {
   category: "",
   type: "",
   brand: "",
+  brandName: "",
   shortDescription: "",
   basePrice: "",
   stock: "",
@@ -658,6 +659,10 @@ export default function CreateProduct({ mode = "seller" }) {
       setError("Brand must be a valid UUID.");
       return;
     }
+    if (!form.brand.trim() && form.brandName.trim().length > 150) {
+      setError("Brand name must be 150 characters or fewer.");
+      return;
+    }
 
     if (discountEnabled) {
       if (!form.discountTitle.trim()) {
@@ -719,6 +724,8 @@ export default function CreateProduct({ mode = "seller" }) {
     const selectedBrandId = form.brand.trim();
     if (selectedBrandId && isUuid(selectedBrandId)) {
       payload.brandId = selectedBrandId;
+    } else if (form.brandName.trim()) {
+      payload.brandName = form.brandName.trim();
     }
     if (stockNumber !== null) payload.stock = stockNumber;
     if (tagList.length > 0) payload.tags = tagList;
@@ -903,8 +910,9 @@ export default function CreateProduct({ mode = "seller" }) {
                 ) : null}
               </div>
               <div className="field">
-                <label>Brand (optional)</label>
+                <label htmlFor="product-brand">Brand (optional)</label>
                 <select
+                  id="product-brand"
                   name="brand"
                   value={form.brand}
                   onChange={handleChange}
@@ -926,6 +934,24 @@ export default function CreateProduct({ mode = "seller" }) {
                   <div className="mt-2 text-xs text-slate-500">No brands available yet.</div>
                 ) : null}
               </div>
+              {!form.brand ? (
+                <div className="field">
+                  <label htmlFor="product-brand-name">Brand name (optional)</label>
+                  <input
+                    id="product-brand-name"
+                    name="brandName"
+                    value={form.brandName}
+                    onChange={handleChange}
+                    maxLength={150}
+                    disabled={loading}
+                    aria-describedby="product-brand-name-help"
+                    placeholder="e.g. Apple"
+                  />
+                  <p id="product-brand-name-help" className="mt-2 text-xs text-slate-500">
+                    Enter a brand if it isn&apos;t listed. Leave blank to identify it from the product name.
+                  </p>
+                </div>
+              ) : null}
               <div className="field">
                 <label>Base Price</label>
                 <input

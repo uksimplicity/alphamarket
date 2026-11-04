@@ -30,6 +30,19 @@ test('seller creation accepts description and a gallery image without other opti
   assert.deepEqual(calls[0].body, minimal);
 });
 
+test('seller create proxy preserves a typed brand name without adding a brand ID', async () => {
+  const { brandId: omittedBrandId, ...unbranded } = payload;
+  assert.equal(omittedBrandId, 'chosen-brand');
+  const typedBrand = { ...unbranded, brandName: 'Acme' };
+  const calls = [];
+  global.fetch = async (url, init) => { calls.push({ url, body: JSON.parse(init.body) }); return Response.json({ data: { id: 'created' } }, { status: 201 }); };
+  const result = await load('src/app/api/seller/products/route.ts').POST(request('POST', typedBrand));
+  assert.equal(result.status, 201);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].body, typedBrand);
+  assert.equal(Object.hasOwn(calls[0].body, 'brandId'), false);
+});
+
 test('seller creation rejects missing description or images before contacting the backend', async () => {
   let calls = 0;
   global.fetch = async () => { calls++; return Response.json({}); };

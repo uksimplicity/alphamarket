@@ -46,10 +46,14 @@ async function main() {
     console.log('PASS seller editor fits mobile viewport');
     await send('Page.navigate', { url: previewUrl + '/vendor/products/create' });
     await wait(`document.querySelector('select[name="brand"]')&&!document.querySelector('select[name="brand"]').disabled&&[...document.querySelector('select[name="brand"]').options].some(o=>o.text==='Workshop')`);
+    assert.equal(await evaluate(`document.querySelector('input[name="brandName"]').maxLength`), 150);
+    await input('input[name="brandName"]','  Acme  ');
     await input('select[name="brand"]','brand-1');
     assert.equal(await evaluate(`document.querySelector('select[name="brand"]').value==='brand-1'&&!document.body.innerText.includes('Brand selection is temporarily disabled')`), true);
+    assert.equal(await evaluate(`document.querySelector('input[name="brandName"]') === null`), true);
     console.log('PASS seller creation allows choosing a real brand');
     await input('select[name="brand"]','');
+    assert.equal(await evaluate(`document.querySelector('input[name="brandName"]').value`), '  Acme  ');
     await evaluate(`document.querySelector('form.create-form').requestSubmit()`);
     await wait(`document.body.innerText.includes('Product name is required.')`);
     assert.equal(await evaluate('__writes.length'), 0);
@@ -87,10 +91,11 @@ async function main() {
     assert.equal(created.productTypeId, 'type-1');
     assert.equal(created.shortDescription, 'A simple chair for everyday use.');
     assert.equal(created.location, 'Lagos');
+    assert.equal(created.brandName, 'Acme');
     assert.equal(created.media.images.length, 1);
     assert.equal(await evaluate(`sessionStorage.getItem('seller-created-upload-count')`), '1');
     assert.equal(['brandId','stock','tags','discounts','attributes'].every(key=>!Object.hasOwn(created,key)), true);
-    console.log('PASS seller can create with a description and gallery photo while all other optional details stay omitted');
+    console.log('PASS seller can create with a trimmed typed brand name and gallery photo while unused optional details stay omitted');
     assert.deepEqual(errors, []); console.log('8 seller product browser checks passed.');
   } finally { socket.close(); await fetch(chromeUrl + '/json/close/' + target.id).catch(()=>{}); }
 }
