@@ -39,7 +39,7 @@ async function main() {
   const fixtures = `
     if (location.pathname.startsWith('/vendor')) localStorage.setItem('alpha.auth', JSON.stringify({ access_token: 'synthetic-preview-token', user: { id: 'preview-seller', first_name: 'Francis', last_name: 'Ukugha', email: 'seller@example.test', role: 'seller', status: 'active' } }));
     const names = ['Everyday Canvas Tote', 'Studio Wireless Headphones', 'Ceramic Coffee Mug', 'Classic Leather Backpack', 'Linen Button-down Shirt', 'Minimal Desk Lamp'];
-    const products = names.map((name, i) => ({ id: 'product-' + i, name, seller_id: 'preview-seller', category_name: ['Accessories', 'Electronics', 'Home & living'][i % 3], base_price: 15000 + i * 8500, stock: [24, 7, 0, 18, 4, 12][i], status: i === 4 ? 'draft' : 'publish' }));
+    const products = names.map((name, i) => ({ id: 'product-' + i, name, seller_id: 'preview-seller', category_id: 'category-' + i % 3, base_price: 15000 + i * 8500, stock: [24, 7, 0, 18, 4, 12][i], status: i === 4 ? 'draft' : 'publish' }));
     const orders = Array.from({ length: 20 }, (_, i) => { const date = new Date(); date.setDate(date.getDate() - i); date.setHours(12, 0, 0, 0); if (date > new Date()) date.setHours(0); return { id: 'ORDER-2026-' + String(1200 + i), seller_id: 'preview-seller', customer_name: ['Amara Okafor', 'Tunde Bakare', 'Zara Bello', 'David Eze', 'Aisha Ibrahim'][i % 5], total_amount: [48500, 32000, 26500, 75000, 18000][i % 5], payment_status: i === 3 ? 'pending' : 'paid', status: i === 3 ? 'pending' : i < 3 ? 'processing' : i === 4 ? 'failed_delivery' : 'delivered', created_at: date.toISOString() }; });
     const realFetch = window.fetch.bind(window);
     window.__sellerPreviewMode = 'normal';
@@ -50,7 +50,8 @@ async function main() {
         window.__sellerRequests.push(url);
         if (url.startsWith('/api/user/profile')) return Response.json({ data: JSON.parse(localStorage.getItem('alpha.auth') || 'null')?.user || {} });
         if (window.__sellerPreviewMode === 'error' && url.startsWith('/api/seller/orders')) return Response.json({ error: 'Synthetic order service failure' }, { status: 503 });
-        if (url.startsWith('/api/seller/products')) return Response.json({ data: { products: window.__sellerPreviewMode === 'empty' ? [] : products } });
+        if (url.startsWith('/api/seller/catalog?resource=categories')) return Response.json({ data: { categories: ['Accessories', 'Electronics', 'Home & living'].map((name, i) => ({id: 'category-' + i, name})) } });
+        if (url.startsWith('/api/seller/products')) return Response.json({ data: { products: window.__sellerPreviewMode === 'empty' ? [] : window.__sellerPreviewMode === 'api-shape' ? products.map(product => ({id: product.id, name: product.name, seller_id: product.seller_id, category_id: product.category_id, base_price: product.base_price, is_active: true, variants: []})) : products } });
         if (url.startsWith('/api/seller/orders')) return Response.json({ data: { orders: window.__sellerPreviewMode === 'empty' ? [] : orders } });
         return Response.json({ data: [] });
       }
@@ -103,6 +104,15 @@ async function main() {
     await evaluate(`window.__sellerPreviewMode = 'empty'; document.querySelector('[aria-label="Refresh dashboard"]').click()`);
     await waitFor(`document.body.textContent.includes('Your next chapter starts with a sale.') && document.body.textContent.includes('Give your store something to show.')`);
     await screenshot('.admin-preview-seller-empty.png');
+    await evaluate(`window.__sellerPreviewMode = 'api-shape'; document.querySelector('[aria-label="Refresh dashboard"]').click()`);
+    await waitFor(`document.querySelector('#products')?.textContent.includes('Stock unavailable') && document.querySelector('#products')?.textContent.includes('active')`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Store performance"] a:last-child').textContent.includes('Stock alerts—')`), true, 'Missing stock must not appear as zero alerts');
+    assert.equal(await evaluate(`document.querySelector('#products').textContent.includes('Unknown')`), false, 'Backend activity flags resolve status');
+    await send('Page.navigate', { url: 'http://localhost:3011/vendor/products' });
+    await waitFor(`document.querySelector('.product-table tbody')?.textContent.includes('Accessories') && document.querySelector('.product-table tbody')?.textContent.includes('N15,000')`);
+    assert.equal(await evaluate(`document.querySelector('.product-table tbody').textContent.includes('category-0')`), false, 'Category names replace raw IDs');
+    assert.equal(await evaluate(`document.querySelectorAll('.product-table tbody tr').length`), 6);
+    assert.equal(await evaluate(`[...document.querySelectorAll('.product-table .status-badge')].filter(badge => badge.textContent === 'draft').length`), 1, 'Explicit drafts stay drafts');
     await evaluate(`document.querySelector('[aria-label="Account menu"]').click(); Array.from(document.querySelectorAll('details button')).find(b => b.textContent === 'Sign out').click()`);
     assert.equal(await evaluate(`document.querySelector('dialog[aria-labelledby="seller-logout-title"]').open`), true);
     await evaluate(`Array.from(document.querySelectorAll('dialog button')).find(b => b.textContent === 'Stay signed in').click()`);

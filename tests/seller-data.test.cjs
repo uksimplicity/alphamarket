@@ -33,6 +33,22 @@ test('inventory loads later pages, deduplicates products and resolves category n
   assert.ok(calls.includes('/api/seller/products?limit=200&offset=200'));
 });
 
+test('backend activity flags resolve product status without inventing missing stock', () => {
+  const products = data.parseSellerProducts({ data: { products: [
+    { id: 'live-api', name: 'iPhone 17Pro', base_price: '78000', is_active: true, variants: [] },
+    { id: 'inactive', is_active: false, stock: 0 },
+    { id: 'camel', isActive: true, stock: 1 },
+    { id: 'legacy', active: false },
+    { id: 'explicit', status: 'draft', is_active: true },
+    { id: 'publication', isPublished: false, is_active: true },
+    { id: 'unknown', is_active: 'false' },
+  ] } }, 'seller');
+  assert.deepEqual(products.map(product => product.status), ['active', 'inactive', 'active', 'inactive', 'draft', 'draft', 'unknown']);
+  assert.equal(products[0].stock, null);
+  assert.equal(products[1].stock, 0);
+  assert.equal(products[2].stock, 1);
+});
+
 test('category failure preserves products and failed inventory pages are not counted as a full inventory', async () => {
   const products = await data.loadSellerProducts(async path => {
     if (path.includes('catalog')) throw new Error('Forbidden');

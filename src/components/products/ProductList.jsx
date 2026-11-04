@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
-import { collection as normalizeList } from "@/components/vendor/sellerData";
+import { collection as normalizeList, loadSellerCategories, parseSellerProducts } from "@/components/vendor/sellerData";
 import { productImage } from "./productMedia";
 import ProductThumbnail from "./ProductThumbnail";
-import { useAdminCategoryNames } from "@/components/marketplace/useAdminCategoryNames";
 
 const LOCAL_PRODUCTS_UPDATED_EVENT = "alpha-products-updated";
 const REALTIME_POLL_INTERVAL_MS = 30000;
@@ -35,7 +34,23 @@ export default function ProductList({
   const [publishingId, setPublishingId] = useState(null);
   const isRequestInFlight = useRef(false);
   const consecutiveSilentFailuresRef = useRef(0);
-  const adminCategoryNames = useAdminCategoryNames();
+  const [categoryNames, setCategoryNames] = useState({});
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const token = buildAuthorizationHeader(getAuth()?.access_token);
+    if (!token) return;
+    loadSellerCategories(async (path) => {
+      const response = await fetch(path, {
+        headers: { Authorization: token, Accept: "application/json" },
+        cache: "no-store", signal: controller.signal,
+      });
+      if (!response.ok) throw new Error("Categories could not be loaded.");
+      return response.json();
+    }).then(names => { if (!controller.signal.aborted) setCategoryNames(names); })
+      .catch(() => { /* Products remain available if the category service fails. */ });
+    return () => controller.abort();
+  }, []);
 
 
   const formatPrice = useCallback((value) => {
@@ -51,6 +66,7 @@ export default function ProductList({
   }, []);
 
   const toProductRow = useCallback((item, index) => {
+    const normalized = parseSellerProducts([item], getAuth()?.user?.id ?? "", categoryNames)[0];
     const id =
       item?.id ||
       item?.productId ||
@@ -62,29 +78,15 @@ export default function ProductList({
     const hasPersistentId = Boolean(
       item?.id || item?.productId || item?.product_id || item?._id || item?.uuid
     );
-    const rawStatus = String(item?.status || "").trim().toLowerCase();
-    const resolvedStatus =
-      !hasPersistentId
-        ? "draft"
-        : rawStatus && rawStatus !== "draft"
-          ? rawStatus
-          : item?.isPublished === false || item?.active === false
-            ? "draft"
-            : "publish";
+    const resolvedStatus = hasPersistentId ? normalized?.status ?? "unknown" : "draft";
     const displayId = item?.displayId || item?.code || `#${String(id).slice(-5)}`;
     return {
       id,
       displayId,
       name: item?.name || item?.title || "Product",
       image: productImage(item, ""),
-      category:
-        item?.category?.name ||
-        item?.categoryName ||
-        item?.category ||
-        item?.category_id ||
-        item?.categoryId ||
-        "-",
-      price: formatPrice(item?.price ?? item?.basePrice ?? item?.amount ?? item?.unitPrice),
+      category: normalized?.category ?? "Category unavailable",
+      price: formatPrice(item?.price ?? item?.base_price ?? item?.basePrice ?? item?.amount ?? item?.unitPrice),
       vendor:
         item?.vendor?.name ||
         item?.vendorName ||
@@ -93,7 +95,7 @@ export default function ProductList({
         "-",
       status: resolvedStatus,
     };
-  }, [formatPrice]);
+  }, [formatPrice, categoryNames]);
 
   const loadProducts = useCallback(async ({ silent = false } = {}) => {
     if (isRequestInFlight.current) return;
@@ -124,7 +126,7 @@ export default function ProductList({
         throw new Error(String(message));
       }
       const list = normalizeList(data);
-      setRows(list.map(toProductRow));
+      setRows(list);
       consecutiveSilentFailuresRef.current = 0;
       if (silent) {
         setError("");
@@ -146,7 +148,7 @@ export default function ProductList({
         setLoading(false);
       }
     }
-  }, [toProductRow]);
+  }, []);
 
   useEffect(() => {
     loadProducts();
@@ -279,15 +281,15 @@ export default function ProductList({
     }
   };
 
-  const products = useMemo(() => rows, [rows]);
+  const products = useMemo(() => rows.map(toProductRow), [rows, toProductRow]);
   const categoryOptions = useMemo(() => {
-    const fromRows = rows
+    const fromRows = products
       .map((row) => String(row?.category ?? "").trim())
       .filter((value) => value && value !== "-");
-    return Array.from(new Set([...adminCategoryNames, ...fromRows])).sort((a, b) =>
+    return Array.from(new Set([...Object.values(categoryNames), ...fromRows])).sort((a, b) =>
       a.localeCompare(b)
     );
-  }, [adminCategoryNames, rows]);
+  }, [categoryNames, products]);
 
   return (
     <div className="product-page">

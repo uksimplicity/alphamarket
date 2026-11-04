@@ -38,33 +38,37 @@ function ownedBy(row: Row, sellerId: string): boolean {
   return !owner || owner === sellerId;
 }
 // Load every inventory page so counts and stock alerts include the whole store.
-export async function loadSellerProducts(request: (path: string) => Promise<unknown>, sellerId: string): Promise<SellerProduct[]> {
-  async function pages(path: string) {
-    const rows: unknown[] = [];
-    const ids = new Set<string>();
-    for (let offset = 0; offset <= 1e7; offset += 200) {
-      const batch = collection(await request(`${path}${path.includes("?") ? "&" : "?"}limit=200&offset=${offset}`));
-      let added = 0;
-      for (const value of batch) {
-        const row = asRow(value);
-        const id = text(row.id ?? row.product_id ?? row.productId ?? row.category_id ?? row.uuid);
-        if (!id || !ids.has(id)) { rows.push(value); added++; if (id) ids.add(id); }
-      }
-      if (batch.length < 200) return rows;
-      if (!added) throw new Error("The service returned a repeated inventory page.");
+async function loadPages(request: (path: string) => Promise<unknown>, path: string) {
+  const rows: unknown[] = [];
+  const ids = new Set<string>();
+  for (let offset = 0; offset <= 1e7; offset += 200) {
+    const batch = collection(await request(`${path}${path.includes("?") ? "&" : "?"}limit=200&offset=${offset}`));
+    let added = 0;
+    for (const value of batch) {
+      const row = asRow(value);
+      const id = text(row.id ?? row.product_id ?? row.productId ?? row.category_id ?? row.uuid);
+      if (!id || !ids.has(id)) { rows.push(value); added++; if (id) ids.add(id); }
     }
-    throw new Error("The inventory could not be loaded completely.");
+    if (batch.length < 200) return rows;
+    if (!added) throw new Error("The service returned a repeated inventory page.");
   }
-  const [products, categoryRows] = await Promise.all([
-    pages("/api/seller/products"),
-    pages("/api/seller/catalog?resource=categories").catch(() => []),
-  ]);
+  throw new Error("The inventory could not be loaded completely.");
+}
+export async function loadSellerCategories(request: (path: string) => Promise<unknown>): Promise<Record<string, string>> {
+  const categoryRows = await loadPages(request, "/api/seller/catalog?resource=categories");
   const categories: Record<string, string> = {};
   for (const value of categoryRows) {
     const row = asRow(value), id = text(row.id ?? row.category_id ?? row.categoryId ?? row.uuid);
     const name = text(row.name ?? row.title ?? row.category_name ?? row.categoryName);
     if (id && name) categories[id] = name;
   }
+  return categories;
+}
+export async function loadSellerProducts(request: (path: string) => Promise<unknown>, sellerId: string): Promise<SellerProduct[]> {
+  const [products, categories] = await Promise.all([
+    loadPages(request, "/api/seller/products"),
+    loadSellerCategories(request).catch(() => ({})),
+  ]);
   return parseSellerProducts(products, sellerId, categories);
 }
 export function parseSellerProducts(payload: unknown, sellerId: string, categories: Record<string, string> = {}): SellerProduct[] {
@@ -72,12 +76,13 @@ export function parseSellerProducts(payload: unknown, sellerId: string, categori
     const category = asRow(row.category);
     const categoryId = text(row.category_id ?? row.categoryId ?? category.id);
     const published = row.isPublished ?? row.is_published;
+    const active = row.is_active ?? row.isActive ?? row.active;
     const status = text(row.status).toLowerCase();
     return {
       id: text(row.id ?? row.product_id ?? row.productId ?? row.uuid), name: text(row.name ?? row.title) || "Untitled product",
       category: text(category.name) || text(row.category_name) || text(row.categoryName) || categories[categoryId] || categories[text(row.category)] || text(row.category) || (categoryId ? "Category unavailable" : "Uncategorized"),
       stock: number(row.stock ?? row.quantity ?? row.stock_quantity ?? row.stockQuantity ?? asRow(row.inventory).stock ?? asRow(row.inventory).quantity), price: number(row.base_price ?? row.basePrice ?? row.price),
-      status: status || (published === true ? "publish" : published === false ? "draft" : "unknown"),
+      status: status || (published === true ? "publish" : published === false ? "draft" : active === true ? "active" : active === false ? "inactive" : "unknown"),
       image: productImage(row, ""),
     };
   }).filter(row => row.id);
