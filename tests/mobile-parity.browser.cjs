@@ -30,8 +30,8 @@ async function main() {
     const current=()=>JSON.parse(localStorage.getItem('alpha.auth')||'null');
     const peer=()=>current()?.user.role==='seller'?{id:'buyer-parity',name:'Buyer One',role:'buyer'}:{id:'seller-parity',name:'Seller One',role:'seller'};
     const rows=()=>JSON.parse(sessionStorage.getItem('parity-chat-rows')||'[]');
-    const thread=()=>({id:'thread-1',peer:peer(),last_message:rows().at(-1)?.text||'',updated_at:new Date().toISOString()});
-    window.__appendReply=()=>{const list=rows();list.push({id:'reply-'+list.length,client_id:'seller-reply-'+list.length,sender_id:'seller-parity',text:'Yes, this is available.',sequence:list.length+1,created_at:new Date().toISOString()});sessionStorage.setItem('parity-chat-rows',JSON.stringify(list));};
+    const thread=()=>({id:'thread-1',type:'product',status:'open',context_id:'product-1',participants:[{user_id:'buyer-parity',name:'Buyer One',role:'buyer'},{user_id:'seller-parity',name:'Seller One',role:'seller'}],last_message_preview:rows().at(-1)?.body||'',last_message_at:new Date().toISOString(),created_at:new Date().toISOString(),unread_count:0});
+    window.__appendReply=()=>{const list=rows();list.push({id:'reply-'+list.length,conversation_id:'thread-1',sender_id:'seller-parity',body:'Yes, this is available.',created_at:new Date().toISOString()});sessionStorage.setItem('parity-chat-rows',JSON.stringify(list));};
     window.__gpsPoint={latitude:7.1,longitude:4.2};
     window.__geocodeCalls=[];
     window.__geocodeStatus="OK";
@@ -64,18 +64,18 @@ async function main() {
         if(window.__slowProfile)return new Promise(resolve=>{window.__releaseProfile=()=>{window.__slowProfile=false;resolve(Response.json({data:user}));};});
         return Response.json({data:user});
       }
-      if(url==='/api/chat/session')return Response.json({user:{id:current().user.id,name:current().user.role==='seller'?'Seller One':'Buyer One',role:current().user.role}});
       if(url==='/api/chat/sellers')return Response.json({sellers:[{id:'seller-parity',name:'Seller One',role:'seller'}]});
-      if(url==='/api/chat/conversations'&&init.method==='POST'){sessionStorage.setItem('parity-thread','1');return Response.json({conversation:thread()});}
-      if(url==='/api/chat/conversations')return Response.json({conversations:sessionStorage.getItem('parity-thread')?[thread()]:[]});
+      if(url==='/api/chat/conversations'&&init.method==='POST'){sessionStorage.setItem('parity-thread','1');return Response.json({success:true,data:thread()});}
+      if(url.startsWith('/api/chat/conversations?')){const list=sessionStorage.getItem('parity-thread')&&current().user.id!=='other-parity'?[thread()]:[];return Response.json({success:true,data:list,meta:{total:list.length,limit:20,offset:0}});}
+      if(url==='/api/chat/conversations/thread-1')return Response.json({success:true,data:thread()});
+      if(url==='/api/chat/conversations/thread-1/read')return Response.json({success:true});
       if(url.startsWith('/api/chat/conversations/thread-1/messages')){
         if(init.method==='POST'){
           if(window.__failSend)return Response.json({error:'Connection interrupted.'},{status:502});
-          const list=rows();let message=list.find(m=>m.client_id===body.client_id&&m.sender_id===current().user.id);
-          if(!message){message={id:'message-'+list.length,client_id:body.client_id,sender_id:current().user.id,text:body.text,sequence:list.length+1,created_at:new Date().toISOString()};list.push(message);sessionStorage.setItem('parity-chat-rows',JSON.stringify(list));}
-          return Response.json({message});
+          const list=rows(),message={id:'message-'+list.length,conversation_id:'thread-1',sender_id:current().user.id,body:body.body,created_at:new Date().toISOString()};list.push(message);sessionStorage.setItem('parity-chat-rows',JSON.stringify(list));
+          return Response.json({success:true,data:message});
         }
-        const after=Number(new URL(url,location.origin).searchParams.get('after')||0);return Response.json({messages:rows().filter(m=>m.sequence>after),has_more:false});
+        const before=new URL(url,location.origin).searchParams.get('before');return Response.json({success:true,data:rows().filter(m=>!before||m.created_at<before).slice().reverse().slice(0,30)});
       }
       if(url==='/api/buyer/orders')return Response.json({data:{id:'new-order'}},{status:201});
       if(url==='/api/payments/initialize')return Response.json({error:'Intentional QA payment stop.'},{status:503});
@@ -134,12 +134,12 @@ async function main() {
     await check(`(()=>{const request=__calls.find(c=>c.url==='/api/buyer/orders');return request.body.dropoff_address==='Updated Lekki gate'&&request.body.dropoff_lat===7.1&&request.body.dropoff_lng===4.2&&request.body.dropoff_contact==='08012345678';})()`,'reviewed coordinates and saved address reach the existing order request');
     await navigate('/dashboard/orders'); await wait(`document.body.innerText.includes('Leave review')`); await click('Leave review'); await wait(`!!document.querySelector('dialog[open]')`); await aria('4 stars'); await input('dialog textarea','Arrived safely'); await click('Save draft'); await wait(`!document.querySelector('dialog[open]')`); await click('Leave review');
     await wait(`document.querySelector('dialog textarea')?.value==='Arrived safely'`); await check(`document.querySelector('dialog').innerText.includes('not published')&&document.querySelector('[aria-label="4 stars"]').getAttribute('aria-pressed')==='true'`,'review text and rating reopen as an unpublished draft'); await aria('Close review');
-    await navigate('/dashboard/messages'); await wait(`document.querySelector('button')&&document.body.innerText.includes('Seller One')`);
-    await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Seller One')).click()`); await wait(`!!document.querySelector('#chat-message')`);
+    await navigate('/dashboard/messages?productId=product-1'); await wait(`document.body.innerText.includes('Message seller')`);
+    await click('Message seller'); await wait(`!!document.querySelector('#chat-message')`);
     await input('#chat-message','Is this available?'); await evaluate('window.__failSend=true'); await click('Send'); await wait(`document.body.innerText.includes('Connection interrupted.')`);
     await check(`document.querySelector('#chat-message').value==='Is this available?'&&document.querySelectorAll('article').length===0`,'failed chat sends retain text without adding a successful message bubble');
-    await evaluate('window.__failSend=false'); await click('Retry send'); await wait(`document.querySelector('#chat-message').value===''&&document.querySelectorAll('article').length===1`);
-    await check(`(()=>{const calls=__calls.filter(c=>c.method==='POST'&&c.url.endsWith('/messages'));return calls.length===2&&calls[0].body.client_id===calls[1].body.client_id;})()`,'chat retries reuse the same message identifier');
+    await evaluate('window.__failSend=false'); await click('I checked the history'); await click('Send'); await wait(`document.querySelector('#chat-message').value===''&&document.querySelectorAll('article').length===1`);
+    await check(`(()=>{const calls=__calls.filter(c=>c.method==='POST'&&c.url.endsWith('/messages'));return calls.length===2&&calls.every(c=>c.body.body==='Is this available?'&&!('client_id'in c.body));})()`,'chat resends require explicit review and use the production body contract');
     await evaluate('__appendReply()'); await wait(`document.body.innerText.includes('Yes, this is available.')`); await check(`document.querySelectorAll('article').length===2`,'polling receives the seller reply without duplicate bubbles');
     await check(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`,'mobile conversation fits viewport'); await screenshot('.admin-preview-web-parity-chat-mobile.png');
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false }); await screenshot('.admin-preview-web-parity-chat-desktop.png');

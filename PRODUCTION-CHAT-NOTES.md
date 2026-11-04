@@ -1,38 +1,55 @@
-# Production chat integration preparation
+# Production chat integration — 4 November 2026
 
-The live marketplace Swagger contract was checked on 4 November 2026:
-https://marketplace.archintell.com/swagger/index.html
+Buyer and seller Messages now use the marketplace API through /api/chat/*.
+NEXT_PUBLIC_API_BASE_URL must point to the marketplace host, optionally ending
+in /api/v1. No separate chat tunnel is needed for messaging.
 
-`src/app/api/chat/productionProxy.ts` prepares the production transport against
-`NEXT_PUBLIC_API_BASE_URL` under `/api/v1`. It is not yet connected to the active
-route or UI. The existing presentation chat remains active pending response samples.
+Implemented behavior:
 
-Prepared operations:
+- Conversation lists use data arrays and meta.total, with offset pagination.
+- Participants provide names and account IDs. The signed-in user's ID determines
+  incoming/outgoing messages. Inbox rows show backend unread counts and status.
+- A live product's “Ask the seller a question” link passes its product ID.
+  “Message seller” opens or creates the product conversation using
+  { "type": "product", "context_id": "..." }. Opening Messages alone sends nothing.
+- History loads newest-first backend pages and displays them oldest-first.
+  “Load older messages” uses the oldest created_at as before. Visible polling
+  catches up across missed pages and merges by message ID.
+- Text sends use { "body": "..." }. Only backend history renders message bubbles.
+  A success acknowledgement clears the draft and refreshes history.
+- Failed/uncertain sends preserve the draft and require explicit history review
+  before a manual resend. The API does not document send idempotency, so no stable
+  client ID or automatic mutation replay is used.
+- Loaded visible history calls /read; closed/unknown-status conversations are
+  read-only. Account changes abort requests and discard private screen state.
 
-- GET/POST `/chat/conversations`
-- GET `/chat/conversations/{id}`
-- GET/POST `/chat/conversations/{id}/messages`
-- POST `/chat/conversations/{id}/read`
-- GET `/chat-categories` (local adapter path: `categories`)
+The transport also exposes documented conversation details and chat categories.
+Starting support/order/delivery conversations, attachment uploads, Socket.IO
+delivery and push notifications are outside this text-chat change. Existing
+conversations of these types can appear in the inbox.
 
-The adapter forwards bearer authorization, strips identity overrides, uses
-offset pagination for conversations and `before` timestamps for message history,
-and sends text using `body`. It does not replay mutations or follow redirects.
-Sending attachments is not implemented in this initial text transport.
+The catalog's existing read-only /api/chat/sellers name lookup still uses
+CHAT_SERVER_URL, independently of production messaging. If that directory is
+offline, existing catalog fallback names remain available. It does not create
+sessions/conversations or send messages.
 
-Before activating it, obtain successful authenticated conversation-list and
-message-list responses, plus a send-response example. Swagger's generic
-`response.APIResponse` schema does not describe the records inside `data`.
-The provided 401 response confirms missing authorization, not a data shape.
-Do not copy tokens or private message content into notes or test fixtures.
+Contract source: https://marketplace.archintell.com/swagger/index.html
+Conversation and history fields were verified against successful responses
+provided by the user. Test fixtures use synthetic identities and messages.
 
-The UI migration must also replace seller-ID conversation starts with product,
-order or delivery context IDs (or a support category). The old service's session,
-seller directory, sequence cursor and stable client message ID are not documented
-by the production API. Do not preserve automatic send retries without a backend
-idempotency contract. Seller-name lookups currently using the presentation
-directory also need an appropriate production source or their existing fallback.
+Checks:
 
-Validation: `node --test tests/chat.test.cjs tests/production-chat.test.cjs`
-passes all 10 tests using synthetic responses. No real conversations or messages
-were created, and authenticated production response decoding remains pending.
+- node --test tests/chat.test.cjs tests/production-chat.test.cjs tests/mobile-parity.test.cjs tests/buyer.test.cjs
+- node tests/production-chat.browser.cjs with Next.js on 3011 and a dedicated
+  headless Chrome debugging session on 9228.
+- npx tsc --noEmit and focused ESLint.
+
+Browser checks cover product starts, draft retention/review, body payloads, read
+acknowledgements, older history, mobile layout, closed threads, account switching
+and seller replies. They use synthetic API responses. An authenticated live
+buyer-to-seller test is still needed; implementation testing sent no real messages.
+
+To test after deployment: sign in as a buyer, open a live product owned by
+another seller, choose “Ask the seller a question”, click “Message seller” and send
+a test message. Sign in as that seller on another browser and open Messages to
+reply. Confirm both histories and unread counts refresh.

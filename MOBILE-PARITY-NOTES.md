@@ -1,5 +1,7 @@
 # Web and mobile parity - 31 October 2026
 
+Update, 4 November: web Messages now use production marketplace chat. The chat service configuration and chat validation below describe the earlier presentation setup; see [PRODUCTION-CHAT-NOTES.md](PRODUCTION-CHAT-NOTES.md) for the current web implementation. Mobile migration remains separate.
+
 The user requested all recent Marketplace_APP work in the web marketplace,
 including the shared chat service. Existing payment, escrow and payout behavior
 has been retained and checked with synthetic browser fixtures.
