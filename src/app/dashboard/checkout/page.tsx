@@ -11,6 +11,8 @@ import styles from "./page.module.css";
 import CheckoutAddresses from "@/components/commerce/CheckoutAddresses";
 import DeliveryLocationButton from "@/components/commerce/deliveryLocation";
 import { deliveryPoint } from "@/components/commerce/addresses";
+import { useCheckoutPricing } from "@/components/commerce/useCheckoutPricing";
+import OrderMoneyBreakdown from "@/components/commerce/OrderMoneyBreakdown";
 
 export default function CheckoutPage() {
   const cart = useCart();
@@ -23,6 +25,7 @@ export default function CheckoutPage() {
   const [error, setError] = useState("");
   const [pending, setPending] = useState<PendingCheckout | null>(null);
   const submitting = useRef(false);
+  const review = useCheckoutPricing(pending?.orderIds ?? []);
 
   useEffect(() => {
     const auth = getAuth();
@@ -45,6 +48,7 @@ export default function CheckoutPage() {
     if (!auth?.access_token || !auth.user?.id) { setError("Please sign in with your buyer account to checkout."); return; }
     if (auth.user.role && auth.user.role !== "buyer") { setError("Please sign in with a buyer account to place an order."); return; }
     if (!agreed) { setError("Please accept the escrow terms to continue."); return; }
+    if (pending?.orderIds.length && !review.ready) { setError("Review the confirmed order total before continuing to payment."); return; }
     if (!pending) {
       if (!cart.items.length) { setError("Your cart is empty."); return; }
       if (!address.trim()) { setError("Enter your delivery address."); return; }
@@ -90,6 +94,8 @@ export default function CheckoutPage() {
         });
         checkout = { ...checkout, orderIds: createdOrderIds(payload) };
         persist(checkout);
+        // The saved order supplies delivery and total amounts for review before payment.
+        return;
       }
       if (!checkout.orderIds.length) throw new Error("The previous order submission could not be confirmed. Check your orders before placing another order.");
       if (!checkout.checkoutUrl) {
@@ -117,7 +123,7 @@ export default function CheckoutPage() {
       <div className={styles.breadcrumbs}><Link href="/dashboard/cart">Shopping cart</Link><span>/</span><span>Checkout</span></div>
       {error ? <p className={styles.errorMessage} role="alert">{error}</p> : null}
       {pending ? <div className={styles.notice}>
-        {pending.orderIds.length ? "An order is awaiting payment. Continue to pay for that order." : "Your previous order submission needs to be checked before another order is placed."}
+        {pending.orderIds.length ? "Your order is saved. Review its product subtotal, delivery fee and total before continuing to payment." : "Your previous order submission needs to be checked before another order is placed."}
         {" "}<Link href="/dashboard/checkout/payment">Check payment status</Link>
       </div> : null}
       <div className={styles.checkoutLayout}>
@@ -126,10 +132,10 @@ export default function CheckoutPage() {
             <div className={styles.cardHeader}><h2>Delivery Address</h2></div>
             <CheckoutAddresses address={address} contact={contact} latitude={latitude} longitude={longitude} disabled={loading || Boolean(pending)} onChoose={row => { setAddress(row.address); setContact(row.contact); setLatitude(String(row.latitude)); setLongitude(String(row.longitude)); }} />
             <fieldset className={styles.addressForm} disabled={loading || Boolean(pending)}>
-              <label>Full delivery address<textarea autoComplete="street-address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Street address, city and state" /></label>
+              <label>Full delivery address<textarea autoComplete="street-address" value={address} onChange={(event) => { setAddress(event.target.value); setLatitude(""); setLongitude(""); }} placeholder="Street address, city and state" /></label>
               <label>Contact phone number<input type="tel" autoComplete="tel" value={contact} onChange={(event) => setContact(event.target.value)} /></label>
               <DeliveryLocationButton point={deliveryPoint(latitude, longitude)} onConfirm={point => { setLatitude(String(point.latitude)); setLongitude(String(point.longitude)); }} disabled={loading || Boolean(pending)} />
-              <p className={styles.mutedText}>Choose the delivery point on the map, or use your current location if you are at the delivery address.</p>
+              <p className={styles.mutedText}>Choose the delivery point, or use your current location if you are at the delivery address. The backend calculates delivery using the seller and buyer locations.</p>
               {deliveryPoint(latitude, longitude) ? <p role="status" className={styles.mutedText}>Delivery location selected.</p> : null}
             </fieldset>
           </div></Card>
@@ -146,19 +152,25 @@ export default function CheckoutPage() {
           </div></Card>
         </div>
         <Card><div className={styles.summaryCard}>
-          <div className={styles.summaryHeader}><h3>Cart Summary</h3><Link href="/dashboard/cart">Edit cart</Link></div>
-          {pending ? <p className={styles.mutedText}>Payment will use the saved order. Its final total is confirmed by the backend and displayed on Paystack.</p> : null}
+          <div className={styles.summaryHeader}><h3>{pending ? "Saved order pricing" : "Cart Summary"}</h3><Link href={pending ? "/dashboard/orders" : "/dashboard/cart"}>{pending ? "View orders" : "Edit cart"}</Link></div>
+          {pending ? <p className={styles.mutedText}>Payment uses the saved order and its confirmed total.</p> : null}
           <div className={styles.summaryList}>
-            {cart.items.length === 0 ? <div className={styles.emptySummary}>No items yet. Add products to your cart.</div> : cart.items.map((item) => (
+            {pending ? <p className={styles.mutedText}>Reviewing {pending.orderIds.length} saved {pending.orderIds.length === 1 ? "order" : "orders"}. Changes to your cart do not change this payment.</p> : cart.items.length === 0 ? <div className={styles.emptySummary}>No items yet. Add products to your cart.</div> : cart.items.map((item) => (
               <div key={item.id} className={styles.summaryItem}>
                 <div className={styles.summaryThumb}><img src={item.image || "/placeholder.png"} alt={item.name} /></div>
                 <div className={styles.summaryInfo}><div className={styles.summaryTitle}>{item.name}</div><div className={styles.summaryMeta}>Qty {item.qty} <span>{formatCurrency(item.price * item.qty)}</span></div></div>
               </div>
             ))}
           </div>
-          <div className={styles.summaryTotals}><div><span>Items subtotal</span><span>{formatCurrency(cartSubtotal(cart))}</span></div><p className={styles.mutedText}>Final amount, including any delivery charges, is confirmed before payment on Paystack.</p></div>
-          <Button type="button" onClick={pay} disabled={loading || !agreed || (!pending && cart.items.length === 0) || Boolean(pending && !pending.orderIds.length)}>
-            {loading ? "Connecting to Paystack..." : pending ? "Continue Payment" : "Pay Now"}
+          <div className={styles.summaryTotals}>{pending?.orderIds.length ? <>
+            {review.loading ? <p role="status">Loading confirmed order pricing...</p> : null}
+            {review.pricing ? <OrderMoneyBreakdown pricing={review.pricing} /> : null}
+            {review.error ? <p role="alert" className={styles.errorMessage}>{review.error}</p> : null}
+            {!review.loading && !review.error && review.pricing?.buyerTotal == null ? <p role="alert">The backend has not returned a payable total yet.</p> : null}
+            <Button variant="ghost" disabled={loading || review.loading} onClick={review.reload}>Refresh order pricing</Button>
+          </> : <><div><span>Items subtotal</span><span>{formatCurrency(cartSubtotal(cart))}</span></div><p className={styles.mutedText}>Delivery is calculated by the backend after you submit the order for review. Your total is the product subtotal plus delivery. Admin commission is deducted from the seller’s share.</p></>}</div>
+          <Button type="button" onClick={pay} disabled={loading || !agreed || (!pending && cart.items.length === 0) || Boolean(pending && (!pending.orderIds.length || !review.ready))}>
+            {loading ? pending ? "Connecting to Paystack..." : "Creating order..." : pending ? "Continue to Paystack" : "Review order"}
           </Button>
         </div></Card>
       </div>

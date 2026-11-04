@@ -3,10 +3,15 @@ const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v
 
 export async function POST(req: Request) {
   if (!API_BASE) return Response.json({ error: "Payment backend is not configured." }, { status: 503 });
-  const body = await req.text();
   const authorization = req.headers.get("authorization");
   const cookie = req.headers.get("cookie");
   if (!authorization && !cookie) return Response.json({ error: "Please sign in to pay for your order." }, { status: 401 });
+  let body: string;
+  try {
+    const input = await req.json();
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error();
+    body = JSON.stringify({ buyer_id: input.buyer_id, order_ids: input.order_ids, callback_url: input.callback_url });
+  } catch { return Response.json({ error: "A valid payment request is required." }, { status: 400 }); }
 
   try {
     // One documented endpoint only: never replay a financial request at a fallback URL.

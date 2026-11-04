@@ -79,6 +79,7 @@ async function main() {
       }
       if(url==='/api/buyer/orders')return Response.json({data:{id:'new-order'}},{status:201});
       if(url==='/api/payments/initialize')return Response.json({error:'Intentional QA payment stop.'},{status:503});
+      if(url==='/api/user/orders/new-order')return Response.json({data:{id:'new-order',buyer_id:current()?.user.id,subtotal:5000,delivery_fee:500,total_amount:5500,commission_percentage:10,payment_status:'pending'}});
       if(url.startsWith('/api/user/orders'))return Response.json({data:{orders:[{id:'delivered-order',buyer_id:current()?.user.id,status:'delivered',payment_status:'paid',escrow_status:'released',items:[{product_id:'chair',product_name:'Chair',quantity:1}],total_amount:2500}]}});
       if(url.startsWith('/api/products/public'))return Response.json({data:{products:[],total:0,limit:24,offset:0}});
       return Response.json({data:[]});
@@ -130,7 +131,7 @@ async function main() {
     await check(`document.body.innerText.includes('Delivery location selected.')`,'cancelling the picker preserves the confirmed delivery location');
     await click('Choose delivery location'); await evaluate('window.__delayGps=true'); await click('Use my location'); await click('Cancel'); await evaluate('__finishGps()');
     await check(`!document.querySelector('dialog[open]')&&document.body.innerText.includes('Delivery location selected.')`,'late GPS results cannot reopen a cancelled picker');
-    await evaluate(`document.querySelector('input[type="checkbox"]').click()`); await click('Pay Now'); await wait(`document.body.innerText.includes('Intentional QA payment stop.')`);
+    await evaluate(`document.querySelector('input[type="checkbox"]').click()`); await click('Review order'); await wait(`document.body.innerText.includes('Buyer total')`); await click('Continue to Paystack'); await wait(`document.body.innerText.includes('Intentional QA payment stop.')`);
     await check(`(()=>{const request=__calls.find(c=>c.url==='/api/buyer/orders');return request.body.dropoff_address==='Updated Lekki gate'&&request.body.dropoff_lat===7.1&&request.body.dropoff_lng===4.2&&request.body.dropoff_contact==='08012345678';})()`,'reviewed coordinates and saved address reach the existing order request');
     await navigate('/dashboard/orders'); await wait(`document.body.innerText.includes('Leave review')`); await click('Leave review'); await wait(`!!document.querySelector('dialog[open]')`); await aria('4 stars'); await input('dialog textarea','Arrived safely'); await click('Save draft'); await wait(`!document.querySelector('dialog[open]')`); await click('Leave review');
     await wait(`document.querySelector('dialog textarea')?.value==='Arrived safely'`); await check(`document.querySelector('dialog').innerText.includes('not published')&&document.querySelector('[aria-label="4 stars"]').getAttribute('aria-pressed')==='true'`,'review text and rating reopen as an unpublished draft'); await aria('Close review');

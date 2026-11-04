@@ -3,6 +3,9 @@
 Finance > Commissions has a percentage form with no preset rate. Admin enters
 a number from 0 to 100; 10 means 10%. Zero is a valid saved percentage and is
 distinct from an unset setting. The signed-in admin account supplies admin_id.
+This product commission is deducted from the product subtotal. The buyer pays
+product subtotal plus delivery; seller proceeds exclude the separate delivery fee.
+Rider commission records are separate. See ORDER-PRICING-NOTES.md for the flow.
 
 The local /api/admin/commission-setting adapter loads the documented backend
 GET /api/v1/admin/platform-settings/all and saves through

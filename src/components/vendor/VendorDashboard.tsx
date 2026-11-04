@@ -8,6 +8,7 @@ import { useAuthUser } from "@/components/auth/useAuthUser";
 import Icon, { type AdminIconName } from "@/components/admin/AdminIcon";
 import { asRow, humanize, isPaid, loadSellerProducts, money, needsFulfillment, orderTone, parseSellerOrders, salesSeries, scopedOrders, type SellerOrder, type SellerProduct } from "./sellerData";
 import styles from "./sellerDashboard.module.css";
+import { pricingTotal, pricingMoney } from "@/components/commerce/orderPricing";
 
 type Snapshot = { owner: string; products: SellerProduct[] | null; orders: SellerOrder[] | null; errors: string[]; updatedAt: Date | null };
 const empty: Snapshot = { owner: "", products: null, orders: null, errors: [], updatedAt: null };
@@ -82,6 +83,7 @@ export default function VendorDashboard() {
   const paidOrders = periodOrders.filter(isPaid);
   const paidValue = paidOrders.reduce((sum, order) => sum + (order.amount ?? 0), 0);
   const amountMissing = paidOrders.some(order => order.amount === null);
+  const proceeds = pricingTotal(paidOrders.map(order => order.pricing));
   const chart = useMemo(() => salesSeries(orders, range), [orders, range]);
   const fulfillment = orders.filter(needsFulfillment);
   const stockAlerts = products.filter(product => product.stock !== null && product.stock <= 10);
@@ -113,12 +115,14 @@ export default function VendorDashboard() {
       if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
       return `"${text.replaceAll('"', '""')}"`;
     };
-    const rows = [["Order ID", "Customer", "Order status", "Payment status", "Amount (NGN)", "Created"], ...periodOrders.map(order => [order.id, order.customer, order.status, order.paymentStatus, order.amount, order.createdAt])];
+    const rows = [["Order ID", "Customer", "Order status", "Payment status", "Buyer total (NGN)", "Products (NGN)", "Delivery (NGN)", "Admin commission (NGN)", "Seller proceeds (NGN)", "Created"], ...periodOrders.map(order => [order.id, order.customer, order.status, order.paymentStatus, order.amount, order.pricing.productSubtotal, order.pricing.deliveryFee, order.pricing.adminCommission, order.pricing.sellerProceeds, order.createdAt])];
     const url = URL.createObjectURL(new Blob(["\uFEFF" + rows.map(row => row.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = `alpha-orders-${range}-days.csv`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const metrics: Array<{ title: string; value: string; note: string; icon: AdminIconName; href: string; color: string }> = [
-    { title: "Paid sales", value: current.orders === null ? "—" : money(amountMissing ? null : paidValue), note: amountMissing ? "Some paid orders have no reported amount" : `Confirmed payments · last ${range} days`, icon: "chart", href: "#performance", color: "blue" },
+    { title: "Paid sales", value: current.orders === null ? "—" : money(amountMissing ? null : paidValue), note: amountMissing ? "Some paid orders have no reported amount" : `Buyer payments including delivery · last ${range} days`, icon: "chart", href: "#performance", color: "blue" },
+    { title: "Seller proceeds", value: current.orders === null || proceeds.issues.length ? "Not reported" : pricingMoney(paidOrders.length ? proceeds.sellerProceeds : 0), note: "Product subtotal minus commission; may still be held in escrow", icon: "wallet", href: "/vendor/orders", color: "blue" },
+    { title: "Admin commission", value: current.orders === null || proceeds.issues.length ? "Not reported" : pricingMoney(paidOrders.length ? proceeds.adminCommission : 0), note: "Deducted from product sales, excluding delivery", icon: "chart", href: "/vendor/orders", color: "violet" },
     { title: "Orders to fulfill", value: current.orders === null ? "—" : String(fulfillment.length), note: "Paid orders awaiting dispatch", icon: "orders", href: "/vendor/orders", color: "amber" },
     { title: "Total products", value: current.products === null ? "—" : String(products.length), note: current.products === null ? "Your store listings" : `${live.length} live · ${drafts.length} drafts`, icon: "catalog", href: "/vendor/products", color: "violet" },
     { title: "Stock alerts", value: current.products === null || products.length > 0 && inventoryKnown.length === 0 ? "—" : String(stockAlerts.length), note: current.products === null ? "Review stock availability" : missingStock ? `Stock unavailable for ${missingStock} ${missingStock === 1 ? "product" : "products"}` : `${outOfStock.length} out of stock · restock to keep selling`, icon: "alert", href: "/vendor/products/stock", color: "rose" },

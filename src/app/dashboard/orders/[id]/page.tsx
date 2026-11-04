@@ -8,6 +8,7 @@ import { useAuthUser } from "@/components/auth/useAuthUser";
 import { canConfirmReceipt } from "@/components/commerce/escrow";
 import EscrowStatus from "@/components/commerce/EscrowStatus";
 import ReviewDraftButton from "@/components/commerce/ReviewDraftButton";
+import OrderMoneyBreakdown from "@/components/commerce/OrderMoneyBreakdown";
 import { paymentError } from "@/components/commerce/payments";
 import { useBuyerOrders } from "@/components/commerce/buyerOrders";
 import {
@@ -80,6 +81,11 @@ export default function OrderDetailPage() {
           <span className="text-xs text-slate-500">Placed {order.createdAt}</span>
           <Badge>Payment: {order.paymentStatus}</Badge>
         </div>
+      </Card>
+
+      <Card>
+        <SectionTitle title="Order pricing" />
+        <OrderMoneyBreakdown pricing={order.pricing} />
       </Card>
 
       <Card>

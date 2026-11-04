@@ -5,6 +5,7 @@ import { getAuth } from "@/components/auth/authStorage";
 import { paymentError, responseData, orderPaymentStatus } from "./payments";
 import { escrowStatusFromOrder } from "./escrow";
 import { useAuthUser } from "@/components/auth/useAuthUser";
+import { orderPricing, type OrderPricing } from "./orderPricing";
 
 type Row = Record<string, unknown>;
 function record(value: unknown): Row { return value && typeof value === "object" && !Array.isArray(value) ? value as Row : {}; }
@@ -18,6 +19,7 @@ function amount(value: unknown): number | null {
 export type BuyerOrder = {
   id: string; buyerId: string; status: string; paymentStatus: string; escrowStatus: string; vendor: string;
   total: number | null; address: string; createdAt: string;
+  pricing: OrderPricing;
   items: Array<{ id: string; name: string; qty: number; price: number | null }>;
 };
 
@@ -31,7 +33,7 @@ export function parseBuyerOrder(payload: unknown): BuyerOrder | null {
     id, buyerId: text(row.buyer_id ?? row.buyerId ?? record(row.buyer).id),
     status: text(row.status).toLowerCase() || "pending", paymentStatus: orderPaymentStatus(row), escrowStatus: escrowStatusFromOrder(row),
     vendor: text(row.seller_name ?? row.vendor_name ?? record(row.seller).name) || "Seller",
-    total: amount(row.total_amount ?? row.totalAmount ?? row.total ?? row.amount),
+    total: orderPricing(row).buyerTotal, pricing: orderPricing(row),
     address: text(row.dropoff_address ?? row.dropoffAddress ?? row.address),
     createdAt: text(row.created_at ?? row.createdAt),
     items: (Array.isArray(items) ? items : []).map((value) => {

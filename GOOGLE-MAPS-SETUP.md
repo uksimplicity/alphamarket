@@ -33,6 +33,10 @@ Cloud. Do not commit actual keys or reuse the Android-restricted key.
 The picker displays loading and failure feedback, and GPS stays
 available if the map cannot load. GPS requires HTTPS (or localhost) and browser
 permission. Opening the picker does not request location permission.
+Use my location is placed above the optional map. The point can be confirmed
+without a map preview, but the buyer must be physically at the delivery address.
+Editing the checkout address clears an old selected point to prevent an incorrect
+distance calculation. The backend's existing delivery rate is unchanged.
 
 Verify on the configured origin: map click, marker drag, GPS, confirm, cancel and
 saving a typed address. Local tests use synthetic coordinates and never change live

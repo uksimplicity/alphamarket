@@ -1,4 +1,5 @@
 import { productImage } from "../products/productMedia";
+import { orderPricing, type OrderPricing } from "../commerce/orderPricing";
 
 export type SellerProduct = {
   id: string; name: string; category: string; stock: number | null;
@@ -7,6 +8,7 @@ export type SellerProduct = {
 export type SellerOrder = {
   id: string; amount: number | null; status: string; paymentStatus: string;
   customer: string; createdAt: string;
+  pricing: OrderPricing;
 };
 type Row = Record<string, unknown>;
 export function asRow(value: unknown): Row {
@@ -91,6 +93,7 @@ export function parseSellerOrders(payload: unknown, sellerId: string): SellerOrd
   return collection(payload).map(asRow).filter(row => ownedBy(row, sellerId)).map(row => ({
     id: text(row.id ?? row.order_id ?? row.uuid),
     amount: number(row.total_amount ?? row.totalAmount ?? row.amount ?? row.total),
+    pricing: orderPricing(row),
     status: text(row.status).toLowerCase() || "unknown",
     paymentStatus: text(row.payment_status ?? row.paymentStatus).toLowerCase() || "unknown",
     customer: text(row.customer_name ?? row.customerName ?? row.buyer_name ?? asRow(row.customer ?? row.buyer).name) || "Customer",

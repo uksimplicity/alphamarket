@@ -3,10 +3,18 @@ const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v
 
 export async function POST(req: Request) {
   if (!API_BASE) return Response.json({ error: "Order backend is not configured." }, { status: 503 });
-  const body = await req.text();
   const authorization = req.headers.get("authorization");
   const cookie = req.headers.get("cookie");
   if (!authorization && !cookie) return Response.json({ error: "Please sign in to place your order." }, { status: 401 });
+  let body: string;
+  try {
+    const input = await req.json();
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error();
+    const payload: Record<string, unknown> = {};
+    for (const key of ["buyer_id", "payment_method", "dropoff_address", "dropoff_contact", "dropoff_lat", "dropoff_lng"]) if (input[key] !== undefined) payload[key] = input[key];
+    if (Array.isArray(input.items)) payload.items = input.items.map((item: Record<string, unknown> | null) => ({ product_id: item?.product_id, quantity: item?.quantity }));
+    body = JSON.stringify(payload);
+  } catch { return Response.json({ error: "A valid order request is required." }, { status: 400 }); }
 
   try {
     // A lost response must not create another order through an alternative endpoint.

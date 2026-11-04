@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getAuth } from "@/components/auth/authStorage";
 import styles from "@/components/vendor/vendor.module.css";
+import { orderPricing, pricingMoney, type OrderPricing } from "@/components/commerce/orderPricing";
 
 type SellerOrder = {
   id: string;
   customer: string;
   status: string;
   amount: number | null;
+  pricing: OrderPricing;
   createdAt: string;
 };
 
@@ -93,6 +95,7 @@ export default function VendorOrders() {
             ),
             status: String(record.status ?? "pending"),
             amount: pickAmount(record),
+            pricing: orderPricing(record),
             createdAt: String(record.created_at ?? record.createdAt ?? "-"),
           } satisfies SellerOrder;
         });
@@ -148,7 +151,9 @@ export default function VendorOrders() {
                 <tr>
                   <th>Order ID</th>
                   <th>Customer</th>
-                  <th>Amount</th>
+                  <th>Buyer total</th>
+                  <th>Admin commission</th>
+                  <th>Seller proceeds</th>
                   <th>Status</th>
                   <th>Created</th>
                 </tr>
@@ -163,6 +168,8 @@ export default function VendorOrders() {
                     </td>
                     <td>{order.customer}</td>
                     <td>{formatNaira(order.amount)}</td>
+                    <td>{pricingMoney(order.pricing.adminCommission)}</td>
+                    <td>{pricingMoney(order.pricing.sellerProceeds)}</td>
                     <td>
                       <span className={styles.pill}>{order.status}</span>
                     </td>

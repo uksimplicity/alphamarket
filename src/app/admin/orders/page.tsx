@@ -6,6 +6,8 @@ import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/
 import { Button, Card, SectionTitle } from "@/components/dashboard/ui";
 
 import AdminEscrowPanel from "@/components/admin/AdminEscrowPanel";
+import OrderMoneyBreakdown from "@/components/commerce/OrderMoneyBreakdown";
+import { orderPricing, pricingMoney } from "@/components/commerce/orderPricing";
 
 export default function AdminOrdersPage() {
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
@@ -44,7 +46,7 @@ export default function AdminOrdersPage() {
           buyer: pickString(record, ["buyer_id", "buyer_email", "customer", "customer_name"], "-"),
           seller: pickString(record, ["seller_id", "seller_email", "seller_name"], "-"),
           status: pickString(record, ["status", "state"], "unknown"),
-          total: pickString(record, ["total_amount", "totalAmount", "total", "amount", "subtotal"], "Not reported"),
+          pricing: orderPricing(record),
         };
       });
     },
@@ -162,7 +164,8 @@ export default function AdminOrdersPage() {
               <div>{row.buyer}</div>
               <div>{row.seller}</div>
               <div>{row.status}</div>
-              <div>{row.total}</div>
+              <div>Buyer total: {pricingMoney(row.pricing.buyerTotal)}</div>
+              <details className="md:col-span-5"><summary className="cursor-pointer text-brand">Product, commission and delivery breakdown</summary><OrderMoneyBreakdown pricing={row.pricing} seller /></details>
             </div>
           ))}
         </div>

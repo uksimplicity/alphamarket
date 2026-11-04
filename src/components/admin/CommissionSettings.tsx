@@ -56,13 +56,13 @@ function PercentageForm({ adminId }: { adminId: string }) {
     finally { lock.current = false; if (!controller?.signal.aborted) setSaving(false); }
   }
   return <Card>
-    <SectionTitle title="Commission percentage" subtitle="Enter the percentage you want to save. No rate is selected by default." />
+    <SectionTitle title="Product commission percentage" subtitle="Deducted from the product subtotal before the seller receives their proceeds. Buyers pay the product subtotal plus delivery." />
     {isLoading ? <p role="status" className="mt-4 text-sm text-slate-500">Loading saved percentage...</p> : error ? <div className="mt-4"><ErrorState message={error.message} onRetry={() => void refresh()} /></div> : <>
       <p className="mt-4 text-sm text-slate-600">Saved percentage: <strong>{data?.percentage == null ? "Not set" : data.percentage + "%"}</strong></p>
       <form onSubmit={save} className="mt-4 grid max-w-lg gap-3">
         <label htmlFor="commission-percentage" className="text-sm font-medium text-slate-700">Percentage (%)</label>
         <input id="commission-percentage" type="number" min="0" max="100" step="any" required inputMode="decimal" value={value} disabled={saving} onChange={event => { setDraft(event.target.value); setMessage(""); }} aria-describedby="commission-percentage-help" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-        <p id="commission-percentage-help" className="text-xs text-slate-500">Enter 10 for 10%. You can choose any percentage from 0 to 100.</p>
+        <p id="commission-percentage-help" className="text-xs text-slate-500">Enter 10 for 10%. Commission excludes delivery fees. You can choose any percentage from 0 to 100.</p>
         <div className="flex flex-wrap gap-2"><Button type="submit" disabled={saving || uncertain || !valid || !data || Number(value) === data.percentage}>{saving ? "Saving..." : "Save percentage"}</Button><Button variant="ghost" disabled={saving} onClick={() => void refresh()}>Refresh saved percentage</Button></div>
       </form>
     </>}

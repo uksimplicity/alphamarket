@@ -6,9 +6,12 @@ import { getAuth } from "@/components/auth/authStorage";
 import { escrowStatusFromOrder } from "@/components/commerce/escrow";
 import { orderPaymentStatus } from "@/components/commerce/payments";
 import EscrowStatus from "@/components/commerce/EscrowStatus";
+import OrderMoneyBreakdown from "@/components/commerce/OrderMoneyBreakdown";
+import { orderPricing } from "@/components/commerce/orderPricing";
 import styles from "@/components/vendor/vendor.module.css";
 
 function formatNaira(value: unknown) {
+  if (value === null || value === undefined || typeof value === "boolean" || typeof value === "string" && !value.trim()) return "Not reported";
   const numeric = Number(value);
   if (!Number.isNaN(numeric) && Number.isFinite(numeric)) {
     return new Intl.NumberFormat("en-NG", {
@@ -87,7 +90,7 @@ export default function VendorOrderDetail() {
       id: String(order.id ?? order.order_id ?? orderId ?? "-"),
       status: String(order.status ?? "pending"),
       customer: String(order.customer_name ?? customerRecord?.name ?? "Customer"),
-      amount: order.amount ?? order.total ?? order.total_amount ?? order.price ?? null,
+      amount: orderPricing(order).buyerTotal,
       createdAt: String(order.created_at ?? order.createdAt ?? "-"),
       deliveryAddress: String(
         order.dropoff_address ?? order.delivery_address ?? order.address ?? "-"
@@ -140,6 +143,7 @@ export default function VendorOrderDetail() {
       </div>
 
       <div className={styles.progressList}>
+        <OrderMoneyBreakdown pricing={orderPricing(order)} seller />
         <EscrowStatus status={summary.escrowStatus} />
         <div className={styles.progressRow}><span>Payment status</span><span className={styles.pill}>{summary.paymentStatus}</span></div>
         <div className={styles.progressRow}>
@@ -151,7 +155,7 @@ export default function VendorOrderDetail() {
           <span>{summary.customer}</span>
         </div>
         <div className={styles.progressRow}>
-          <span>Amount</span>
+          <span>Buyer total</span>
           <span>{formatNaira(summary.amount)}</span>
         </div>
         <div className={styles.progressRow}>

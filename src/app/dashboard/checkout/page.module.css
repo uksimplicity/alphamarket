@@ -382,7 +382,7 @@
   color: #475569;
 }
 
-.summaryTotals div {
+.summaryTotals > div:not([aria-label]) {
   display: flex;
   justify-content: space-between;
 }

@@ -963,6 +963,7 @@ export default function CreateProduct({ mode = "seller" }) {
                   onChange={handleChange}
                   placeholder="0.00"
                 />
+                <p className="helper-text">Enter the product selling price. Admin commission is deducted from this price; the buyer pays this price plus delivery.</p>
               </div>
               <div className="field">
                 <label>Stock (optional)</label>

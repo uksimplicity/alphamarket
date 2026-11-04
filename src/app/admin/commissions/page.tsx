@@ -154,7 +154,7 @@ function CommissionRecords() {
   return (
     <div className="grid gap-6">
       <Card>
-        <SectionTitle title="Commissions" subtitle="Manage rider commissions and payment lifecycle." />
+        <SectionTitle title="Rider commission records" subtitle="Manage rider commission records and payment lifecycle separately from the product commission percentage above." />
         <div className="mt-3 grid gap-3 md:grid-cols-4">
           <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="status" value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))} />
           <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="rider_id" value={filters.riderId} onChange={(event) => setFilters((prev) => ({ ...prev, riderId: event.target.value }))} />
