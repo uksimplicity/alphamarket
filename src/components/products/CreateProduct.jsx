@@ -6,6 +6,7 @@ import "@/components/products/CreateProduct.css";
 import { getAuth } from "@/components/auth/authStorage";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import { uploadProductMedia } from "@/components/vendor/sellerProductForm";
+import DeliveryLocationButton from "@/components/commerce/deliveryLocation";
 
 const initialForm = {
   name: "",
@@ -300,17 +301,6 @@ function parseNonNegativeInteger(value) {
   return numeric;
 }
 
-function readFirstFiniteNumber(...values) {
-  for (const value of values) {
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string" && value.trim()) {
-      const numeric = Number(value);
-      if (Number.isFinite(numeric)) return numeric;
-    }
-  }
-  return null;
-}
-
 function readCachedAdminCategories() {
   if (typeof window === "undefined") return [];
   try {
@@ -355,6 +345,7 @@ export default function CreateProduct({ mode = "seller" }) {
   // Reuse requests across development effect replays for this form instance.
   const catalogRequests = useRef(new Map());
   const [form, setForm] = useState(initialForm);
+  const [productPoint, setProductPoint] = useState(null);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [typeOptions, setTypeOptions] = useState([]);
   const [brandOptions, setBrandOptions] = useState([]);
@@ -557,6 +548,7 @@ export default function CreateProduct({ mode = "seller" }) {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
+    if (name === "location") setProductPoint(null);
     setForm((prev) => {
       if (name === "category") {
         return { ...prev, category: value, type: "" };
@@ -729,20 +721,10 @@ export default function CreateProduct({ mode = "seller" }) {
     }
     if (stockNumber !== null) payload.stock = stockNumber;
     if (tagList.length > 0) payload.tags = tagList;
-    const latitude = readFirstFiniteNumber(
-      auth?.user?.latitude,
-      auth?.user?.lat,
-      auth?.user?.profile?.latitude,
-      auth?.user?.profile?.lat
-    );
-    const longitude = readFirstFiniteNumber(
-      auth?.user?.longitude,
-      auth?.user?.lng,
-      auth?.user?.profile?.longitude,
-      auth?.user?.profile?.lng
-    );
-    if (latitude !== null) payload.latitude = latitude;
-    if (longitude !== null) payload.longitude = longitude;
+    if (productPoint) {
+      payload.latitude = productPoint.latitude;
+      payload.longitude = productPoint.longitude;
+    }
 
     if (discountEnabled) {
       payload.discounts = [
@@ -992,6 +974,9 @@ export default function CreateProduct({ mode = "seller" }) {
               <div className="field">
                 <label htmlFor="product-location">Location *</label>
                 <input id="product-location" name="location" aria-required="true" value={form.location} onChange={handleChange} />
+                <p className="text-sm text-slate-500">Enter the pickup address, then choose its exact position on the map.</p>
+                <DeliveryLocationButton purpose="product" point={productPoint} onConfirm={setProductPoint} disabled={loading} />
+                {productPoint ? <p role="status" className="text-sm text-slate-500">Product location selected.</p> : null}
               </div>
             </div>
           </section>

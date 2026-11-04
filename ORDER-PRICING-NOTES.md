@@ -49,10 +49,14 @@ confirmation. Use it only when physically at the delivery/pickup address.
 Changing the checkout address clears the previously selected coordinates.
 No default or invented delivery coordinates are supplied.
 
-The local .env.local had no NEXT_PUBLIC_GOOGLE_MAPS_API_KEY during verification.
-Rendering maps and locating remote typed addresses still require a configured
-website key, enabled APIs, billing and appropriate website restrictions; see
-GOOGLE-MAPS-SETUP.md. Hosted environment settings were not inspected or changed.
+The local .env.local now contains NEXT_PUBLIC_GOOGLE_MAPS_API_KEY. A fresh
+production build includes it. The first live browser check on 2026-11-04 returned
+RefererNotAllowedMapError for http://localhost:3011. After the user added the
+preview origins, the live map loaded, accepted a clicked point and confirmed the
+delivery location. This passed again after a five-minute propagation wait.
+GPS selection and confirmation also pass with synthetic browser coordinates.
+See GOOGLE-MAPS-SETUP.md for origins and remaining verification limits.
+Hosted environment settings were not inspected or changed.
 
 ## Verification limits
 
@@ -77,3 +81,11 @@ Commands:
 Browser checks require the local preview on 3011 and dedicated Chrome CDP on
 9228. They cover GPS without maps, stale-point clearing, review before payment,
 bad/missing totals, duplicate prevention, mobile, seller proceeds and admin splits.
+
+Continuation verification (2026-11-04): all 46 focused tests and 16 pricing-flow
+browser checks passed again against a fresh production build. TypeScript and
+the production build passed (72 static pages); focused lint had no errors and
+one existing checkout image warning. After the user updated the Google Cloud
+website restrictions, live map loading, point selection and confirmation passed
+twice on localhost:3011, including after a five-minute wait. No real orders or
+payments were created. Local production preview: http://127.0.0.1:3011 while running.

@@ -15,6 +15,19 @@ async function main() {
   const fixture = `
     localStorage.setItem('alpha.auth', JSON.stringify({access_token:'synthetic-seller-token',user:{id:'seller-1',role:'seller',first_name:'Seller',status:'active'}}));
     const realFetch=window.fetch.bind(window); window.__writes=[];window.__uploads=0;
+    if (new URLSearchParams(location.search).has('maps')) {
+      window.__maps=[];window.__pins=[];
+      window.google={maps:{Map:class {
+        constructor(element,options){this.center=options.center;this.events={};element.textContent='Synthetic map';window.__maps.push(this);}
+        setCenter(point){this.center=point;}
+        addListener(name,callback){this.events[name]=callback;return {remove:()=>delete this.events[name]};}
+      },Marker:class {
+        constructor(options){this.position=options.position;this.visible=options.visible;this.events={};window.__pins.push(this);}
+        setPosition(point){this.position=point;}setVisible(value){this.visible=value;}setMap(){}
+        addListener(name,callback){this.events[name]=callback;return {remove:()=>delete this.events[name]};}
+      }}};
+      Object.defineProperty(navigator,'geolocation',{value:{getCurrentPosition(success){success({coords:{latitude:7.3,longitude:4.5,accuracy:10}});}}});
+    }
     const product={id:'product-1',name:'Chair',slug:'chair',basePrice:5000,stock:3,shortDescription:'An actual chair',categoryId:'category-1',productTypeId:'type-1',brandId:'brand-1',sellerId:'seller-1',media:{cover:'https://images.example/old-cover.png',images:['https://images.example/old-image.png'],video:'https://images.example/old-video.mp4'},attributes:[{attribute_id:'attribute-1',attribute_value_id:'value-1'}]};
     window.fetch=async(input,init={})=>{const url=typeof input==='string'?input:input.url;if(!url.startsWith('/api/'))return realFetch(input,init);
       if(url.startsWith('/api/user/profile'))return Response.json({data:JSON.parse(localStorage.getItem('alpha.auth')).user});
@@ -44,7 +57,7 @@ async function main() {
     const overflow = await evaluate(`JSON.stringify({width:innerWidth,scroll:document.documentElement.scrollWidth,elements:[...document.querySelectorAll('body *')].filter(el=>el.getBoundingClientRect().right>innerWidth+2&&getComputedStyle(el).position!=='fixed').slice(0,12).map(el=>({tag:el.tagName,class:el.className,width:el.getBoundingClientRect().width}))})`);
     assert.equal(await evaluate(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`), true, overflow);
     console.log('PASS seller editor fits mobile viewport');
-    await send('Page.navigate', { url: previewUrl + '/vendor/products/create' });
+    await send('Page.navigate', { url: previewUrl + '/vendor/products/create' + (process.env.ALPHA_TEST_MAPS ? '?maps=1' : '') });
     await wait(`document.querySelector('select[name="brand"]')&&!document.querySelector('select[name="brand"]').disabled&&[...document.querySelector('select[name="brand"]').options].some(o=>o.text==='Workshop')`);
     assert.equal(await evaluate(`document.querySelector('input[name="brandName"]').maxLength`), 150);
     await input('input[name="brandName"]','  Acme  ');
@@ -70,6 +83,31 @@ async function main() {
     await wait(`document.body.innerText.includes('Product location is required.')`);
     assert.equal(await evaluate('__uploads===0&&__writes.length===0'), true);
     await input('input[name="location"]','  Lagos  ');
+    if (process.env.ALPHA_TEST_MAPS) {
+      const click = label => evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(label)}).click()`);
+      await click('Choose product location on map'); await wait(`window.__maps.length===1`);
+      assert.equal(await evaluate(`document.querySelector('dialog[open] button[class*="primary"]').disabled`),true);
+      await evaluate(`__maps.at(-1).events.click({latLng:{lat:()=>6.6,lng:()=>3.4}})`);
+      await wait(`document.querySelector('dialog[open]').innerText.includes('Location selected.')`);
+      assert.equal(await evaluate(`!document.querySelector('dialog[open] input[type="number"]')&&!document.querySelector('dialog[open]').innerText.match(/latitude|longitude|coordinates/i)`),true);
+      await click('Cancel');
+      assert.equal(await evaluate(`!document.body.innerText.includes('Product location selected.')`),true);
+      await click('Choose product location on map'); await wait(`__maps.length===2`);
+      await evaluate(`__pins.at(-1).events.dragend({latLng:{lat:()=>6.7,lng:()=>3.5}})`);
+      await click('Use this product location');
+      await wait(`document.body.innerText.includes('Product location selected.')`);
+      await input('input[name="location"]','Lagos pickup');
+      assert.equal(await evaluate(`!document.body.innerText.includes('Product location selected.')`),true);
+      await input('input[name="location"]','  Lagos  ');
+      await click('Choose product location on map'); await wait(`__maps.length===3`);
+      await click('Use my location'); await wait(`__pins.at(-1).position.lat===7.3&&__pins.at(-1).position.lng===4.5`);
+      await evaluate(`window.dispatchEvent(new Event('alpha-maps-auth-failure'))`);
+      await wait(`document.querySelector('dialog[open] [role="alert"]')?.textContent.includes('map is unavailable')`);
+      await click('Use this product location');
+      await wait(`document.body.innerText.includes('Product location selected.')`);
+      assert.equal(await evaluate(`!document.body.innerText.match(/latitude|longitude|coordinates/i)&&!document.body.innerText.includes('7.300000')`),true);
+      console.log('PASS map click, pin drag, cancel, address changes, GPS and map failure fallback');
+    }
     await evaluate(`document.querySelector('form.create-form').requestSubmit()`);
     await wait(`document.body.innerText.includes('Add at least one product image.')`);
     assert.equal(await evaluate('__writes.length'), 0);
@@ -93,6 +131,7 @@ async function main() {
     assert.equal(created.shortDescription, 'A simple chair for everyday use.');
     assert.equal(created.location, 'Lagos');
     assert.equal(created.brandName, 'Acme');
+    if (process.env.ALPHA_TEST_MAPS) { assert.equal(created.latitude,7.3); assert.equal(created.longitude,4.5); }
     assert.equal(created.media.images.length, 1);
     assert.equal(await evaluate(`sessionStorage.getItem('seller-created-upload-count')`), '1');
     assert.equal(['brandId','stock','tags','discounts','attributes'].every(key=>!Object.hasOwn(created,key)), true);

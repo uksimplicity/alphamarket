@@ -103,7 +103,7 @@ test('Google Maps script loads once on demand and resolves through the ready cal
     const first = maps.loadGoogleMaps('public-key'), second = maps.loadGoogleMaps('public-key');
     assert.equal(scripts.length, 1); assert.equal(first, second);
     assert.match(scripts[0].src, /callback=__alphaMapsReady/);
-    const api = { Map: class {} }; window.google = { maps: api }; window.__alphaMapsReady();
+    const api = { Map: class {}, Marker: class {} }; window.google = { maps: api }; window.__alphaMapsReady();
     assert.equal(await first, api); assert.equal(await maps.loadGoogleMaps('public-key'), api);
     assert.equal(scripts.length, 1);
   } finally { delete global.document; }
@@ -116,7 +116,7 @@ test('failed map loading can be retried without marking a location as selected',
     const failed = assert.rejects(maps.loadGoogleMaps('public-key'), /could not be loaded/);
     scripts[0].onerror(); await failed;
     const retry = maps.loadGoogleMaps('public-key'); assert.equal(scripts.length, 2);
-    window.google = { maps: { Map: class {} } }; window.__alphaMapsReady(); await retry;
+    window.google = { maps: { Map: class {}, Marker: class {} } }; window.__alphaMapsReady(); await retry;
     assert.deepEqual(maps.mapPoint({ latitude: -33.5, longitude: 18.4 }), { lat: -33.5, lng: 18.4 });
   } finally { delete global.document; }
 });
