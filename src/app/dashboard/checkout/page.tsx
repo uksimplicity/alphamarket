@@ -13,6 +13,7 @@ import DeliveryLocationButton from "@/components/commerce/deliveryLocation";
 import { deliveryPoint } from "@/components/commerce/addresses";
 import { useCheckoutPricing } from "@/components/commerce/useCheckoutPricing";
 import OrderMoneyBreakdown from "@/components/commerce/OrderMoneyBreakdown";
+import AddressLocationLookup from "@/components/commerce/AddressLocationLookup";
 
 export default function CheckoutPage() {
   const cart = useCart();
@@ -134,8 +135,9 @@ export default function CheckoutPage() {
             <fieldset className={styles.addressForm} disabled={loading || Boolean(pending)}>
               <label>Full delivery address<textarea autoComplete="street-address" value={address} onChange={(event) => { setAddress(event.target.value); setLatitude(""); setLongitude(""); }} placeholder="Street address, city and state" /></label>
               <label>Contact phone number<input type="tel" autoComplete="tel" value={contact} onChange={(event) => setContact(event.target.value)} /></label>
+              <AddressLocationLookup address={address} onAddressChange={value => { setAddress(value); setLatitude(""); setLongitude(""); }} point={deliveryPoint(latitude, longitude)} onLocate={point => { setLatitude(String(point.latitude)); setLongitude(String(point.longitude)); }} disabled={loading || Boolean(pending)} />
               <DeliveryLocationButton point={deliveryPoint(latitude, longitude)} onConfirm={point => { setLatitude(String(point.latitude)); setLongitude(String(point.longitude)); }} disabled={loading || Boolean(pending)} />
-              <p className={styles.mutedText}>Choose the delivery point, or use your current location if you are at the delivery address. The backend calculates delivery using the seller and buyer locations.</p>
+              <p className={styles.mutedText}>Choose the delivery point, or use your current location if you are at the delivery address.</p>
               {deliveryPoint(latitude, longitude) ? <p role="status" className={styles.mutedText}>Delivery location selected.</p> : null}
             </fieldset>
           </div></Card>
@@ -168,7 +170,7 @@ export default function CheckoutPage() {
             {review.error ? <p role="alert" className={styles.errorMessage}>{review.error}</p> : null}
             {!review.loading && !review.error && review.pricing?.buyerTotal == null ? <p role="alert">The backend has not returned a payable total yet.</p> : null}
             <Button variant="ghost" disabled={loading || review.loading} onClick={review.reload}>Refresh order pricing</Button>
-          </> : <><div><span>Items subtotal</span><span>{formatCurrency(cartSubtotal(cart))}</span></div><p className={styles.mutedText}>Delivery is calculated by the backend after you submit the order for review. Your total is the product subtotal plus delivery. Admin commission is deducted from the seller’s share.</p></>}</div>
+          </> : <><div><span>Items subtotal</span><span>{formatCurrency(cartSubtotal(cart))}</span></div></>}</div>
           <Button type="button" onClick={pay} disabled={loading || !agreed || (!pending && cart.items.length === 0) || Boolean(pending && (!pending.orderIds.length || !review.ready))}>
             {loading ? pending ? "Connecting to Paystack..." : "Creating order..." : pending ? "Continue to Paystack" : "Review order"}
           </Button>

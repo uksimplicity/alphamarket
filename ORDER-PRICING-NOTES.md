@@ -20,6 +20,15 @@ pricing, and enables Continue to Paystack only after a payable total is availabl
 without conflicting amounts. Payment initialization sends the saved order IDs.
 Failed pricing refreshes and payment attempts never recreate the order.
 
+Requested follow-up: show delivery cost as soon as the buyer supplies a delivery
+address/location, before order creation. The 2026-11-04 public and admin Swagger
+contracts contain no delivery quote endpoint. This needs a backend quote contract
+using product IDs/quantities and the confirmed delivery location, returning the
+delivery fee and currency/units (including how multiple sellers are priced).
+Do not create orders automatically when an address changes or invent a delivery
+rate. The buyer-facing paragraph about backend calculation and seller commission
+has been removed; saved-order fee review remains available until quoting exists.
+
 The order and payment proxies strip client-supplied prices, delivery fees,
 commission settings and payout amounts. The backend determines the charge.
 

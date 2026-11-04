@@ -1,0 +1,74 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { accountStamp, checkAccount } from "./localAccountData";
+import { geocodeDeliveryAddress } from "./geocodeAddress";
+import type { DeliveryPoint } from "./addresses";
+import styles from "./localFeatures.module.css";
+
+const emptyDetails = { houseNumber: "", street: "", lga: "", state: "" };
+
+export default function AddressLocationLookup({ address, point, onLocate, onAddressChange, disabled = false }: {
+  address: string;
+  point: DeliveryPoint | null;
+  onLocate: (point: DeliveryPoint) => void;
+  onAddressChange: (address: string) => void;
+  disabled?: boolean;
+}) {
+  const [attempt, setAttempt] = useState(0);
+  const [fields, setFields] = useState({ address: "", ...emptyDetails });
+  const details = fields.address === address ? fields : emptyDetails;
+  const structured = Object.values({ houseNumber: details.houseNumber, street: details.street, lga: details.lga, state: details.state }).some(value => value.trim());
+  const complete = !structured || Boolean(details.street.trim() && details.lga.trim() && details.state.trim());
+  const [state, setState] = useState({ address: "", loading: false, error: "" });
+  const locate = useRef(onLocate);
+  useEffect(() => { locate.current = onLocate; }, [onLocate]);
+  const latitude = point?.latitude, longitude = point?.longitude;
+
+  useEffect(() => {
+    if (disabled || !complete || !address.trim() || latitude !== undefined && longitude !== undefined) return;
+    let active = true;
+    // Wait until typing pauses instead of sending a Google request per keystroke.
+    const timer = setTimeout(() => {
+      setState({ address, loading: true, error: "" });
+      void (async () => {
+        try {
+          const stamp = accountStamp();
+          const result = await geocodeDeliveryAddress(address, process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "");
+          if (!active) return;
+          checkAccount(stamp);
+          locate.current(result);
+          setState({ address, loading: false, error: "" });
+        } catch (failure) {
+          if (active) setState({ address, loading: false, error: failure instanceof Error ? failure.message : "We couldn't locate this address. Choose its exact location on the map." });
+        }
+      })();
+    }, 900);
+    // Google geocoding cannot be aborted; ignore results after editing, pin/GPS
+    // selection, submission, or leaving this form.
+    return () => { active = false; clearTimeout(timer); };
+  }, [address, latitude, longitude, disabled, attempt, complete]);
+
+  function change(field: keyof typeof emptyDetails, value: string) {
+    const next = { houseNumber: details.houseNumber, street: details.street, lga: details.lga, state: details.state, [field]: value };
+    const streetAddress = [next.houseNumber.trim(), next.street.trim()].filter(Boolean).join(" ");
+    const parts = [streetAddress, next.lga.trim(), next.state.trim()].filter(Boolean);
+    const fullAddress = parts.length ? [...parts, "Nigeria"].join(", ") : "";
+    setFields({ ...next, address: fullAddress });
+    onAddressChange(fullAddress);
+  }
+
+  const current = !point && !disabled && state.address === address ? state : null;
+  return <div>
+    <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-2">
+      <legend className="mb-2 text-sm font-medium">Address details</legend>
+      <label>House number<input type="text" value={details.houseNumber} onChange={event => change("houseNumber", event.target.value)} placeholder="e.g. 12B" /></label>
+      <label>Street name<input type="text" value={details.street} onChange={event => change("street", event.target.value)} placeholder="e.g. Admiralty Way" /></label>
+      <label>LGA<input type="text" autoComplete="address-level2" value={details.lga} onChange={event => change("lga", event.target.value)} placeholder="Local government area" /></label>
+      <label>State<input type="text" autoComplete="address-level1" value={details.state} onChange={event => change("state", event.target.value)} placeholder="e.g. Lagos" /></label>
+    </fieldset>
+    <p className={styles.muted}>{structured && !complete ? "Complete the street name, LGA and state to locate this address." : "We’ll locate your full address automatically. Use the map to adjust the exact point."}</p>
+    {current?.loading ? <p role="status" className={styles.muted}>Locating your address...</p> : null}
+    {current?.error ? <><p role="status" className={styles.error}>{current.error}</p><button type="button" className={styles.button} disabled={disabled} onClick={() => setAttempt(value => value + 1)}>Retry address lookup</button></> : null}
+  </div>;
+}

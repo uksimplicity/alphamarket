@@ -7,6 +7,7 @@ import { getAuth } from "@/components/auth/authStorage";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import { uploadProductMedia } from "@/components/vendor/sellerProductForm";
 import DeliveryLocationButton from "@/components/commerce/deliveryLocation";
+import AddressLocationLookup from "@/components/commerce/AddressLocationLookup";
 
 const initialForm = {
   name: "",
@@ -974,7 +975,7 @@ export default function CreateProduct({ mode = "seller" }) {
               <div className="field">
                 <label htmlFor="product-location">Location *</label>
                 <input id="product-location" name="location" aria-required="true" value={form.location} onChange={handleChange} />
-                <p className="text-sm text-slate-500">Enter the pickup address, then choose its exact position on the map.</p>
+                <AddressLocationLookup address={form.location} onAddressChange={value => { setForm(previous => ({ ...previous, location: value })); setProductPoint(null); }} point={productPoint} onLocate={setProductPoint} disabled={loading} />
                 <DeliveryLocationButton purpose="product" point={productPoint} onConfirm={setProductPoint} disabled={loading} />
                 {productPoint ? <p role="status" className="text-sm text-slate-500">Product location selected.</p> : null}
               </div>

@@ -86,7 +86,7 @@ async function main() {
     if (process.env.ALPHA_TEST_MAPS) {
       const click = label => evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(label)}).click()`);
       await click('Choose product location on map'); await wait(`window.__maps.length===1`);
-      assert.equal(await evaluate(`document.querySelector('dialog[open] button[class*="primary"]').disabled`),true);
+      assert.equal(await evaluate(`[...document.querySelectorAll('dialog[open] button')].find(button=>button.textContent==='Use this product location').disabled`),true);
       await evaluate(`__maps.at(-1).events.click({latLng:{lat:()=>6.6,lng:()=>3.4}})`);
       await wait(`document.querySelector('dialog[open]').innerText.includes('Location selected.')`);
       assert.equal(await evaluate(`!document.querySelector('dialog[open] input[type="number"]')&&!document.querySelector('dialog[open]').innerText.match(/latitude|longitude|coordinates/i)`),true);
@@ -102,7 +102,7 @@ async function main() {
       await click('Choose product location on map'); await wait(`__maps.length===3`);
       await click('Use my location'); await wait(`__pins.at(-1).position.lat===7.3&&__pins.at(-1).position.lng===4.5`);
       await evaluate(`window.dispatchEvent(new Event('alpha-maps-auth-failure'))`);
-      await wait(`document.querySelector('dialog[open] [role="alert"]')?.textContent.includes('map is unavailable')`);
+      await wait(`document.querySelector('dialog[open]').innerText.includes('map preview could not load')`);
       await click('Use this product location');
       await wait(`document.body.innerText.includes('Product location selected.')`);
       assert.equal(await evaluate(`!document.body.innerText.match(/latitude|longitude|coordinates/i)&&!document.body.innerText.includes('7.300000')`),true);

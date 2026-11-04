@@ -9,6 +9,18 @@ The product form keeps the typed pickup address; its selected coordinates are se
 as `latitude` and `longitude`. Changing the address clears its old selected point.
 The account profile coordinates are not substituted for a product's location.
 
+Checkout, saved-address editing and product creation now have House number,
+Street name, LGA and State fields. They compose a full Nigerian address while
+retaining the free-text address field for saved or manually entered addresses.
+Once street, LGA and state are complete, lookup runs after typing pauses for
+900 ms. A single precise building match selects internal coordinates. Partial,
+multiple, street-only or approximate results require map/GPS confirmation.
+Changing any address field clears the previous point. Late results after edits,
+manual selection, leaving the form or changing accounts cannot replace it.
+Checkout sends the confirmed point as `dropoff_lat` and `dropoff_lng`; the backend
+remains responsible for distance and delivery pricing. Address lookup creates no
+orders and initializes no payments.
+
 ## Google Cloud configuration
 
 Use a separate website key in the existing billed project. Keep the Android key's
@@ -70,8 +82,24 @@ With the local preview on port 3011 and isolated Chrome CDP on port 9228, rerun:
 node tests/google-maps-live.browser.cjs
 ```
 
-This check uses a synthetic buyer, loads the real Google map, clicks a location
-and confirms it. Application API calls are intercepted; it creates no orders,
+This check uses a synthetic buyer, loads the real Google map, clicks a location,
+confirms it and asks the real Geocoding API to locate a public Lagos street
+address. Application API calls are intercepted; it creates no orders,
 makes no payments and does not request device GPS. Use `MAPS_SMOKE_ORIGIN` to
 check another localhost or 127.0.0.1 preview origin. A pass does not establish
-that geocoding, real-device GPS, pin dragging or the hosted website work.
+that real-device GPS, pin dragging or the hosted website work.
+
+Structured-address verification: TypeScript and the production build passed,
+along with 30 focused unit/API tests, 10 new address browser checks, 16 pricing
+browser checks, 29 saved-address/chat/account browser checks and seller product
+checks including map click, drag, cancel and GPS. Synthetic tests verify lookup
+debouncing, address composition, stale/account-change rejection, ambiguity,
+service failure/retry, mobile width and the geocoded order payload.
+
+Live geocoding initially returned `REQUEST_DENIED`. After the user enabled
+Geocoding API and the configuration propagated, the live check passed: both map
+selection and converting a typed Lagos street address to valid latitude and
+longitude succeeded. Geocoding API must remain enabled in the project that owns
+the configured website key and included in the key's API restrictions. These are
+separate settings. Hosted-key configuration and actual-device GPS remain outside
+this local verification. No actual key is recorded in this document.

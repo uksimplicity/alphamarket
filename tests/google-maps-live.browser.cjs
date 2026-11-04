@@ -10,7 +10,7 @@ async function main() {
   const socket = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
   let serial = 0;
-  const requests = new Map(), mapErrors = new Set();
+  const requests = new Map(), mapErrors = new Set(), geocodingErrors = new Set();
   socket.onmessage = event => {
     const message = JSON.parse(event.data);
     if (message.method === 'Runtime.consoleAPICalled') {
@@ -18,6 +18,12 @@ async function main() {
         // Record error codes only: Google diagnostics can contain the API key.
         const code = String(argument.value || '').match(/Google Maps JavaScript API error:\s*(\w+)/)?.[1];
         if (code) mapErrors.add(code);
+        const diagnostic = String(argument.value || '');
+        if (/geocod/i.test(diagnostic)) {
+          if (/not authorized to use this API/i.test(diagnostic)) geocodingErrors.add('The API project or key is not authorized to use Geocoding API.');
+          if (/billing/i.test(diagnostic)) geocodingErrors.add('Google reports a billing configuration issue.');
+          if (/referer|referrer/i.test(diagnostic)) geocodingErrors.add('Google reports a website restriction issue.');
+        }
       }
     }
     const request = requests.get(message.id);
@@ -68,6 +74,17 @@ async function main() {
     await wait(`!document.querySelector('dialog[open]')`);
     assert.equal(await evaluate(`document.body.innerText.includes('Delivery location selected.')`), true);
     console.log('PASS live map loads, accepts a clicked point and confirms delivery location on ' + parsedOrigin.origin + '.');
+    const geocoding = await evaluate(`new Promise(resolve => {
+      const timer = setTimeout(() => resolve({status:'TIMEOUT'}), 15000);
+      new google.maps.Geocoder().geocode({address:'2 Kofo Abayomi Street, Victoria Island, Lagos, Nigeria',region:'ng'}, (results,status) => {
+        clearTimeout(timer);
+        const point=results?.[0]?.geometry?.location;
+        resolve({status,validCoordinates:!!point&&Number.isFinite(point.lat())&&Number.isFinite(point.lng())});
+      });
+    })`);
+    assert.equal(geocoding.status, 'OK', 'Live geocoding failed: ' + geocoding.status + '. ' + [...geocodingErrors].join(' ') + ' Check Geocoding API activation and website key API restrictions.');
+    assert.equal(geocoding.validCoordinates, true, 'Live geocoding must return latitude and longitude.');
+    console.log('PASS live Google Geocoding API converts a typed Lagos street address to coordinates.');
   } finally {
     await send('Page.close').catch(() => {}); socket.close();
   }
