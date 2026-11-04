@@ -15,7 +15,7 @@ async function main() {
   async function navigate(route) { await send('Page.navigate', { url: 'http://127.0.0.1:3011' + route }); }
   async function click(label) { await wait(`[...document.querySelectorAll('button')].some(b => b.textContent.trim() === ${JSON.stringify(label)} && !b.disabled)`); await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(label)} && !b.disabled).click()`); }
   async function aria(label) { await wait(`!!document.querySelector('[aria-label=${JSON.stringify(label)}]')`); await evaluate(`document.querySelector('[aria-label=${JSON.stringify(label)}]').click()`); }
-  async function input(selector, value) { await evaluate(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) throw new Error('Missing input'); const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); })()`); }
+  async function input(selector, value) { await evaluate(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) throw new Error('Missing input'); const proto = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); })()`); }
   async function labelled(label, value) { const selector = await evaluate(`(() => { const labels = [...document.querySelectorAll('label')]; const el = labels.find(l => l.textContent.trim().startsWith(${JSON.stringify(label)}))?.querySelector('input,textarea'); if (!el) throw new Error('Missing labelled input'); el.dataset.qaField = ${JSON.stringify(label)}; return '[data-qa-field=' + JSON.stringify(${JSON.stringify(label)}) + ']'; })()`); await input(selector, value); }
   async function screenshot(name) { const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }); fs.writeFileSync(path.resolve(__dirname, '..', name), Buffer.from(shot.data, 'base64')); }
   const fixtures = `
@@ -54,13 +54,16 @@ async function main() {
     await send('Page.enable');await send('Runtime.enable');await send('Page.addScriptToEvaluateOnNewDocument',{source:fixtures});
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
     await navigate('/dashboard/checkout');await wait("!!document.querySelector('textarea[autocomplete=\"street-address\"]')");
-    await input('textarea[autocomplete="street-address"]','10 Example Street, Lagos');
+    await input('fieldset input[placeholder="e.g. 12B"]','10');
+    await input('fieldset input[placeholder="e.g. Admiralty Way"]','Example Street');
+    await input('select[autocomplete="address-level1"]','Lagos');
+    await input('select[autocomplete="address-level2"]','Ikeja');
     await click('Choose delivery location');
     await check("__gpsCalls===0",'opening location picker does not request permission automatically');
     await check("[...document.querySelectorAll('dialog[open] button')].find(b=>b.textContent==='Use my location').getBoundingClientRect().top<document.querySelector('dialog[open]').getBoundingClientRect().top+220",'GPS is visible before an unavailable map');
     await click('Use my location');await wait("document.querySelector('dialog[open]')?.innerText.includes('Location selected.')");await click('Use this delivery point');
     await check("document.body.innerText.includes('Delivery location selected.')",'GPS point can be confirmed without a Google map');
-    await input('textarea[autocomplete="street-address"]','20 Example Street, Lagos');
+    await input('fieldset input[placeholder="e.g. 12B"]','20');
     await check("!document.body.innerText.includes('Delivery location selected.')",'editing delivery address clears stale coordinates');
     await click('Choose delivery location');await click('Use my location');await wait("document.querySelector('dialog[open]')?.innerText.includes('Location selected.')");await click('Use this delivery point');
     await evaluate("document.querySelector('input[type=checkbox]').click()");await click('Review order');

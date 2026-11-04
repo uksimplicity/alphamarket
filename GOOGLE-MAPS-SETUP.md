@@ -10,8 +10,11 @@ as `latitude` and `longitude`. Changing the address clears its old selected poin
 The account profile coordinates are not substituted for a product's location.
 
 Checkout, saved-address editing and product creation now have House number,
-Street name, LGA and State fields. They compose a full Nigerian address while
-retaining the free-text address field for saved or manually entered addresses.
+Street name, State and LGA fields at the top. State is a dropdown including the
+FCT; LGA is a dropdown limited to the selected state. Changing state resets LGA.
+The generated full address appears underneath and is read-only. Existing saved
+addresses in the generated format repopulate their editable fields, allowing
+case and common separator differences without inventing a state/LGA match.
 Once street, LGA and state are complete, lookup runs after typing pauses for
 900 ms. A single precise building match selects internal coordinates. Partial,
 multiple, street-only or approximate results require map/GPS confirmation.
@@ -103,3 +106,26 @@ longitude succeeded. Geocoding API must remain enabled in the project that owns
 the configured website key and included in the key's API restrictions. These are
 separate settings. Hosted-key configuration and actual-device GPS remain outside
 this local verification. No actual key is recorded in this document.
+
+## Dropdown and hosting follow-up
+
+The bundled state/LGA source is
+https://github.com/temikeezy/nigeria-geojson-data/blob/main/data/lgas.json
+(source blob cfdf96821997c66c9e06986c75674ace20b5e714, MIT © 2025 Temi).
+Its license is retained in `src/data/nigeria-locations.LICENSE.txt`. Nasarawa's
+display spelling is normalized; Lagos display names follow
+https://tms.lagosstate.gov.ng/mobile/mComplianceCenter.aspx.
+No external location-data request is needed to populate the dropdowns.
+
+2026-11-04: a synthetic browser check on the hosted checkout found no Google
+Maps element, confirming the deployed build lacks NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.
+This explains automatic lookup failure there despite successful local Maps and
+geocoding checks. Add the website key to the Vercel project's Production
+environment (and Preview when needed), then rebuild/redeploy. The key is never
+committed. Hosted success must be verified after that environment update.
+
+Dropdown/layout validation: fresh production build and TypeScript passed, with
+22 focused unit/API/data checks and 14 address browser checks covering read-only
+display, field ordering, dependent dropdowns, state-change reset, stale responses,
+account changes, mobile width and geocoded order submission. Pricing and seller
+map browser checks also passed. No real orders/payments were created.

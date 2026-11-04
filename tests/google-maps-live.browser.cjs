@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 async function main() {
   const origin = process.env.MAPS_SMOKE_ORIGIN || 'http://localhost:3011';
   const parsedOrigin = new URL(origin);
-  assert.ok(['localhost', '127.0.0.1'].includes(parsedOrigin.hostname), 'Use a local preview origin for this synthetic identity check.');
+  assert.ok(['localhost', '127.0.0.1'].includes(parsedOrigin.hostname) || parsedOrigin.origin === 'https://alphamarket-weld.vercel.app', 'Use a local preview or the marketplace website for this synthetic identity check.');
   const target = await (await fetch('http://127.0.0.1:9228/json/new?about:blank', { method: 'PUT' })).json();
   const socket = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
@@ -61,6 +61,8 @@ async function main() {
     await send('Page.navigate', { url: parsedOrigin.origin + '/dashboard/checkout' });
     const choose = `[...document.querySelectorAll('button')].find(button=>button.textContent==='Choose delivery location')`;
     await wait(`!!(${choose})`); await evaluate(`${choose}.click()`);
+    await wait(`!!document.querySelector('dialog[open]')`);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Delivery map"]')`), true, 'The website build has no Google Maps key. Set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in hosting and rebuild.');
     await wait(`!!document.querySelector('dialog[open] .gm-style')`);
     // Google authorization errors can arrive after the map constructor succeeds.
     await new Promise(resolve => setTimeout(resolve, 5000));

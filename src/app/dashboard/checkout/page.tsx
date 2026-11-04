@@ -133,9 +133,8 @@ export default function CheckoutPage() {
             <div className={styles.cardHeader}><h2>Delivery Address</h2></div>
             <CheckoutAddresses address={address} contact={contact} latitude={latitude} longitude={longitude} disabled={loading || Boolean(pending)} onChoose={row => { setAddress(row.address); setContact(row.contact); setLatitude(String(row.latitude)); setLongitude(String(row.longitude)); }} />
             <fieldset className={styles.addressForm} disabled={loading || Boolean(pending)}>
-              <label>Full delivery address<textarea autoComplete="street-address" value={address} onChange={(event) => { setAddress(event.target.value); setLatitude(""); setLongitude(""); }} placeholder="Street address, city and state" /></label>
-              <label>Contact phone number<input type="tel" autoComplete="tel" value={contact} onChange={(event) => setContact(event.target.value)} /></label>
               <AddressLocationLookup address={address} onAddressChange={value => { setAddress(value); setLatitude(""); setLongitude(""); }} point={deliveryPoint(latitude, longitude)} onLocate={point => { setLatitude(String(point.latitude)); setLongitude(String(point.longitude)); }} disabled={loading || Boolean(pending)} />
+              <label>Contact phone number<input type="tel" autoComplete="tel" value={contact} onChange={(event) => setContact(event.target.value)} /></label>
               <DeliveryLocationButton point={deliveryPoint(latitude, longitude)} onConfirm={point => { setLatitude(String(point.latitude)); setLongitude(String(point.longitude)); }} disabled={loading || Boolean(pending)} />
               <p className={styles.mutedText}>Choose the delivery point, or use your current location if you are at the delivery address.</p>
               {deliveryPoint(latitude, longitude) ? <p role="status" className={styles.mutedText}>Delivery location selected.</p> : null}

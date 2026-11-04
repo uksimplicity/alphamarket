@@ -12,7 +12,7 @@ async function main() {
   async function evaluate(expression) { const result = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }); if (result.exceptionDetails) throw new Error(result.exceptionDetails.text); return result.result.value; }
   async function wait(expression) { const start = Date.now(); while (Date.now() - start < 30000) { if (await evaluate(expression)) return; await new Promise(resolve => setTimeout(resolve, 100)); } throw new Error('Timed out: ' + expression); }
   async function check(expression, label) { assert.equal(await evaluate(expression), true, label); checks++; console.log('PASS ' + label); }
-  async function field(label, value) { await evaluate(`(()=>{const input=[...document.querySelectorAll('label')].find(label=>label.firstChild?.textContent.trim()===${JSON.stringify(label)})?.querySelector('input,textarea');if(!input)throw new Error('Missing field');Object.getOwnPropertyDescriptor(input.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`); }
+  async function field(label, value) { await evaluate(`(()=>{const input=[...document.querySelectorAll('label')].find(label=>label.firstChild?.textContent.trim()===${JSON.stringify(label)})?.querySelector('input,textarea,select');if(!input)throw new Error('Missing field');Object.getOwnPropertyDescriptor(input.tagName==='SELECT'?HTMLSelectElement.prototype:input.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));})()`); }
   const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
   const selected = `document.body.innerText.includes('Delivery location selected.')`;
   try {
@@ -34,39 +34,44 @@ async function main() {
     ` });
     await send('Page.navigate', { url: 'http://127.0.0.1:3011/dashboard/checkout' });
     await wait(`!!document.querySelector('textarea[autocomplete="street-address"]')`);
-    await field('House number', '12B'); await field('Street name', 'Example Street'); await field('LGA', 'Eti-Osa');
+    await check(`document.querySelector('select[autocomplete="address-level2"]').disabled&&document.querySelector('select[autocomplete="address-level1"]').options.length===38`, 'state dropdown includes Nigeria states and FCT; LGA waits for state selection');
+    await check(`document.querySelector('textarea[autocomplete="street-address"]').readOnly`, 'generated full address is read-only');
+    await check(`document.querySelector('select[autocomplete="address-level1"]').getBoundingClientRect().top<document.querySelector('textarea[autocomplete="street-address"]').getBoundingClientRect().top`, 'editable address details appear above the generated full address');
+    await field('House number', '12B'); await field('Street name', 'Example Street'); await field('State', 'Lagos');
     await pause(1200);
     await check(`__lookups.length===0`, 'incomplete structured address does not trigger Google lookup');
-    await field('State', 'Lagos');
+    await field('LGA', 'Eti-Osa');
     await wait(selected);
     await check(`__lookups.length===1&&__lookups[0].address==='12B Example Street, Eti-Osa, Lagos, Nigeria'`, 'house, street, LGA and state form one precise address lookup');
     await check(`!__calls.some(call=>call.url==='/api/buyer/orders')`, 'locating the typed address creates no order');
     await evaluate(`window.__delay=true`); await field('State', 'Ogun');
     await check(`!(${selected})`, 'editing a structured field clears the previous coordinates');
+    await check(`document.querySelector('select[autocomplete="address-level2"]').value===''&&![...document.querySelector('select[autocomplete="address-level2"]').options].some(option=>option.value==='Eti-Osa')`, 'changing state clears the LGA and removes the old state options');
+    await field('LGA', 'Ifo');
     await wait(`__queued.length===1`);
-    await field('Full delivery address', '30 New Street, Ikeja, Lagos');
+    await field('Street name', 'New Street');
     await evaluate(`__queued.shift()()`); await pause(100);
     await check(`!(${selected})`, 'late geocoding response cannot restore coordinates for an old address');
     await wait(`__queued.length===1`);
     await evaluate(`__queued.shift()();window.__delay=false`); await wait(selected);
-    await evaluate(`window.__ambiguous=true`); await field('Full delivery address', 'Broad Street, Lagos');
+    await evaluate(`window.__ambiguous=true`); await field('Street name', 'Broad Street');
     await wait(`document.body.innerText.includes('exact delivery location on the map')`);
     await check(`!(${selected})`, 'ambiguous address requires an exact map point');
-    await evaluate(`window.__ambiguous=false;window.__denied=true`); await field('Full delivery address', '40 Example Street, Lagos');
+    await evaluate(`window.__ambiguous=false;window.__denied=true`); await field('Street name', 'Another Street');
     await wait(`document.body.innerText.includes("couldn't locate this address automatically")`);
     await check(`!![...document.querySelectorAll('button')].find(button=>button.textContent==='Retry address lookup')`, 'Google service failure leaves a retry and manual location fallback');
     await evaluate(`window.__denied=false;[...document.querySelectorAll('button')].find(button=>button.textContent==='Retry address lookup').click()`); await wait(selected);
-    await evaluate(`window.__delay=true`); await field('Full delivery address', '50 Example Street, Lagos'); await wait(`__queued.length===1`);
+    await evaluate(`window.__delay=true`); await field('Street name', 'Later Street'); await wait(`__queued.length===1`);
     await evaluate(`localStorage.setItem('alpha.auth',JSON.stringify({access_token:'other-token',user:{id:'other-buyer',role:'buyer'}}));__queued.shift()()`);
     await wait(`document.body.innerText.includes('Your account changed')`);
     await check(`!(${selected})`, 'response from an earlier account cannot select coordinates');
     await evaluate(`localStorage.setItem('alpha.auth',JSON.stringify({access_token:'lookup-test',user:{id:'lookup-buyer',role:'buyer'}}));window.__delay=false`);
-    await field('Full delivery address', '60 Example Street, Lagos'); await wait(selected);
+    await field('Street name', 'Final Street'); await wait(selected);
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await check(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`, 'structured address fields fit a mobile screen');
     await evaluate(`document.querySelector('input[type=checkbox]').click();[...document.querySelectorAll('button')].find(button=>button.textContent==='Review order').click()`);
     await wait(`__calls.some(call=>call.url==='/api/buyer/orders')`);
-    await check(`(()=>{const body=__calls.find(call=>call.url==='/api/buyer/orders').body;return body.dropoff_address==='60 Example Street, Lagos'&&body.dropoff_lat===6.6&&body.dropoff_lng===3.4})()`, 'checkout sends geocoded latitude and longitude to the backend with the address');
+    await check(`(()=>{const body=__calls.find(call=>call.url==='/api/buyer/orders').body;return body.dropoff_address==='12B Final Street, Ifo, Ogun, Nigeria'&&body.dropoff_lat===6.6&&body.dropoff_lng===3.4})()`, 'checkout sends geocoded latitude and longitude to the backend with the address');
     console.log(checks + ' address lookup browser checks passed.');
   } finally { await send('Page.close').catch(() => {}); socket.close(); }
 }

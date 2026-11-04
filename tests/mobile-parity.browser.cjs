@@ -15,8 +15,8 @@ async function main() {
   async function navigate(route) { await send('Page.navigate', { url: 'http://127.0.0.1:3011' + route }); }
   async function click(label) { await wait(`[...document.querySelectorAll('button')].some(b => b.textContent.trim() === ${JSON.stringify(label)} && !b.disabled)`); await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(label)} && !b.disabled).click()`); }
   async function aria(label) { await wait(`!!document.querySelector('[aria-label=${JSON.stringify(label)}]')`); await evaluate(`document.querySelector('[aria-label=${JSON.stringify(label)}]').click()`); }
-  async function input(selector, value) { await evaluate(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) throw new Error('Missing input'); const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); })()`); }
-  async function labelled(label, value) { const selector = await evaluate(`(() => { const labels = [...document.querySelectorAll('label')]; const el = labels.find(l => l.textContent.trim().startsWith(${JSON.stringify(label)}))?.querySelector('input,textarea'); if (!el) throw new Error('Missing labelled input'); el.dataset.qaField = ${JSON.stringify(label)}; return '[data-qa-field=' + JSON.stringify(${JSON.stringify(label)}) + ']'; })()`); await input(selector, value); }
+  async function input(selector, value) { await evaluate(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) throw new Error('Missing input'); const proto = el.tagName === 'SELECT' ? HTMLSelectElement.prototype : el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); })()`); }
+  async function labelled(label, value) { const selector = await evaluate(`(() => { const labels = [...document.querySelectorAll('label')]; const el = labels.find(l => l.textContent.trim().startsWith(${JSON.stringify(label)}))?.querySelector('input,textarea,select'); if (!el) throw new Error('Missing labelled input'); el.dataset.qaField = ${JSON.stringify(label)}; return '[data-qa-field=' + JSON.stringify(${JSON.stringify(label)}) + ']'; })()`); await input(selector, value); }
   async function screenshot(name) { const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }); fs.writeFileSync(path.resolve(__dirname, '..', name), Buffer.from(shot.data, 'base64')); }
   const fixtures = `
     if (!sessionStorage.getItem('parity-initialized')) {
@@ -92,21 +92,21 @@ async function main() {
     await wait(`typeof __releaseProfile==='function'`);
     await check(`!document.querySelector('h1')?.textContent.includes('Address Book') && !!document.querySelector('[aria-label="Loading page"]')`,'private workspace waits for backend session verification');
     await evaluate('__releaseProfile()'); await wait(`document.querySelector('h1')?.textContent==='Address Book'`);
-    await click('Add address'); await labelled('Full delivery address','Lekki gate'); await labelled('Delivery phone','08012345678');
+    await click('Add address'); await labelled('House number','10'); await labelled('Street name','Lekki gate'); await labelled('State','Lagos'); await labelled('LGA','Eti-Osa'); await labelled('Delivery phone','08012345678');
     await check(`!document.body.innerText.match(/latitude|longitude|coordinates/i)`,'address editor does not expose coordinate fields');
     await check('__gpsCalls===0', 'typed address save does not request location permission');
 
     await evaluate(`[...document.querySelectorAll('label')].find(l=>l.textContent.includes('Make default')).querySelector('input').click()`);
     await click('Save address'); await wait(`document.body.innerText.includes('Home · Default')`);
     await check(`!document.body.innerText.includes('6.6, 3.4')&&!document.body.innerText.match(/latitude|longitude/i)`,'saved addresses do not display raw coordinates');
-    await check(`__geocodeCalls.includes('Lekki gate') && __gpsCalls===0`, 'typed address saves using automatic lookup without GPS');
-    await click('Edit'); await labelled('Full delivery address','Updated Lekki gate');
+    await check(`__geocodeCalls.includes('10 Lekki gate, Eti-Osa, Lagos, Nigeria') && __gpsCalls===0`, 'typed address saves using automatic lookup without GPS');
+    await click('Edit'); await labelled('Street name','Updated Lekki gate');
     await evaluate('window.__geocodeStatus="ZERO_RESULTS"'); await click('Save address');
     await wait(`document.querySelector('[role="alert"]')?.innerText.includes('city and state')`);
-    await check(`document.querySelector('textarea').value==='Updated Lekki gate'`, 'failed lookup retains the typed address');
+    await check(`document.querySelector('textarea').value==='10 Updated Lekki gate, Eti-Osa, Lagos, Nigeria'`, 'failed lookup retains the typed address');
     await evaluate('window.__geocodeStatus="OK"'); await click('Save address');
     await wait(`!document.querySelector('textarea')`);
-    await check(`__geocodeCalls.filter(a=>a==='Updated Lekki gate').length===2`, 'editing an address clears its previous point and permits lookup retry');
+    await check(`__geocodeCalls.filter(a=>a==='10 Updated Lekki gate, Eti-Osa, Lagos, Nigeria').length===2`, 'editing an address clears its previous point and permits lookup retry');
     await navigate('/dashboard/addresses'); await wait(`document.body.innerText.includes('Updated Lekki gate')`);
     await check(`document.body.innerText.includes('Home · Default')`,'saved address, edited details and default persist across reopening');
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
@@ -118,7 +118,7 @@ async function main() {
     await navigate('/dashboard/checkout'); await wait(`!!document.querySelector('textarea[autocomplete="street-address"]')`);
     await check(`document.querySelector('textarea[autocomplete="street-address"]').value===''`,'default address is not silently applied to checkout');
     await click('Saved addresses'); await wait(`document.querySelector('dialog[open]')?.innerText.includes('Updated Lekki gate')`); await click('Use address'); await wait(`!document.querySelector('dialog[open]')`);
-    await check(`document.querySelector('textarea[autocomplete="street-address"]').value==='Updated Lekki gate'&&document.querySelector('input[autocomplete="tel"]').value==='08012345678'`,'selected address and phone populate checkout');
+    await check(`document.querySelector('textarea[autocomplete="street-address"]').value==='10 Updated Lekki gate, Eti-Osa, Lagos, Nigeria'&&document.querySelector('input[autocomplete="tel"]').value==='08012345678'`,'selected address and phone populate checkout');
     await check(`!document.body.innerText.match(/latitude|longitude|coordinates/i)`,'checkout keeps coordinates internal');
     await evaluate('window.__gpsCalls=0');
     await click('Choose delivery location'); await wait(`!!document.querySelector('dialog[open]')`); await check(`__gpsCalls===0`,'opening the picker does not request GPS');
@@ -132,7 +132,7 @@ async function main() {
     await click('Choose delivery location'); await evaluate('window.__delayGps=true'); await click('Use my location'); await click('Cancel'); await evaluate('__finishGps()');
     await check(`!document.querySelector('dialog[open]')&&document.body.innerText.includes('Delivery location selected.')`,'late GPS results cannot reopen a cancelled picker');
     await evaluate(`document.querySelector('input[type="checkbox"]').click()`); await click('Review order'); await wait(`document.body.innerText.includes('Buyer total')`); await click('Continue to Paystack'); await wait(`document.body.innerText.includes('Intentional QA payment stop.')`);
-    await check(`(()=>{const request=__calls.find(c=>c.url==='/api/buyer/orders');return request.body.dropoff_address==='Updated Lekki gate'&&request.body.dropoff_lat===7.1&&request.body.dropoff_lng===4.2&&request.body.dropoff_contact==='08012345678';})()`,'reviewed coordinates and saved address reach the existing order request');
+    await check(`(()=>{const request=__calls.find(c=>c.url==='/api/buyer/orders');return request.body.dropoff_address==='10 Updated Lekki gate, Eti-Osa, Lagos, Nigeria'&&request.body.dropoff_lat===7.1&&request.body.dropoff_lng===4.2&&request.body.dropoff_contact==='08012345678';})()`,'reviewed coordinates and saved address reach the existing order request');
     await navigate('/dashboard/orders'); await wait(`document.body.innerText.includes('Leave review')`); await click('Leave review'); await wait(`!!document.querySelector('dialog[open]')`); await aria('4 stars'); await input('dialog textarea','Arrived safely'); await click('Save draft'); await wait(`!document.querySelector('dialog[open]')`); await click('Leave review');
     await wait(`document.querySelector('dialog textarea')?.value==='Arrived safely'`); await check(`document.querySelector('dialog').innerText.includes('not published')&&document.querySelector('[aria-label="4 stars"]').getAttribute('aria-pressed')==='true'`,'review text and rating reopen as an unpublished draft'); await aria('Close review');
     await navigate('/dashboard/messages?productId=product-1'); await wait(`document.body.innerText.includes('Message seller')`);
@@ -149,7 +149,7 @@ async function main() {
     await navigate('/dashboard/notifications'); await wait(`!!document.querySelector('input[aria-label="Sound"]')&&!document.querySelector('input[aria-label="Sound"]').disabled`); await check(`!document.querySelector('input[aria-label="Sound"]').checked`,'notification choices are separate for the second account');
     await evaluate(`localStorage.setItem('alpha.auth',JSON.stringify({access_token:'seller-token',user:{id:'seller-parity',role:'seller',first_name:'Seller',last_name:'One'}}));window.dispatchEvent(new Event('alpha-auth-updated'));`);
     await navigate('/vendor/messages'); await wait(`document.body.innerText.includes('Buyer One')`); await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Buyer One')).click()`); await wait(`!!document.querySelector('#chat-message')`);
-    await input('#chat-message','Thank you for your enquiry.'); await click('Send'); await wait(`document.querySelector('#chat-message').value===''`); await check(`document.body.innerText.includes('Thank you for your enquiry.')`,'seller workspace can open the buyer conversation and reply'); await screenshot('.admin-preview-web-parity-seller-chat.png');
+    await input('#chat-message','Thank you for your enquiry.'); await click('Send'); await wait(`document.querySelector('#chat-message').value===''&&document.body.innerText.includes('Thank you for your enquiry.')`); await check(`document.body.innerText.includes('Thank you for your enquiry.')`,'seller workspace can open the buyer conversation and reply'); await screenshot('.admin-preview-web-parity-seller-chat.png');
     await navigate('/vendor/messages?unapproved=1'); await wait(`document.body.innerText.includes('approved by the service')`); await check(`!document.querySelector('#chat-message')&&!document.querySelector('nav[aria-label="Seller navigation"]')`,'saved seller role cannot bypass the server-reported buyer role');
     await evaluate(`localStorage.removeItem('alpha.auth');window.dispatchEvent(new Event('alpha-auth-updated'));`); await wait(`document.body.innerText.includes('Please sign in')`); await check(`!document.body.innerText.includes('Thank you for your enquiry.')`,'logout removes private chat content');
     assert.deepEqual(errors, []); console.log(checks + ' web parity browser checks passed.');

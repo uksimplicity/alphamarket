@@ -82,7 +82,13 @@ async function main() {
     await evaluate(`document.querySelector('form.create-form').requestSubmit()`);
     await wait(`document.body.innerText.includes('Product location is required.')`);
     assert.equal(await evaluate('__uploads===0&&__writes.length===0'), true);
-    await input('input[name="location"]','  Lagos  ');
+    async function pickup(street) {
+      await input('input[placeholder="e.g. 12B"]','10');
+      await input('input[placeholder="e.g. Admiralty Way"]',street);
+      await input('select[autocomplete="address-level1"]','Lagos');
+      await input('select[autocomplete="address-level2"]','Ikeja');
+    }
+    await pickup('Example Street');
     if (process.env.ALPHA_TEST_MAPS) {
       const click = label => evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(label)}).click()`);
       await click('Choose product location on map'); await wait(`window.__maps.length===1`);
@@ -96,9 +102,9 @@ async function main() {
       await evaluate(`__pins.at(-1).events.dragend({latLng:{lat:()=>6.7,lng:()=>3.5}})`);
       await click('Use this product location');
       await wait(`document.body.innerText.includes('Product location selected.')`);
-      await input('input[name="location"]','Lagos pickup');
+      await pickup('New pickup street');
       assert.equal(await evaluate(`!document.body.innerText.includes('Product location selected.')`),true);
-      await input('input[name="location"]','  Lagos  ');
+      await pickup('Example Street');
       await click('Choose product location on map'); await wait(`__maps.length===3`);
       await click('Use my location'); await wait(`__pins.at(-1).position.lat===7.3&&__pins.at(-1).position.lng===4.5`);
       await evaluate(`window.dispatchEvent(new Event('alpha-maps-auth-failure'))`);
@@ -129,7 +135,7 @@ async function main() {
     assert.equal(created.categoryId, 'category-1');
     assert.equal(created.productTypeId, 'type-1');
     assert.equal(created.shortDescription, 'A simple chair for everyday use.');
-    assert.equal(created.location, 'Lagos');
+    assert.equal(created.location, '10 Example Street, Ikeja, Lagos, Nigeria');
     assert.equal(created.brandName, 'Acme');
     if (process.env.ALPHA_TEST_MAPS) { assert.equal(created.latitude,7.3); assert.equal(created.longitude,4.5); }
     assert.equal(created.media.images.length, 1);

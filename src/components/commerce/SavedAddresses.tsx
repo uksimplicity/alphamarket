@@ -34,9 +34,8 @@ export function AddressEditor({ existing, initial, primary = false, onSaved, onC
   }}>
     <h2>{existing ? "Edit address" : "New address"}</h2><p className={styles.muted}>Saved on this browser for your account.</p>
     <label>Address name<input value={label} disabled={saving} onChange={e => setLabel(e.target.value)} required /></label>
-    <label>Full delivery address<textarea autoComplete="street-address" value={address} disabled={saving} onChange={e => { setAddress(e.target.value); setLatitude(""); setLongitude(""); setError(""); }} required /></label>
-    <label>Delivery phone<input type="tel" value={contact} disabled={saving} onChange={e => setContact(e.target.value)} /></label>
     <AddressLocationLookup address={address} onAddressChange={value => { setAddress(value); setLatitude(""); setLongitude(""); setError(""); }} point={deliveryPoint(latitude, longitude)} disabled={saving} onLocate={point => { setLatitude(String(point.latitude)); setLongitude(String(point.longitude)); setError(""); }} />
+    <label>Delivery phone<input type="tel" value={contact} disabled={saving} onChange={e => setContact(e.target.value)} /></label>
     <DeliveryLocationButton disabled={saving} point={deliveryPoint(latitude, longitude)} onConfirm={point => { try { checkAccount(stamp); setLatitude(String(point.latitude)); setLongitude(String(point.longitude)); setError(""); } catch (failure) { setError((failure as Error).message); } }} />
     {deliveryPoint(latitude, longitude) ? <p role="status" className={styles.muted}>Delivery location selected.</p> : null}
     <label className={styles.check}><input type="checkbox" checked={isDefault} disabled={saving} onChange={e => setDefault(e.target.checked)} />Make default address</label>

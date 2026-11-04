@@ -973,9 +973,7 @@ export default function CreateProduct({ mode = "seller" }) {
             </div>
             <div className="form-grid">
               <div className="field">
-                <label htmlFor="product-location">Location *</label>
-                <input id="product-location" name="location" aria-required="true" value={form.location} onChange={handleChange} />
-                <AddressLocationLookup address={form.location} onAddressChange={value => { setForm(previous => ({ ...previous, location: value })); setProductPoint(null); }} point={productPoint} onLocate={setProductPoint} disabled={loading} />
+                <AddressLocationLookup addressLabel="Full pickup address" addressId="product-location" addressName="location" address={form.location} onAddressChange={value => { setForm(previous => ({ ...previous, location: value })); setProductPoint(null); }} point={productPoint} onLocate={setProductPoint} disabled={loading} />
                 <DeliveryLocationButton purpose="product" point={productPoint} onConfirm={setProductPoint} disabled={loading} />
                 {productPoint ? <p role="status" className="text-sm text-slate-500">Product location selected.</p> : null}
               </div>
