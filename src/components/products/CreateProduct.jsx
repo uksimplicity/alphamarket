@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import "@/components/products/CreateProduct.css";
 import { getAuth } from "@/components/auth/authStorage";
@@ -77,6 +77,8 @@ function walkRecords(payload, target = []) {
   const idCandidate = getValueCaseInsensitive(record, [
     "id",
     "uuid",
+    "brand_id",
+    "brandId",
     "category_id",
     "categoryId",
     "product_type_id",
@@ -87,6 +89,8 @@ function walkRecords(payload, target = []) {
   const nameCandidate = getValueCaseInsensitive(record, [
     "name",
     "title",
+    "brand_name",
+    "brandName",
     "category",
     "type",
     "productType",
@@ -113,6 +117,8 @@ function parseOptions(payload) {
         getValueCaseInsensitive(row, [
           "id",
           "uuid",
+          "brand_id",
+          "brandId",
           "category_id",
           "categoryId",
           "product_type_id",
@@ -125,6 +131,8 @@ function parseOptions(payload) {
         getValueCaseInsensitive(row, [
           "name",
           "title",
+          "brand_name",
+          "brandName",
           "category",
           "type",
           "productType",
@@ -277,7 +285,6 @@ const ADMIN_PRODUCT_TYPES_CACHE_KEY = "alpha.admin.product-types";
 const MAX_PRODUCT_PRICE = 1000000000;
 const MAX_PRODUCT_STOCK = 1000000;
 const MAX_DISCOUNT_PRICE = 1000000000;
-const CATALOG_POLL_INTERVAL_MS = 5000;
 
 function parsePositivePrice(value) {
   const numeric = Number(value);
@@ -344,6 +351,8 @@ function readCachedAdminProductTypes() {
 }
 
 export default function CreateProduct({ mode = "seller" }) {
+  // Reuse requests across development effect replays for this form instance.
+  const catalogRequests = useRef(new Map());
   const [form, setForm] = useState(initialForm);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [typeOptions, setTypeOptions] = useState([]);
@@ -352,6 +361,7 @@ export default function CreateProduct({ mode = "seller" }) {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [categoryLoading, setCategoryLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
+  const [brandError, setBrandError] = useState("");
   const [discountEnabled, setDiscountEnabled] = useState(false);
   const [submitIntent, setSubmitIntent] = useState("publish");
   const [loading, setLoading] = useState(false);
@@ -365,35 +375,46 @@ export default function CreateProduct({ mode = "seller" }) {
   useEffect(() => {
     let isMounted = true;
 
+    function requestOnce(key, request) {
+      if (!catalogRequests.current.has(key)) {
+        catalogRequests.current.set(key, request());
+      }
+      return catalogRequests.current.get(key);
+    }
+
     async function requestCatalog(resource) {
-      const auth = getAuth();
-      const token = auth?.access_token;
-      const authorization = buildAuthorizationHeader(token);
-      const response = await fetch(
-        `/api/seller/catalog?resource=${encodeURIComponent(resource)}&limit=200&offset=0`,
-        {
+      return requestOnce(resource, async () => {
+        const auth = getAuth();
+        const token = auth?.access_token;
+        const authorization = buildAuthorizationHeader(token);
+        const response = await fetch(
+          `/api/seller/catalog?resource=${encodeURIComponent(resource)}&limit=200&offset=0`,
+          {
+            headers: {
+              Accept: "application/json",
+              ...(authorization ? { Authorization: authorization } : {}),
+            },
+          }
+        );
+        if (!response.ok) throw new Error(`Could not load ${resource} (${response.status}).`);
+        return response.json();
+      });
+    }
+
+    async function requestAdminCategories() {
+      return requestOnce("admin-categories", async () => {
+        const auth = getAuth();
+        const token = auth?.access_token;
+        const authorization = buildAuthorizationHeader(token);
+        const response = await fetch("/api/admin/categories/raw", {
           headers: {
             Accept: "application/json",
             ...(authorization ? { Authorization: authorization } : {}),
           },
-        }
-      );
-      if (!response.ok) throw new Error(`Could not load ${resource} (${response.status}).`);
-      return response.json();
-    }
-
-    async function requestAdminCategories() {
-      const auth = getAuth();
-      const token = auth?.access_token;
-      const authorization = buildAuthorizationHeader(token);
-      const response = await fetch("/api/admin/categories/raw", {
-        headers: {
-          Accept: "application/json",
-          ...(authorization ? { Authorization: authorization } : {}),
-        },
+        });
+        if (!response.ok) throw new Error(`Could not load admin categories (${response.status}).`);
+        return response.json();
       });
-      if (!response.ok) throw new Error(`Could not load admin categories (${response.status}).`);
-      return response.json();
     }
 
     async function loadCatalog() {
@@ -479,6 +500,11 @@ export default function CreateProduct({ mode = "seller" }) {
           );
         }
         if (brandsResult.status === "rejected") {
+          setBrandError(
+            brandsResult.reason instanceof Error
+              ? brandsResult.reason.message
+              : "Failed to load brands."
+          );
           failedMessages.push(
             brandsResult.reason instanceof Error
               ? brandsResult.reason.message
@@ -522,24 +548,9 @@ export default function CreateProduct({ mode = "seller" }) {
       }
     }
 
-    const pollId = window.setInterval(() => {
-      if (isMounted) {
-        void loadCatalog();
-      }
-    }, CATALOG_POLL_INTERVAL_MS);
-
-    const handleFocus = () => {
-      if (isMounted) {
-        void loadCatalog();
-      }
-    };
-    window.addEventListener("focus", handleFocus);
-
     void loadCatalog();
     return () => {
       isMounted = false;
-      window.clearInterval(pollId);
-      window.removeEventListener("focus", handleFocus);
     };
   }, []);
 
@@ -910,7 +921,8 @@ export default function CreateProduct({ mode = "seller" }) {
                     </option>
                   ))}
                 </select>
-                {!catalogLoading && !hasBrandOptions ? (
+                {brandError ? <div className="mt-2 text-xs text-red-600" role="alert">{brandError}</div> : null}
+                {!catalogLoading && !brandError && !hasBrandOptions ? (
                   <div className="mt-2 text-xs text-slate-500">No brands available yet.</div>
                 ) : null}
               </div>

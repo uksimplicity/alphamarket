@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:payments": "node --test tests/payments.test.cjs",
-    "test:seller": "node --test tests/seller-data.test.cjs tests/seller-products.test.cjs",
+    "test:seller": "node --test tests/seller-data.test.cjs tests/seller-products.test.cjs tests/create-product-catalog.test.cjs",
     "test:escrow": "node --test tests/escrow.test.cjs",
     "test:payouts": "node --test tests/payouts.test.cjs",
     "test:buyer": "node --test tests/buyer.test.cjs",
