@@ -25,6 +25,9 @@ async function main() {
     const names=['Everyday Headphones','Urban Trainers','Home Accent Chair','Hydrating Serum','Everyday Backpack','Smart Watch','Desk Audio System','Studio Speakers','Travel Bag','Cotton Shirt','Wireless Microphone','Studio Speakers 12'];
     const images=['photo-1505740420928-5e560c06d30e','photo-1542291026-7eec264c27ff','photo-1505691938895-1758d7feb511','photo-1585238342028-4bbc7c0f0cb5','photo-1509769375558-7c1fefe0f0de','photo-1523275335684-37898b6baf30'];
     window.__products=(options.has('pages')?Array.from({length:125},(_,index)=>index===124?'Future find':('Catalog find '+index)):names).map((name,index)=>({id:'live-'+index,name,base_price:2500+index*500,stock:index===1?0:5,status:'published',description:'Thoughtfully chosen for your everyday. Real product details from the seller.',category:index===2?'Home & living':index===3?'Beauty':index===1||index===4||index===5||index===8||index===9?'Style':'Electronics',image:'https://images.unsplash.com/'+images[index%images.length]+'?auto=format&fit=crop&w=650&q=80',media:index===0?{images:['https://images.unsplash.com/'+images[0]+'?auto=format&fit=crop&w=650&q=80','https://images.unsplash.com/'+images[5]+'?auto=format&fit=crop&w=650&q=80']}:undefined,seller:{name:'The Everyday Store',slug:'everyday-store'}}));
+    __products[0].location='Ikeja, Lagos';
+    __products[1].seller.location='Wuse 2, Abuja';
+    __products[2].seller.location='A long seller location in the Central Business District, Victoria Island, Lagos';
     const realFetch=window.fetch.bind(window);
     window.fetch=async(input,init={})=>{
       const url=typeof input==='string'?input:input.url;
@@ -43,6 +46,8 @@ async function main() {
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
     await navigate('/dashboard/home');
     await wait(`document.body.innerText.includes('Welcome back, Amara') && document.querySelectorAll('article').length===8`);
+    await check(`document.querySelector('article [aria-label="Seller location: Ikeja, Lagos"]')?.textContent==='Ikeja, Lagos' && document.querySelector('article [aria-label="Seller location: Wuse 2, Abuja"]')?.textContent==='Wuse 2, Abuja'`,'seller locations are visible directly on product cards');
+    await check(`document.querySelector('article [aria-label="Seller location: Location not provided"]')!==null`,'missing seller locations are stated without invented addresses');
     await check(`document.querySelectorAll('header[role="banner"]').length<=1 && document.querySelectorAll('nav[aria-label="Account navigation"] a[aria-current="page"]').length===1`,'dashboard has one active account navigation and a consistent shell');
     await check(`document.body.innerText.includes('order') && document.body.innerText.includes('Everyday Headphones') && document.body.innerText.includes('Payment received')`,'real order activity is visible');
     await check(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`,'desktop dashboard fits viewport');
@@ -70,6 +75,9 @@ async function main() {
     await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true}); await check(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`,'mobile product detail fits viewport'); await screenshot('.admin-preview-buyer-product-mobile.png');
     await navigate('/products/urban-runner-sneakers'); await wait(`document.querySelector('h1')?.textContent==='Urban Runner Sneakers'`); await check(`[...document.querySelectorAll('button')].find(item=>item.textContent==='Preview item').disabled && !document.body.innerText.includes('Rated 4.7')`,'catalog example cannot masquerade as purchasable seller stock');
     await navigate('/dashboard/home'); await wait(`document.querySelectorAll('article').length===8`); await check(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`,'mobile dashboard fits viewport'); await screenshot('.admin-preview-buyer-dashboard-mobile.png');
+    await check(`document.querySelector('article [aria-label="Seller location: Ikeja, Lagos"]')?.getBoundingClientRect().width > 0`,'seller locations remain visible on mobile cards');
+    await evaluate(`document.querySelector('article').scrollIntoView({block:'center'})`);
+    await screenshot('.admin-preview-buyer-seller-location-mobile.png');
     await evaluate(`localStorage.setItem('alpha.auth',JSON.stringify({access_token:'other-token',user:{id:'other-buyer',role:'buyer',first_name:'New'}}));window.dispatchEvent(new Event('alpha-auth-updated'));`); await wait(`!document.body.innerText.includes('Previous good find')`); await check(`!document.querySelector('[aria-label="Unsave Everyday Headphones"]')`,'account change clears previous saved items and order activity');
     await navigate('/dashboard/home?empty=1'); await wait(`document.body.innerText.includes('Collection preview') && document.querySelectorAll('article').length===8`); await check(`!document.querySelector('button[aria-label^="Add "]')`,'empty public catalog shows clearly labelled non-purchasable previews');
     await navigate('/dashboard/home?failure=1'); await wait(`document.body.innerText.includes("We couldn't load the latest listings.")`); await check(`document.querySelector('[role="alert"]')!==null && document.body.innerText.includes('Collection previews are shown below.')`,'catalog failure is visible rather than presented as live data');

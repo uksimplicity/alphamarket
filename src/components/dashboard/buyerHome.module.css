@@ -15,3 +15,6 @@
 .heading p, .sectionHeading p, .productSeller, .stat small { color: #71839d; }
 .productCategory { color: #7589a7; }.productTitle { color: #344d70; }
 @media (max-width: 640px) { .hero h2 { font-size: 28px; letter-spacing: -1.2px; } }
+.productLocation { display: flex; align-items: flex-start; gap: 5px; min-width: 0; color: #50698c; font-size: 11px; font-weight: 500; line-height: 1.5; }
+.productLocation > svg { flex-shrink: 0; margin-top: 1px; color: #527be1; }
+.productLocation > span { min-width: 0; overflow-wrap: anywhere; }

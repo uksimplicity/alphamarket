@@ -31,6 +31,17 @@ test('catalog pagination advances by raw rows and preserves unknown totals', () 
   assert.throws(() => buyer.buyerCatalogPage({ data: { products: [{ id: 'a' }], offset: 0 } }, 2, 2), /unexpected page/);
 });
 
+test('buyer cards receive public seller or listing locations without inventing an address', () => {
+  const products = buyer.buyerProducts({ data: { products: [
+    { id: 'listing-location', location: '  Wuse 2, Abuja  ' },
+    { id: 'seller-location', location: 'Listing address', seller: { location: 'Ikeja, Lagos' } },
+    { id: 'snake-location', seller_location: 'Ibadan, Oyo' },
+    { id: 'camel-location', sellerLocation: 'Benin City, Edo' },
+    { id: 'missing-location' },
+  ] } });
+  assert.deepEqual(products.map(product => product.seller.location), ['Wuse 2, Abuja', 'Ikeja, Lagos', 'Ibadan, Oyo', 'Benin City, Edo', '']);
+});
+
 test('public product links resolve beyond 100 rows without seller privileges or premature 404s', async () => {
   const originalFetch = global.fetch, previousBase = process.env.NEXT_PUBLIC_API_BASE_URL;
   process.env.NEXT_PUBLIC_API_BASE_URL = 'https://backend.test/api/v1';
