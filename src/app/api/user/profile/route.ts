@@ -21,7 +21,7 @@ async function proxyProfile(req: Request, method: "GET" | "PUT") {
     headers["Content-Type"] = "application/json";
   }
 
-  const urls = Array.from(
+  const urls = method === "PUT" ? [`${API_V1_BASE}/user/profile`] : Array.from(
     new Set([`${API_V1_BASE}/user/profile`, `${API_BASE}/user/profile`])
   );
 

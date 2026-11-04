@@ -189,6 +189,8 @@ export default function ProfilePage() {
                 state: "",
                 country: "",
                 postalCode: "",
+                latitude: null,
+                longitude: null,
                 profilePicture: uploadedUrl,
               }
       );

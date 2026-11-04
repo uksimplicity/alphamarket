@@ -10,6 +10,12 @@ import {
   verifyPhoneOtp,
 } from "@/components/auth/profileClient";
 import { Button, ErrorState, Skeleton } from "@/components/dashboard/ui";
+import AddressLocationLookup from "@/components/commerce/AddressLocationLookup";
+import DeliveryLocationButton from "@/components/commerce/deliveryLocation";
+import { deliveryPoint } from "@/components/commerce/addresses";
+import { readAddressDetails } from "@/components/commerce/structuredAddress";
+import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
+import localStyles from "@/components/commerce/localFeatures.module.css";
 
 type ProfileData = {
   name: string;
@@ -37,6 +43,7 @@ function isAllowedProfileImage(file: File) {
 }
 
 function formatAddressDetail(input: UpdateProfileInput) {
+  if (input.address?.trim().endsWith(", Nigeria")) return input.address.trim();
   return [input.address, input.city, input.state, input.country, input.postalCode]
     .filter(Boolean)
     .join(", ");
@@ -104,6 +111,8 @@ export default function VendorProfile() {
           state: profile.state,
           country: profile.country,
           postalCode: profile.postalCode,
+          latitude: profile.latitude ?? undefined,
+          longitude: profile.longitude ?? undefined,
         },
         addresses: [
           {
@@ -136,7 +145,8 @@ export default function VendorProfile() {
   const openAddressEditor = () => {
     if (!data) return;
     setAddressMode("edit");
-    setAddressForm(latestSavedForm ?? data.addressForm);
+    const saved = latestSavedForm ?? data.addressForm;
+    setAddressForm({ ...saved, address: formatAddressDetail(saved) });
     setAddressError("");
     setAddressSuccess("");
     setAddressModalOpen(true);
@@ -158,11 +168,21 @@ export default function VendorProfile() {
 
   const submitAddress = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (addressSaving) return;
     setAddressSaving(true);
     setAddressError("");
     setAddressSuccess("");
     try {
+      const stamp = accountStamp();
+      const details = readAddressDetails(addressForm.address || "");
+      if (!details.street.trim() || !details.state || !details.lga) throw new Error("Enter your street name and select the pickup state and local government area before saving.");
+      const point = deliveryPoint(String(addressForm.latitude ?? ""), String(addressForm.longitude ?? ""));
+      if (!addressForm.address?.trim() || !point || point.latitude === 0 && point.longitude === 0) throw new Error("Locate your pickup address or choose its exact point on the map before saving.");
       await updateCurrentUserProfile(addressForm);
+      checkAccount(stamp);
+      const saved = await fetchCurrentUserProfile();
+      checkAccount(stamp);
+      if (saved.latitude === null || saved.longitude === null || Math.abs(saved.latitude - point.latitude) > 0.00001 || Math.abs(saved.longitude - point.longitude) > 0.00001) throw new Error("The saved pickup location could not be confirmed. Refresh your profile before retrying.");
       const nextDetail = formatAddressDetail(addressForm) || "Add an address to continue.";
       setLatestSavedAddress(nextDetail);
       setLatestSavedForm({ ...addressForm });
@@ -514,56 +534,16 @@ export default function VendorProfile() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/45 px-4">
           <form
             onSubmit={submitAddress}
-            className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-card"
+            className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-card"
           >
             <div className="mb-4 text-lg font-semibold text-slate-900">
               {addressMode === "add" ? "Add New Address" : "Edit Address"}
             </div>
-            <div className="grid gap-3">
-              <input
-                className="h-11 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-brand"
-                placeholder="Street address"
-                value={addressForm.address}
-                onChange={(event) =>
-                  setAddressForm((prev) => ({ ...prev, address: event.target.value }))
-                }
-              />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <input
-                  className="h-11 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-brand"
-                  placeholder="City"
-                  value={addressForm.city}
-                  onChange={(event) =>
-                    setAddressForm((prev) => ({ ...prev, city: event.target.value }))
-                  }
-                />
-                <input
-                  className="h-11 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-brand"
-                  placeholder="State"
-                  value={addressForm.state}
-                  onChange={(event) =>
-                    setAddressForm((prev) => ({ ...prev, state: event.target.value }))
-                  }
-                />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <input
-                  className="h-11 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-brand"
-                  placeholder="Country"
-                  value={addressForm.country}
-                  onChange={(event) =>
-                    setAddressForm((prev) => ({ ...prev, country: event.target.value }))
-                  }
-                />
-                <input
-                  className="h-11 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-brand"
-                  placeholder="Postal code"
-                  value={addressForm.postalCode}
-                  onChange={(event) =>
-                    setAddressForm((prev) => ({ ...prev, postalCode: event.target.value }))
-                  }
-                />
-              </div>
+            <div className={localStyles.form}>
+              <AddressLocationLookup addressLabel="Full pickup address" address={addressForm.address || ""} disabled={addressSaving} point={addressForm.latitude === 0 && addressForm.longitude === 0 ? null : deliveryPoint(String(addressForm.latitude ?? ""), String(addressForm.longitude ?? ""))} onAddressChange={value => { const details = readAddressDetails(value); setAddressForm(previous => ({ ...previous, address: value, city: details.lga, state: details.state, country: "Nigeria", latitude: undefined, longitude: undefined })); setAddressError(""); }} onLocate={point => setAddressForm(previous => ({ ...previous, ...point }))} />
+              <DeliveryLocationButton purpose="product" disabled={addressSaving} point={addressForm.latitude === 0 && addressForm.longitude === 0 ? null : deliveryPoint(String(addressForm.latitude ?? ""), String(addressForm.longitude ?? ""))} onConfirm={point => { setAddressForm(previous => ({ ...previous, ...point })); setAddressError(""); }} />
+              {addressForm.latitude !== undefined && addressForm.longitude !== undefined && !(addressForm.latitude === 0 && addressForm.longitude === 0) ? <p role="status">Pickup location selected.</p> : null}
+              <p className="text-sm text-slate-500">Save the location where riders collect your orders.</p>
               {addressError ? <div className="text-sm text-red-600">{addressError}</div> : null}
             </div>
             <div className="mt-5 flex justify-end gap-2">

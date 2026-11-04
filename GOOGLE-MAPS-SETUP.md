@@ -124,6 +124,13 @@ geocoding checks. Add the website key to the Vercel project's Production
 environment (and Preview when needed), then rebuild/redeploy. The key is never
 committed. Hosted success must be verified after that environment update.
 
+Resolved later on 2026-11-04: the user saved the website key in Vercel. Rebuild
+commit `6e2ba98e800b7ea661d470038253cf552d692d42` deployed successfully. The live
+smoke check on https://alphamarket-weld.vercel.app passed both map loading/click
+selection/confirmation and converting a typed Lagos street address into valid
+latitude and longitude. The check used synthetic application API responses and
+created no real orders, payments or messages.
+
 Dropdown/layout validation: fresh production build and TypeScript passed, with
 22 focused unit/API/data checks and 14 address browser checks covering read-only
 display, field ordering, dependent dropdowns, state-change reset, stale responses,

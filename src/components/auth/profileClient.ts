@@ -59,10 +59,14 @@ export type CurrentUserProfile = {
   state: string;
   country: string;
   postalCode: string;
+  latitude: number | null;
+  longitude: number | null;
   profilePicture: string;
 };
 
 export type UpdateProfileInput = {
+  latitude?: number;
+  longitude?: number;
   address?: string;
   city?: string;
   state?: string;
@@ -379,6 +383,8 @@ export async function fetchCurrentUserProfile(): Promise<CurrentUserProfile> {
     state: toText(finalAddress.state),
     country: toText(finalAddress.country),
     postalCode: toText(finalAddress.postalCode),
+    latitude: record.latitude !== null && record.latitude !== undefined && String(record.latitude).trim() && Number.isFinite(Number(record.latitude)) ? Number(record.latitude) : null,
+    longitude: record.longitude !== null && record.longitude !== undefined && String(record.longitude).trim() && Number.isFinite(Number(record.longitude)) ? Number(record.longitude) : null,
     profilePicture: finalProfilePicture,
   };
 }
@@ -388,7 +394,11 @@ export async function updateCurrentUserProfile(input: UpdateProfileInput): Promi
   const token = auth?.access_token;
   const userKey = getUserCacheKey();
 
-  const payload: Record<string, string> = {
+  if (input.latitude !== undefined || input.longitude !== undefined) {
+    if (typeof input.latitude !== "number" || typeof input.longitude !== "number" || !Number.isFinite(input.latitude) || !Number.isFinite(input.longitude) || Math.abs(input.latitude) > 90 || Math.abs(input.longitude) > 180 || input.latitude === 0 && input.longitude === 0) throw new Error("Choose a valid pickup location before saving.");
+  }
+  const payload: Record<string, string | number> = {
+    ...(input.latitude !== undefined ? { latitude: input.latitude, longitude: input.longitude! } : {}),
     ...(typeof input.address === "string" ? { address: input.address } : {}),
     ...(typeof input.city === "string" ? { city: input.city } : {}),
     ...(typeof input.state === "string" ? { state: input.state } : {}),
