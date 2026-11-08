@@ -1,7 +1,61 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const load = require('./support/load-ts.cjs');
-const { orderPricing, pricingTotal } = load('src/components/commerce/orderPricing.ts');
+const { orderPricing, pricingTotal, checkoutPricing } = load('src/components/commerce/orderPricing.ts');
+test('missing delivery fee is buyer total minus recorded products, excluding commission', () => {
+  const pricing = orderPricing({ subtotal: '45000', TotalAmount: '47250', commission_percentage: 5 });
+  assert.equal(pricing.deliveryFee, 2250);
+  assert.equal(pricing.adminCommission, 2250);
+  assert.equal(pricing.sellerProceeds, 42750);
+  assert.deepEqual(pricing.issues, []);
+  assert.equal(orderPricing({ items: [{ unit_price: '12.34', quantity: 3 }], total_amount: '38.27' }).deliveryFee, 1.25);
+  assert.equal(orderPricing({ subtotal: 45000, total_amount: 45000 }).deliveryFee, 0);
+});
+test('checkout uses frozen listed prices when the live order has no items or subtotal', () => {
+  const snapshot = JSON.stringify([{ id: 'helmet', price: 45000, qty: 1 }]);
+  const live = orderPricing({ ID: 'synthetic-order', TotalAmount: '47250', Commission: '2250', Items: null });
+  const pricing = checkoutPricing([live], snapshot);
+  assert.equal(pricing.productSubtotal, 45000);
+  assert.equal(pricing.deliveryFee, 2250);
+  assert.equal(pricing.buyerTotal, 47250);
+  assert.equal(pricing.adminCommission, null);
+  assert.deepEqual(pricing.issues, []);
+});
+test('checkout subtracts the cart subtotal once across multiple seller orders', () => {
+  const snapshot = JSON.stringify([{ id: 'one', price: 100, qty: 2 }, { id: 'two', price: 50, qty: 3 }]);
+  const pricing = checkoutPricing([orderPricing({ TotalAmount: 230 }), orderPricing({ TotalAmount: 170 })], snapshot);
+  assert.equal(pricing.productSubtotal, 350);
+  assert.equal(pricing.deliveryFee, 50);
+  assert.equal(pricing.buyerTotal, 400);
+  assert.equal(checkoutPricing([orderPricing({ TotalAmount: 230 }), orderPricing({})], snapshot).deliveryFee, null);
+});
+test('explicit backend fees and recorded subtotals take priority over the snapshot', () => {
+  const snapshot = JSON.stringify([{ id: 'one', price: 1, qty: 1 }]);
+  assert.equal(checkoutPricing([orderPricing({ subtotal: 45000, total_amount: 47250 })], snapshot).deliveryFee, 2250);
+  assert.equal(checkoutPricing([orderPricing({ total_amount: 47250, delivery_fee: 0 })], snapshot).deliveryFee, 0);
+  assert.equal(checkoutPricing([orderPricing({ subtotal: 45000, total_amount: 47250, delivery_fee: 100 })], snapshot).deliveryFee, 100);
+});
+test('invalid snapshots, invalid amounts and negative differences never become delivery fees', () => {
+  const value = orderPricing({ TotalAmount: 100 });
+  for (const snapshot of [undefined, 'invalid', '{}', '[]', '[{}]', JSON.stringify([{ id: 'one', price: -1, qty: 1 }]), JSON.stringify([{ id: 'one', price: 1, qty: 1.5 }]), JSON.stringify([{ id: 'one', price: 1, qty: '2' }])]) {
+    assert.equal(checkoutPricing([value], snapshot).deliveryFee, null);
+  }
+  const negative = checkoutPricing([value], JSON.stringify([{ id: 'one', price: 101, qty: 1 }]));
+  assert.equal(negative.deliveryFee, null);
+  assert.match(negative.issues.join(' '), /less than/);
+  assert.match(orderPricing({ subtotal: 101, total_amount: 100 }).issues.join(' '), /less than/);
+  const invalid = checkoutPricing([orderPricing({ subtotal: 90, total_amount: 100, delivery_fee: 'invalid' })], JSON.stringify([{ id: 'one', price: 90, qty: 1 }]));
+  assert.equal(invalid.deliveryFee, null);
+  assert.ok(invalid.issues.length);
+});
+test('live capitalized total does not imply a delivery fee or a commission interpretation', () => {
+  const pricing = orderPricing({ ID: 'synthetic-order', TotalAmount: '47250', Commission: '2250', Items: null });
+  assert.equal(pricing.buyerTotal, 47250);
+  assert.equal(pricing.deliveryFee, null);
+  assert.equal(pricing.productSubtotal, null);
+  assert.equal(pricing.adminCommission, null);
+  assert.deepEqual(pricing.issues, []);
+});
 test('buyer pays products plus delivery; seller receives products minus admin commission', () => {
   assert.deepEqual(orderPricing({ subtotal: '10000', delivery_fee: '1500', commission_percentage: '10' }), {
     productSubtotal: 10000, deliveryFee: 1500, buyerTotal: 11500, commissionPercentage: 10, adminCommission: 1000, sellerProceeds: 9000, issues: [],

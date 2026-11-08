@@ -25,8 +25,9 @@ export function orderPricing(payload: unknown): OrderPricing {
     return value;
   }
   let subtotal = money(["product_subtotal", "items_subtotal", "subtotal", "subtotal_amount"]);
-  const delivery = money(["delivery_fee", "deliveryFee", "shipping_fee"]);
-  let total = money(["buyer_total", "total_amount", "totalAmount", "total", "amount"]);
+  const deliveryKeys = ["delivery_fee", "deliveryFee", "shipping_fee"];
+  let delivery = money(deliveryKeys);
+  let total = money(["buyer_total", "total_amount", "totalAmount", "TotalAmount", "total", "amount"]);
   let commission = money(["admin_commission", "commission_amount", "commission_amt", "platform_commission_amount"]);
   let seller = money(["seller_proceeds", "seller_net_amount", "seller_payout_amount"]);
   const percentageRaw = first(source, ["commission_percentage"]);
@@ -41,6 +42,12 @@ export function orderPricing(payload: unknown): OrderPricing {
     }
   }
   if (subtotal === null && total !== null && delivery !== null && total >= delivery) subtotal = total - delivery;
+  // Until the backend exposes a separate fee, display the difference requested
+  // by the marketplace: buyer total minus the seller's product subtotal.
+  if (first(source, deliveryKeys) === undefined && subtotal !== null && total !== null) {
+    if (total >= subtotal) delivery = total - subtotal;
+    else issues.push("The buyer total is less than the product subtotal.");
+  }
   if (total !== null && delivery !== null && delivery > total) issues.push("The delivery fee exceeds the buyer total.");
   if (total === null && subtotal !== null && delivery !== null && Number.isSafeInteger(subtotal + delivery)) total = subtotal + delivery;
   if (subtotal !== null && delivery !== null && total !== null && subtotal + delivery !== total) issues.push("The buyer total does not match the product subtotal plus delivery.");
@@ -63,5 +70,32 @@ export function pricingTotal(values: OrderPricing[]): OrderPricing {
     return Number.isSafeInteger(cents) ? cents / 100 : null;
   };
   return { productSubtotal: sum("productSubtotal"), deliveryFee: sum("deliveryFee"), buyerTotal: sum("buyerTotal"), commissionPercentage: null, adminCommission: sum("adminCommission"), sellerProceeds: sum("sellerProceeds"), issues: [...new Set(values.flatMap(value => value.issues))] };
+}
+
+// The cart snapshot belongs to the submitted checkout, not the current cart or
+// today's catalogue. Aggregate once across all seller orders; never apply the
+// entire cart subtotal separately to each order.
+export function checkoutPricing(values: OrderPricing[], cartKey?: string): OrderPricing {
+  const pricing = pricingTotal(values);
+  if (pricing.deliveryFee !== null || pricing.buyerTotal === null || pricing.issues.length) return pricing;
+  let subtotal = pricing.productSubtotal;
+  if (subtotal === null && cartKey) {
+    try {
+      const items = JSON.parse(cartKey);
+      if (!Array.isArray(items) || !items.length) return pricing;
+      let cents = 0;
+      for (const input of items) {
+        const item = row(input), price = kobo(item.price), quantity = item.qty;
+        if (typeof item.id !== "string" || !item.id.trim() || price === null || typeof quantity !== "number" || !Number.isSafeInteger(quantity) || quantity < 1 || !Number.isSafeInteger(price * quantity)) return pricing;
+        cents += price * quantity;
+        if (!Number.isSafeInteger(cents)) return pricing;
+      }
+      subtotal = cents / 100;
+    } catch { return pricing; }
+  }
+  if (subtotal === null) return pricing;
+  const difference = Math.round(pricing.buyerTotal * 100) - Math.round(subtotal * 100);
+  if (difference < 0) return { ...pricing, productSubtotal: subtotal, issues: ["The buyer total is less than the product subtotal."] };
+  return { ...pricing, productSubtotal: subtotal, deliveryFee: difference / 100 };
 }
 export const pricingMoney = (value: number | null) => value === null ? "Not reported" : new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);

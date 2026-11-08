@@ -34,6 +34,18 @@ commission settings and payout amounts. The backend determines the charge.
 
 ## Pricing data
 
+Update, 8 November 2026: at the user's request, when a separate delivery fee is
+absent, display buyer total minus product subtotal as delivery. Recorded order
+subtotals/item prices take priority. If all seller orders together omit their
+subtotal/items (as in the live capitalized response), checkout uses its saved
+submission cart snapshot, including quantities, and subtracts it once from the
+combined saved-order total. It never uses today's catalogue or the edited cart.
+Explicit backend fees, including zero, remain authoritative. Invalid amounts or
+negative differences are flagged, not clamped to zero. Existing orders without
+recorded item prices or a matching checkout snapshot remain unknown. This is a
+display convention pending backend clarification, not verification of distance
+pricing. Payment requests and the backend's charged total are unchanged.
+
 The common adapter reads explicit subtotal, delivery, buyer total, commission
 amount, order commission_percentage and seller proceeds fields. It supports
 snake/camel aliases already used in the app. Money arithmetic uses integer kobo.

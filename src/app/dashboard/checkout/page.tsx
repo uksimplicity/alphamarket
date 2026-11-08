@@ -26,7 +26,7 @@ export default function CheckoutPage() {
   const [error, setError] = useState("");
   const [pending, setPending] = useState<PendingCheckout | null>(null);
   const submitting = useRef(false);
-  const review = useCheckoutPricing(pending?.orderIds ?? []);
+  const review = useCheckoutPricing(pending?.orderIds ?? [], pending?.cartKey);
 
   useEffect(() => {
     const auth = getAuth();

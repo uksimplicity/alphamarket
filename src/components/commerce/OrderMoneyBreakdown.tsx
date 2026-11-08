@@ -1,7 +1,7 @@
 import { pricingMoney, type OrderPricing } from "./orderPricing";
 
 export default function OrderMoneyBreakdown({ pricing, seller = false }: { pricing: OrderPricing; seller?: boolean }) {
-  const entries: Array<[string, number | null]> = [["Product subtotal", pricing.productSubtotal], ["Delivery fee", pricing.deliveryFee], ["Buyer total", pricing.buyerTotal]];
+  const entries: Array<[string, number | null]> = [["Product subtotal", pricing.productSubtotal], ["Delivery fee", pricing.deliveryFee], [seller ? "Buyer total" : "Total", pricing.buyerTotal]];
   if (seller) entries.push(["Admin commission" + (pricing.commissionPercentage === null ? "" : " (" + pricing.commissionPercentage + "%)"), pricing.adminCommission], ["Seller proceeds", pricing.sellerProceeds]);
   return <div className="mt-4 text-sm" aria-label={seller ? "Seller order pricing" : "Buyer order pricing"}>
     <dl className="grid gap-3">{entries.map(([label, value]) => <div className="flex flex-wrap justify-between gap-2" key={label}><dt className="text-slate-500">{label}</dt><dd className="font-semibold text-slate-800">{pricingMoney(value)}</dd></div>)}</dl>

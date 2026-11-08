@@ -26,16 +26,16 @@ export type BuyerOrder = {
 export function parseBuyerOrder(payload: unknown): BuyerOrder | null {
   const data = record(responseData(payload));
   const row = record(data.order ?? data);
-  const id = text(row.id ?? row.order_id ?? row.orderId);
+  const id = text(row.id ?? row.order_id ?? row.orderId ?? row.ID);
   if (!id) return null;
-  const items = row.items ?? row.order_items ?? row.orderItems;
+  const items = row.items ?? row.order_items ?? row.orderItems ?? row.Items;
   return {
-    id, buyerId: text(row.buyer_id ?? row.buyerId ?? record(row.buyer).id),
-    status: text(row.status).toLowerCase() || "pending", paymentStatus: orderPaymentStatus(row), escrowStatus: escrowStatusFromOrder(row),
+    id, buyerId: text(row.buyer_id ?? row.buyerId ?? row.BuyerID ?? record(row.buyer).id),
+    status: text(row.status ?? row.Status).toLowerCase() || "pending", paymentStatus: orderPaymentStatus(row), escrowStatus: escrowStatusFromOrder(row),
     vendor: text(row.seller_name ?? row.vendor_name ?? record(row.seller).name) || "Seller",
     total: orderPricing(row).buyerTotal, pricing: orderPricing(row),
-    address: text(row.dropoff_address ?? row.dropoffAddress ?? row.address),
-    createdAt: text(row.created_at ?? row.createdAt),
+    address: text(row.dropoff_address ?? row.dropoffAddress ?? row.address ?? row.DeliveryAddress),
+    createdAt: text(row.created_at ?? row.createdAt ?? row.CreatedAt),
     items: (Array.isArray(items) ? items : []).map((value) => {
       const item = record(value), product = record(item.product);
       return {

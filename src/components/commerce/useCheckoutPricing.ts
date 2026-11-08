@@ -3,13 +3,13 @@ import { useEffect, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
 import { accountStamp, checkAccount } from "./localAccountData";
-import { orderPricing, pricingTotal, type OrderPricing } from "./orderPricing";
+import { orderPricing, checkoutPricing, type OrderPricing } from "./orderPricing";
 
-export function useCheckoutPricing(orderIds: string[]) {
+export function useCheckoutPricing(orderIds: string[], cartKey?: string) {
   const user = useAuthUser(), idsKey = JSON.stringify(orderIds);
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState<{ key: string; pricing: OrderPricing | null; loading: boolean; error: string }>({ key: "", pricing: null, loading: false, error: "" });
-  const key = user?.id + ":" + idsKey;
+  const key = user?.id + ":" + idsKey + ":" + (cartKey ?? "");
   useEffect(() => {
     const controller = new AbortController();
     const ids: string[] = JSON.parse(idsKey);
@@ -26,16 +26,17 @@ export function useCheckoutPricing(orderIds: string[]) {
           checkAccount(stamp);
           if (!response.ok || payload?.success === false) throw new Error(payload?.error || "The order total could not be loaded.");
           const data = payload?.data ?? payload, order = data?.order ?? data;
-          if (!order || (order.id ?? order.order_id) !== id || order.buyer_id && order.buyer_id !== auth.user.id) throw new Error("The returned order does not match your checkout.");
+          const buyerId = order?.buyer_id ?? order?.buyerId ?? order?.BuyerID;
+          if (!order || (order.id ?? order.order_id ?? order.orderId ?? order.ID) !== id || buyerId && buyerId !== auth.user.id) throw new Error("The returned order does not match your checkout.");
           values.push(orderPricing(order));
         }
-        const pricing = pricingTotal(values);
+        const pricing = checkoutPricing(values, cartKey);
         if (!controller.signal.aborted) setState({ key, pricing, loading: false, error: pricing.issues.join(" ") });
       } catch (failure) { if (!controller.signal.aborted) setState({ key, pricing: null, loading: false, error: failure instanceof Error ? failure.message : "The order total could not be loaded." }); }
     }
     void load();
     return () => controller.abort();
-  }, [idsKey, key, revision]);
+  }, [idsKey, key, revision, cartKey]);
   const current = state.key === key ? state : { key, pricing: null, loading: orderIds.length > 0, error: "" };
   return { ...current, ready: !current.loading && !current.error && current.pricing?.buyerTotal != null, reload: () => setRevision(value => value + 1) };
 }

@@ -31,6 +31,12 @@ test('does not initialize a partial or unidentified order response', () => {
   }
 });
 
+test('recognizes capitalized fields in the live order response', () => {
+  const payload = { success: true, data: [{ ID: 'synthetic-order', TotalAmount: '47250', Commission: '2250', PaymentStatus: 'pending', Items: null }] };
+  assert.deepEqual(payments.createdOrderIds(payload), ['synthetic-order']);
+  assert.equal(payments.orderPaymentStatus({ data: { ID: 'synthetic-order', PaymentStatus: 'PAID' } }), 'paid');
+});
+
 test('only accepts the HTTPS Paystack checkout host', () => {
   assert.equal(payments.checkoutUrl({ data: { checkout_url: 'https://checkout.paystack.com/session' } }), 'https://checkout.paystack.com/session');
   for (const url of ['javascript:alert(1)', 'http://checkout.paystack.com/session', 'https://checkout.paystack.com.attacker.test/session', 'https://attacker.test/session', 'https://user@checkout.paystack.com/session', 'https://checkout.paystack.com:444/session']) {

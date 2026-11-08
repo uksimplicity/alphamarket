@@ -21,7 +21,7 @@ export function createdOrderIds(payload: unknown): string[] {
   const ids = (Array.isArray(rows) ? rows : [rows]).map((row) => {
     if (typeof row === "string") return row.trim();
     const item = record(row);
-    const id = item?.id ?? item?.order_id ?? item?.orderId;
+    const id = item?.id ?? item?.order_id ?? item?.orderId ?? item?.ID;
     return typeof id === "string" ? id.trim() : "";
   });
   if (ids.length === 0 || ids.some((id) => !id)) {
@@ -44,7 +44,7 @@ export function checkoutUrl(payload: unknown): string {
 export function orderPaymentStatus(payload: unknown): string {
   const data = record(responseData(payload));
   const order = record(data?.order) ?? data;
-  const status = order?.payment_status ?? order?.paymentStatus;
+  const status = order?.payment_status ?? order?.paymentStatus ?? order?.PaymentStatus;
   return typeof status === "string" ? status.toLowerCase() : "pending";
 }
 
