@@ -34,7 +34,6 @@ function formHarness(brandResponse, createResponse, citiesResponse = () => Respo
       if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'test-token', user: { id: 'seller-one', status: 'active' } }) };
       if (name.endsWith('localAccountData')) return { accountStamp: () => 'seller-one', checkAccount: () => {} };
       if (name.endsWith('sellerProductForm')) return { uploadProductMedia: async () => 'https://images.example/chair.png' };
-      if (name.endsWith('AddressLocationLookup')) return { default: function AddressLocationLookup() {} };
       if (name.endsWith('productCities')) return require('./support/load-ts.cjs')('src/components/products/productCities.ts');
       return {};
     },
@@ -71,10 +70,8 @@ async function prepareProduct(harness, fields = {}) {
     locationId: 'city-lagos',
     ...fields,
   })) {
-    if (name === 'location') continue;
     nodes(tree, node => node.props?.name === name)[0].props.onChange({ target: { name, value } });
   }
-  nodes(tree, node => node.props?.addressName === 'location')[0].props.onAddressChange(fields.location ?? 'Lagos');
   nodes(tree, node => node.type === 'input' && node.props.type === 'file')[0].props.onChange({
     target: { files: [{ name: 'chair.png', size: 100 }] },
   });
@@ -167,18 +164,17 @@ test('overlong brand names are rejected before product submission', async () => 
   cleanup();
 });
 
-test('selected city supplies location and locationId while address and pickup point remain separate', async () => {
+test('single Location field submits the selected city name and ID without address or coordinates', async () => {
   const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Synthetic rejection' }, { status: 400 }));
-  const cleanup = await prepareProduct(harness, { location: '1 Ajayi Road, Ogba, Ifako-Ijaiye, Lagos, Nigeria' });
-  nodes(harness.render(), node => node.props?.addressName === 'location')[0].props.onLocate({ latitude: 6.63, longitude: 3.34 });
+  const cleanup = await prepareProduct(harness);
   await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
   const writes = harness.calls.filter(call => call.init?.method === 'POST');
   assert.equal(writes.length, 1);
   const body = JSON.parse(writes[0].init.body);
   assert.equal(body.locationId, 'city-lagos');
   assert.equal(body.location, 'Lagos');
-  assert.equal(body.address, '1 Ajayi Road, Ogba, Ifako-Ijaiye, Lagos, Nigeria');
-  assert.equal(body.latitude, 6.63); assert.equal(body.longitude, 3.34);
+  for (const key of ['address', 'latitude', 'longitude']) assert.equal(Object.hasOwn(body, key), false);
+  assert.equal(nodes(harness.render(), node => node.props?.addressName || node.props?.purpose === 'product').length, 0);
   cleanup();
 });
 

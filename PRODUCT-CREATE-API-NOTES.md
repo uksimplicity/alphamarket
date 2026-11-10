@@ -2,12 +2,13 @@
 
 The current CreateProductRequest documents `locationId` as the required supported
 location/region, in addition to the legacy `location` text field. The product
-form now loads active cities from `GET /api/v1/ads/locations?type=city`, including
-pagination, and lets the seller select a real city. Creation sends its ID as
-`locationId` and city name as `location`. The structured full pickup address is
-sent separately as `address`; the confirmed pickup latitude/longitude remain
-unchanged. Missing/unavailable selections are caught before image uploads or a
-product write. Refresh cities retries the read while retaining form contents.
+form now has a single Location selector, loading active cities from
+`GET /api/v1/ads/locations?type=city`, including pagination. Creation sends the
+selected city's ID as `locationId` and name as `location`. At the user's request,
+the entire address/map block has been removed from product creation. It no longer
+collects or submits `address`, `latitude` or `longitude`. Missing/unavailable
+selections are caught before image uploads or a product write. Refresh cities
+retries the read while retaining form contents.
 
 Live dependency: on 10 November, the public locations endpoint returned
 `data: []` and `meta.total: 0` for both all locations and cities. An administrator
@@ -17,7 +18,7 @@ is_active `true`, with the appropriate parent if a hierarchy is configured).
 The frontend cannot substitute a state/LGA label or made-up ID for a supported
 location record. No live locations or products were created during this fix.
 
-Checks use synthetic responses for city selection, payload separation,
+Checks use synthetic responses for city selection, omission of address/coordinates,
 missing/unavailable cities, public city proxy behavior and seller submission.
 
 ---
