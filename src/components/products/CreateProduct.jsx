@@ -8,6 +8,7 @@ import { accountStamp, checkAccount } from "@/components/commerce/localAccountDa
 import { uploadProductMedia } from "@/components/vendor/sellerProductForm";
 import DeliveryLocationButton from "@/components/commerce/deliveryLocation";
 import AddressLocationLookup from "@/components/commerce/AddressLocationLookup";
+import { productCityPage } from "@/components/products/productCities";
 
 const initialForm = {
   name: "",
@@ -19,6 +20,7 @@ const initialForm = {
   basePrice: "",
   stock: "",
   location: "",
+  locationId: "",
   tags: "",
   discountTitle: "",
   discountPrice: "",
@@ -347,6 +349,10 @@ export default function CreateProduct({ mode = "seller" }) {
   const catalogRequests = useRef(new Map());
   const [form, setForm] = useState(initialForm);
   const [productPoint, setProductPoint] = useState(null);
+  const [cityOptions, setCityOptions] = useState([]);
+  const [citiesLoading, setCitiesLoading] = useState(true);
+  const [citiesError, setCitiesError] = useState("");
+  const [citiesAttempt, setCitiesAttempt] = useState(0);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [typeOptions, setTypeOptions] = useState([]);
   const [brandOptions, setBrandOptions] = useState([]);
@@ -547,6 +553,36 @@ export default function CreateProduct({ mode = "seller" }) {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    async function loadCities() {
+      setCitiesLoading(true);
+      setCitiesError("");
+      try {
+        const requestKey = `product-cities:${citiesAttempt}`;
+        if (!catalogRequests.current.has(requestKey)) {
+          catalogRequests.current.set(requestKey, (async () => {
+            const cities = new Map();
+            for (let offset = 0; offset < 10000; offset += 100) {
+              const response = await fetch(`/api/products/locations?offset=${offset}`, { headers: { Accept: "application/json" }, cache: "no-store" });
+              if (!response.ok) throw new Error("Product cities could not be loaded. Please retry.");
+              const page = productCityPage(await response.json());
+              page.cities.forEach(city => cities.set(city.id, city));
+              if (!page.count || (page.total !== undefined ? offset + page.count >= page.total : page.count < 100)) return [...cities.values()].sort((a, b) => a.name.localeCompare(b.name));
+            }
+            throw new Error("The city list is too large to load. Please contact support.");
+          })());
+        }
+        const cities = await catalogRequests.current.get(requestKey);
+        if (active) setCityOptions(cities);
+      } catch (failure) {
+        if (active) { setCityOptions([]); setCitiesError(failure instanceof Error ? failure.message : "Product cities could not be loaded."); }
+      } finally { if (active) setCitiesLoading(false); }
+    }
+    void loadCities();
+    return () => { active = false; };
+  }, [citiesAttempt]);
+
   const handleChange = (event) => {
     const { name, value } = event.target;
     if (name === "location") setProductPoint(null);
@@ -641,7 +677,12 @@ export default function CreateProduct({ mode = "seller" }) {
       return;
     }
     if (!form.location.trim()) {
-      setError("Product location is required.");
+      setError("Full pickup address is required.");
+      return;
+    }
+    const selectedCity = cityOptions.find(city => city.id === form.locationId);
+    if (citiesLoading || citiesError || !selectedCity) {
+      setError(citiesLoading ? "Wait for product cities to load." : citiesError || (cityOptions.length ? "Select a product city." : "No product cities are available. An administrator needs to add an active city before products can be submitted."));
       return;
     }
     if (mode === "seller" && !coverFile && imageFiles.length === 0) {
@@ -712,7 +753,9 @@ export default function CreateProduct({ mode = "seller" }) {
       isPublished: submitIntent !== "draft",
     };
 
-    if (form.location.trim()) payload.location = form.location.trim();
+    payload.locationId = selectedCity.id;
+    payload.location = selectedCity.name;
+    payload.address = form.location.trim();
     if (form.shortDescription.trim()) payload.shortDescription = form.shortDescription.trim();
     const selectedBrandId = form.brand.trim();
     if (selectedBrandId && isUuid(selectedBrandId)) {
@@ -974,6 +1017,14 @@ export default function CreateProduct({ mode = "seller" }) {
             <div className="form-grid">
               <div className="field">
                 <AddressLocationLookup addressLabel="Full pickup address" addressId="product-location" addressName="location" address={form.location} onAddressChange={value => { setForm(previous => ({ ...previous, location: value })); setProductPoint(null); }} point={productPoint} onLocate={setProductPoint} disabled={loading} />
+                <label htmlFor="product-city">Product city</label>
+                <select id="product-city" name="locationId" value={form.locationId} onChange={handleChange} disabled={loading || citiesLoading || !!citiesError || !cityOptions.length} aria-describedby="product-city-help">
+                  <option value="">{citiesLoading ? "Loading cities…" : "Select city"}</option>
+                  {cityOptions.map(city => <option key={city.id} value={city.id}>{city.name}</option>)}
+                </select>
+                <p id="product-city-help" className="text-sm text-slate-500">Choose the city for this listing. Your full address and map point are used for pickup.</p>
+                {citiesError ? <p role="alert" className="form-error">{citiesError}</p> : !citiesLoading && !cityOptions.length ? <p role="alert" className="form-error">No product cities are available. Ask an administrator to add an active city before publishing.</p> : null}
+                <button type="button" disabled={loading || citiesLoading} onClick={() => setCitiesAttempt(attempt => attempt + 1)}>Refresh cities</button>
                 <DeliveryLocationButton purpose="product" point={productPoint} onConfirm={setProductPoint} disabled={loading} />
                 {productPoint ? <p role="status" className="text-sm text-slate-500">Product location selected.</p> : null}
               </div>

@@ -1,3 +1,27 @@
+# Product city update — 10 November 2026
+
+The current CreateProductRequest documents `locationId` as the required supported
+location/region, in addition to the legacy `location` text field. The product
+form now loads active cities from `GET /api/v1/ads/locations?type=city`, including
+pagination, and lets the seller select a real city. Creation sends its ID as
+`locationId` and city name as `location`. The structured full pickup address is
+sent separately as `address`; the confirmed pickup latitude/longitude remain
+unchanged. Missing/unavailable selections are caught before image uploads or a
+product write. Refresh cities retries the read while retaining form contents.
+
+Live dependency: on 10 November, the public locations endpoint returned
+`data: []` and `meta.total: 0` for both all locations and cities. An administrator
+must register/activate supported cities using the documented authenticated
+`POST /api/v1/admin/ad-locations` endpoint (e.g. name `Lagos`, type `city`,
+is_active `true`, with the appropriate parent if a hierarchy is configured).
+The frontend cannot substitute a state/LGA label or made-up ID for a supported
+location record. No live locations or products were created during this fix.
+
+Checks use synthetic responses for city selection, payload separation,
+missing/unavailable cities, public city proxy behavior and seller submission.
+
+---
+
 # Create-product API review — 4 November 2026
 
 Source: fresh, uncached read of https://marketplace.archintell.com/swagger/doc.json,

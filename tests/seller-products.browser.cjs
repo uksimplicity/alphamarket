@@ -31,6 +31,7 @@ async function main() {
     const product={id:'product-1',name:'Chair',slug:'chair',basePrice:5000,stock:3,shortDescription:'An actual chair',categoryId:'category-1',productTypeId:'type-1',brandId:'brand-1',sellerId:'seller-1',media:{cover:'https://images.example/old-cover.png',images:['https://images.example/old-image.png'],video:'https://images.example/old-video.mp4'},attributes:[{attribute_id:'attribute-1',attribute_value_id:'value-1'}]};
     window.fetch=async(input,init={})=>{const url=typeof input==='string'?input:input.url;if(!url.startsWith('/api/'))return realFetch(input,init);
       if(url.startsWith('/api/user/profile'))return Response.json({data:JSON.parse(localStorage.getItem('alpha.auth')).user});
+      if(url.startsWith('/api/products/locations'))return Response.json({data:window.__noCities?[]:[{id:'city-lagos',name:'Lagos',type:'city'}],meta:{total:window.__noCities?0:1}});
       if(url.startsWith('/api/seller/catalog')){const p=new URL(url,location.origin).searchParams;const resource=p.get('resource');if(p.get('id'))return Response.json({data:{id:'attribute-1',values:[{id:'value-1',name:'Oak'},{id:'value-2',name:'Walnut'}]}});const data={categories:[{id:'category-1',name:'Furniture'}],'product-types':[{id:'type-1',name:'Physical'}],brands:[{id:'brand-1',name:'Workshop'}],attributes:[{id:'attribute-1',name:'Wood'}]};return Response.json({data:data[resource]||[]});}
       if(url==='/api/upload/file'){__uploads++;if(window.__failUpload)return Response.json({message:'Failed to upload file'},{status:500});return Response.json({data:{file:{fileUrl:'https://images.example/new-cover.png'}}});}
       if(url.startsWith('/api/seller/products/')){if(init.method==='PUT'){__writes.push(JSON.parse(init.body));return Response.json({data:product});}return Response.json({data:product});}
@@ -80,7 +81,7 @@ async function main() {
     assert.equal(await evaluate('__writes.length'), 0);
     await input('textarea[name="shortDescription"]','A simple chair for everyday use.');
     await evaluate(`document.querySelector('form.create-form').requestSubmit()`);
-    await wait(`document.body.innerText.includes('Product location is required.')`);
+    await wait(`document.body.innerText.includes('Full pickup address is required.')`);
     assert.equal(await evaluate('__uploads===0&&__writes.length===0'), true);
     async function pickup(street) {
       await input('input[placeholder="e.g. 12B"]','10');
@@ -89,6 +90,11 @@ async function main() {
       await input('select[autocomplete="address-level2"]','Ikeja');
     }
     await pickup('Example Street');
+    await wait(`!!document.querySelector('#product-city option[value="city-lagos"]')`);
+    await evaluate(`document.querySelector('form.create-form').requestSubmit()`);
+    await wait(`document.body.innerText.includes('Select a product city.')`);
+    assert.equal(await evaluate('__uploads'), 0);
+    await input('#product-city', 'city-lagos');
     if (process.env.ALPHA_TEST_MAPS) {
       const click = label => evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(label)}).click()`);
       await click('Choose product location on map'); await wait(`window.__maps.length===1`);
@@ -135,14 +141,24 @@ async function main() {
     assert.equal(created.categoryId, 'category-1');
     assert.equal(created.productTypeId, 'type-1');
     assert.equal(created.shortDescription, 'A simple chair for everyday use.');
-    assert.equal(created.location, '10 Example Street, Ikeja, Lagos, Nigeria');
+    assert.equal(created.location, 'Lagos');
+    assert.equal(created.locationId, 'city-lagos');
+    assert.equal(created.address, '10 Example Street, Ikeja, Lagos, Nigeria');
     assert.equal(created.brandName, 'Acme');
     if (process.env.ALPHA_TEST_MAPS) { assert.equal(created.latitude,7.3); assert.equal(created.longitude,4.5); }
     assert.equal(created.media.images.length, 1);
     assert.equal(await evaluate(`sessionStorage.getItem('seller-created-upload-count')`), '1');
     assert.equal(['brandId','stock','tags','discounts','attributes'].every(key=>!Object.hasOwn(created,key)), true);
     console.log('PASS seller can create with a trimmed typed brand name and gallery photo while unused optional details stay omitted');
-    assert.deepEqual(errors, []); console.log('8 seller product browser checks passed.');
+    await send('Page.navigate', { url: previewUrl + '/vendor/products/create' });
+    await wait(`!!document.querySelector('#product-city option[value="city-lagos"]')`);
+    await evaluate(`window.__noCities=true;[...document.querySelectorAll('button')].find(button=>button.textContent==='Refresh cities').click()`);
+    await wait(`document.body.innerText.includes('No product cities are available.')`);
+    assert.equal(await evaluate(`document.getElementById('product-city').disabled&&__uploads===0&&__writes.length===0`), true);
+    await evaluate(`window.__noCities=false;[...document.querySelectorAll('button')].find(button=>button.textContent==='Refresh cities').click()`);
+    await wait(`!document.getElementById('product-city').disabled`);
+    console.log('PASS empty city list is explained and explicit refresh recovers the selector');
+    assert.deepEqual(errors, []); console.log('9 seller product browser checks passed.');
   } finally { socket.close(); await fetch(chromeUrl + '/json/close/' + target.id).catch(()=>{}); }
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

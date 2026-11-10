@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const ts = require('typescript');
 
 // Exercise the form's effect and rendered options without a browser or live account.
-function formHarness(brandResponse, createResponse) {
+function formHarness(brandResponse, createResponse, citiesResponse = () => Response.json({ data: [{ id: 'city-lagos', name: 'Lagos', type: 'city' }], meta: { total: 1 } })) {
   const slots = [], effects = [], calls = [];
   let cursor = 0;
   const react = {
@@ -35,6 +35,7 @@ function formHarness(brandResponse, createResponse) {
       if (name.endsWith('localAccountData')) return { accountStamp: () => 'seller-one', checkAccount: () => {} };
       if (name.endsWith('sellerProductForm')) return { uploadProductMedia: async () => 'https://images.example/chair.png' };
       if (name.endsWith('AddressLocationLookup')) return { default: function AddressLocationLookup() {} };
+      if (name.endsWith('productCities')) return require('./support/load-ts.cjs')('src/components/products/productCities.ts');
       return {};
     },
     // Unexpected polling or focus subscriptions fail the test immediately.
@@ -42,6 +43,7 @@ function formHarness(brandResponse, createResponse) {
     fetch: async (url, init) => {
       calls.push({ url, init });
       if (init?.method === 'POST' && createResponse) return createResponse();
+      if (url.startsWith('/api/products/locations')) return citiesResponse();
       if (url.includes('resource=brands')) return brandResponse();
       return Response.json({ data: [{ id: 'reference-id', name: 'Reference' }] });
     },
@@ -60,12 +62,13 @@ function nodes(tree, match) {
 
 async function prepareProduct(harness, fields = {}) {
   harness.render();
-  const cleanup = harness.effects[0]();
+  const cleanups = harness.effects.map(effect => effect());
   await new Promise(resolve => setImmediate(resolve));
   const tree = harness.render();
   for (const [name, value] of Object.entries({
     name: 'Chair', category: 'category-one', type: 'type-one',
     basePrice: '5000', shortDescription: 'An actual chair', brand: '',
+    locationId: 'city-lagos',
     ...fields,
   })) {
     if (name === 'location') continue;
@@ -75,7 +78,7 @@ async function prepareProduct(harness, fields = {}) {
   nodes(tree, node => node.type === 'input' && node.props.type === 'file')[0].props.onChange({
     target: { files: [{ name: 'chair.png', size: 100 }] },
   });
-  return cleanup;
+  return () => cleanups.forEach(cleanup => cleanup?.());
 }
 
 test('catalog requests run once across effect replay and renders; brands include No brand', async () => {
@@ -162,4 +165,34 @@ test('overlong brand names are rejected before product submission', async () => 
   assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
   assert.equal(nodes(harness.render(), node => node.props?.className === 'form-error')[0].props.children, 'Brand name must be 150 characters or fewer.');
   cleanup();
+});
+
+test('selected city supplies location and locationId while address and pickup point remain separate', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Synthetic rejection' }, { status: 400 }));
+  const cleanup = await prepareProduct(harness, { location: '1 Ajayi Road, Ogba, Ifako-Ijaiye, Lagos, Nigeria' });
+  nodes(harness.render(), node => node.props?.addressName === 'location')[0].props.onLocate({ latitude: 6.63, longitude: 3.34 });
+  await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  const writes = harness.calls.filter(call => call.init?.method === 'POST');
+  assert.equal(writes.length, 1);
+  const body = JSON.parse(writes[0].init.body);
+  assert.equal(body.locationId, 'city-lagos');
+  assert.equal(body.location, 'Lagos');
+  assert.equal(body.address, '1 Ajayi Road, Ogba, Ifako-Ijaiye, Lagos, Nigeria');
+  assert.equal(body.latitude, 6.63); assert.equal(body.longitude, 3.34);
+  cleanup();
+});
+
+test('missing, unavailable and forged cities stop before uploads or product submission', async () => {
+  for (const scenario of [
+    { fields: { locationId: '' }, cities: [{ id: 'city-lagos', name: 'Lagos', type: 'city' }], message: 'Select a product city.' },
+    { fields: { locationId: 'invented-city' }, cities: [{ id: 'city-lagos', name: 'Lagos', type: 'city' }], message: 'Select a product city.' },
+    { fields: {}, cities: [], message: 'No product cities are available.' },
+  ]) {
+    const harness = formHarness(() => Response.json({ data: [] }), undefined, () => Response.json({ data: scenario.cities, meta: { total: scenario.cities.length } }));
+    const cleanup = await prepareProduct(harness, scenario.fields);
+    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+    assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
+    assert.ok(nodes(harness.render(), node => node.props?.className === 'form-error').some(node => String(node.props.children).includes(scenario.message)));
+    cleanup();
+  }
 });
