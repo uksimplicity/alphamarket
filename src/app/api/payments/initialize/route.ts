@@ -10,7 +10,10 @@ export async function POST(req: Request) {
   try {
     const input = await req.json();
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error();
-    body = JSON.stringify({ buyer_id: input.buyer_id, order_ids: input.order_ids, callback_url: input.callback_url });
+    // Always send the return URL for this deployment. A stale browser-provided
+    // localhost URL must not send a hosted buyer away from their checkout.
+    const callbackUrl = new URL("/dashboard/checkout/payment", req.url).href;
+    body = JSON.stringify({ buyer_id: input.buyer_id, order_ids: input.order_ids, callback_url: callbackUrl });
   } catch { return Response.json({ error: "A valid payment request is required." }, { status: 400 }); }
 
   try {

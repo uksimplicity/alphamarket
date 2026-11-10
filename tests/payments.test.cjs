@@ -132,6 +132,33 @@ test('checkout forwards created order IDs to payment initialization using the do
   }
 });
 
+test('hosted initialization always supplies its own payment return URL', async () => {
+  const previousBase = process.env.NEXT_PUBLIC_API_BASE_URL, originalFetch = global.fetch;
+  process.env.NEXT_PUBLIC_API_BASE_URL = 'https://backend.test/api/v1';
+  const initialize = loadTypeScript('src/app/api/payments/initialize/route.ts');
+  const calls = [];
+  global.fetch = async (url, init) => {
+    calls.push({ url, body: JSON.parse(init.body) });
+    return Response.json({ data: { checkout_url: 'https://checkout.paystack.com/session', reference: 'ref' } });
+  };
+  try {
+    for (const callbackUrl of ['http://localhost:3000/payment-processing', 'https://other.example/return', undefined]) {
+      const response = await initialize.POST(new Request('https://shop.example/api/payments/initialize', {
+        method: 'POST', headers: { Authorization: 'Bearer buyer-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ buyer_id: 'buyer', order_ids: ['one', 'two'], callback_url: callbackUrl, amount: 1, commission_amount: 0 }),
+      }));
+      assert.equal(response.status, 200);
+      assert.deepEqual(calls.at(-1).body, { buyer_id: 'buyer', order_ids: ['one', 'two'], callback_url: 'https://shop.example/dashboard/checkout/payment' });
+    }
+    assert.equal(calls.length, 3);
+    assert.ok(calls.every(call => call.url === 'https://backend.test/api/v1/payments/initialize'));
+  } finally {
+    global.fetch = originalFetch;
+    if (previousBase === undefined) delete process.env.NEXT_PUBLIC_API_BASE_URL;
+    else process.env.NEXT_PUBLIC_API_BASE_URL = previousBase;
+  }
+});
+
 test('callback verifies server-side without following a backend redirect or trusting it as payment success', async () => {
   const previousBase = process.env.NEXT_PUBLIC_API_BASE_URL;
   const originalFetch = global.fetch;

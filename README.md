@@ -34,6 +34,34 @@ The integration follows the deployed [Swagger contract](https://marketplace.arch
 4. The return page at `/dashboard/checkout/payment` sends the reference to the backend's `/payments/callback` and polls `/user/orders/{id}`. Only `payment_status: "paid"` confirms success. A redirect or reference alone never confirms payment.
 5. Saved order IDs allow payment initialization to be retried without recreating orders. After an uncertain order submission, check My Orders and use **Pay with Paystack** on the existing pending order. The original cart is cleared only after every saved order is confirmed paid and the cart has not changed.
 
+The initialization proxy builds `callback_url` from the current request's origin
+and `/dashboard/checkout/payment`, overriding stale or external callback URLs
+sent by a browser. Local previews stay local; hosted checkout returns to that
+hosted deployment when the backend honors this field.
+
+The backend return path `/payment-processing` also forwards to this status page,
+preserving `reference` and `trxref` on the current website. Configure the payment
+service's final browser redirect to the hosted frontend origin, or have it honor
+the `callback_url` supplied during initialization. A hosted checkout must not
+return to `http://localhost:3000`: that is the customer's computer and has no
+access to the hosted site's browser checkout session. A frontend route cannot
+correct an upstream redirect to a different origin.
+
+To recover a payment after that redirect, open `/dashboard/checkout/payment` on
+the original hosted website in the original checkout tab. It checks the saved
+orders with the backend. If the browser checkout session is unavailable, use
+My orders to inspect the payment status. No new order or payment is created by
+the status check. `tests/payment-return.test.cjs` covers return routing;
+`tests/payment-return.browser.cjs` covers confirmed/pending payments, mismatched
+references and missing-session recovery using synthetic responses.
+
+Backend handoff for the deployed site: return buyers to
+`https://alphamarket-weld.vercel.app/dashboard/checkout/payment?reference=<reference>`
+instead of localhost, or honor the supplied `callback_url` and preserve the
+transaction reference. The hosted `/payment-processing` compatibility route is
+also supported after deploying this frontend change. Backend verification,
+webhooks, saved order amounts, escrow and payout accounting should stay intact.
+
 The callback URL must be reachable by the customer's browser and accepted by the backend configuration. The backend must retain its Paystack webhook and verification setup. Seller bank accounts and withdrawals are connected in the `/vendor/payments` workspace.
 
 Order creation and payment initialization forward authentication to the documented `/api/v1` endpoints once, with a 20-second timeout. They do not follow redirects or try alternative URLs after a failure. After an uncertain response, review the existing order before submitting again. Delivery confirmation and admin escrow actions use their separate documented endpoints; payment success alone does not establish that funds have been released.
