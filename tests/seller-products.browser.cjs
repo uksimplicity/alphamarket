@@ -13,7 +13,7 @@ async function main() {
   async function wait(expression) { const start = Date.now(); while (Date.now() - start < 90000) { if (await evaluate(expression)) return; await new Promise(resolve => setTimeout(resolve, 150)); } throw new Error('Timed out: ' + expression + '\n' + await evaluate('document.body.innerText.slice(-2000)')); }
   async function input(selector, value) { await evaluate(`(() => { const el=document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(el.tagName==='SELECT'?HTMLSelectElement.prototype:el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true})); })()`); }
   const fixture = `
-    localStorage.setItem('alpha.auth', JSON.stringify({access_token:'synthetic-seller-token',user:{id:'seller-1',role:'seller',first_name:'Seller',status:'active'}}));
+    localStorage.setItem('alpha.auth', JSON.stringify({access_token:'synthetic-seller-token',user:{id:'seller-1',role:'seller',first_name:'Seller',status:'active',latitude:5.52,longitude:5.75}}));
     const realFetch=window.fetch.bind(window); window.__writes=[];window.__uploads=0;
     const product={id:'product-1',name:'Chair',slug:'chair',basePrice:5000,stock:3,shortDescription:'An actual chair',categoryId:'category-1',productTypeId:'type-1',brandId:'brand-1',sellerId:'seller-1',media:{cover:'https://images.example/old-cover.png',images:['https://images.example/old-image.png'],video:'https://images.example/old-video.mp4'},attributes:[{attribute_id:'attribute-1',attribute_value_id:'value-1'}]};
     window.fetch=async(input,init={})=>{const url=typeof input==='string'?input:input.url;if(!url.startsWith('/api/'))return realFetch(input,init);
@@ -94,7 +94,9 @@ async function main() {
     assert.equal(created.shortDescription, 'A simple chair for everyday use.');
     assert.equal(created.location, 'Lagos');
     assert.equal(Object.hasOwn(created, 'locationId'), false);
-    for (const key of ['address','latitude','longitude']) assert.equal(Object.hasOwn(created,key), false);
+    assert.equal(Object.hasOwn(created, 'address'), false);
+    assert.equal(created.latitude, 5.52);
+    assert.equal(created.longitude, 5.75);
     assert.equal(created.brandName, 'Acme');
     assert.equal(created.media.images.length, 1);
     assert.equal(await evaluate(`sessionStorage.getItem('seller-created-upload-count')`), '1');

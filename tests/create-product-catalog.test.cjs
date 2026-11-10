@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const ts = require('typescript');
 
 // Exercise the form's effect and rendered options without a browser or live account.
-function formHarness(brandResponse, createResponse) {
+function formHarness(brandResponse, createResponse, sellerFields = {}) {
   const slots = [], effects = [], calls = [];
   let cursor = 0;
   const react = {
@@ -31,7 +31,7 @@ function formHarness(brandResponse, createResponse) {
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
       if (name === 'next/navigation') return { useRouter: () => ({}) };
-      if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'test-token', user: { id: 'seller-one', status: 'active' } }) };
+      if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'test-token', user: { id: 'seller-one', status: 'active', ...sellerFields } }) };
       if (name.endsWith('localAccountData')) return { accountStamp: () => 'seller-one', checkAccount: () => {} };
       if (name.endsWith('sellerProductForm')) return { uploadProductMedia: async () => 'https://images.example/chair.png' };
       return {};
@@ -184,6 +184,37 @@ test('blank city blocks product submission', async () => {
   await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
   assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
   assert.equal(nodes(harness.render(), node => node.props?.className === 'form-error')[0].props.children, 'Enter the city where this product is located.');
+  cleanup();
+});
+
+test('typed city retains saved seller coordinates from the pre-map submission contract', async () => {
+  for (const seller of [
+    { latitude: 5.52, longitude: 5.75 },
+    { lat: '5.52', lng: '5.75' },
+    { profile: { latitude: '5.52', longitude: '5.75' } },
+    { profile: { lat: 5.52, lng: 5.75 } },
+  ]) {
+    const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Synthetic rejection' }, { status: 400 }), seller);
+    const cleanup = await prepareProduct(harness, { location: '  Warri  ' });
+    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+    const writes = harness.calls.filter(call => call.init?.method === 'POST');
+    assert.equal(writes.length, 1);
+    const body = JSON.parse(writes[0].init.body);
+    assert.equal(body.location, 'Warri');
+    assert.equal(body.latitude, 5.52); assert.equal(body.longitude, 5.75);
+    assert.equal(Object.hasOwn(body, 'locationId'), false);
+    assert.equal(Object.hasOwn(body, 'address'), false);
+    cleanup();
+  }
+});
+
+test('missing or invalid saved seller coordinates are not replaced with invented values', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Synthetic rejection' }, { status: 400 }), { latitude: 'bad', longitude: '' });
+  const cleanup = await prepareProduct(harness);
+  await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  const body = JSON.parse(harness.calls.find(call => call.init?.method === 'POST').init.body);
+  assert.equal(Object.hasOwn(body, 'latitude'), false);
+  assert.equal(Object.hasOwn(body, 'longitude'), false);
   cleanup();
 });
 

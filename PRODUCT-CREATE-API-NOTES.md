@@ -1,3 +1,29 @@
+# Restored pre-map product Location submission — 10 November 2026
+
+The seller types a city into one Location text field; the trimmed city is sent
+as `location`. There is no city-list dependency, locationId requirement, address
+form, map picker or geolocation prompt in product creation.
+
+History review found that commit fb13f24212e7f0d24ab36332e95abae1d7dca822 replaced
+the automatic submission of authenticated seller coordinates with a manually
+selected map point. Removing the map later also omitted those previously sent
+coordinates. The earlier behavior from commit
+4a1eea3e2b9428235903597ed05cc51b286a324b is restored: finite latitude/longitude
+are read from the signed-in user (latitude/longitude or lat/lng, including nested
+profile fields) and forwarded when present. Missing values stay omitted. No new
+coordinates are invented, no address is sent, and the backend endpoint remains
+POST /api/v1/seller/product.
+
+The user's failing request includes `location: "Warri"` but no coordinates.
+This confirms the city text is present and matches the identified regression
+in coordinate forwarding. It does not prove coordinates cause the backend's
+specific rejection. The earlier conclusion that a backend change was necessary
+was premature; authenticated live acceptance still needs verification.
+
+Validation: 24 focused product tests and 8 synthetic Chrome checks pass,
+including restored seller coordinate aliases, missing/invalid saved values,
+trimmed typed city and absence of address/map UI. No live products were created.
+
 # Product Location text field — 10 November 2026
 
 The seller types their city directly into one Location text field. The form

@@ -300,6 +300,17 @@ function parseNonNegativeInteger(value) {
   return numeric;
 }
 
+function readFirstFiniteNumber(...values) {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim()) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) return numeric;
+    }
+  }
+  return null;
+}
+
 function readCachedAdminCategories() {
   if (typeof window === "undefined") return [];
   try {
@@ -718,6 +729,18 @@ export default function CreateProduct({ mode = "seller" }) {
     }
     if (stockNumber !== null) payload.stock = stockNumber;
     if (tagList.length > 0) payload.tags = tagList;
+    // Preserve the submission behavior from before the address/map UI: use the
+    // seller coordinates already supplied by the authenticated account.
+    const latitude = readFirstFiniteNumber(
+      auth?.user?.latitude, auth?.user?.lat,
+      auth?.user?.profile?.latitude, auth?.user?.profile?.lat
+    );
+    const longitude = readFirstFiniteNumber(
+      auth?.user?.longitude, auth?.user?.lng,
+      auth?.user?.profile?.longitude, auth?.user?.profile?.lng
+    );
+    if (latitude !== null) payload.latitude = latitude;
+    if (longitude !== null) payload.longitude = longitude;
 
     if (discountEnabled) {
       payload.discounts = [
