@@ -36,3 +36,39 @@ checks and all 8 seller-profile browser checks passed, including incomplete
 dropdown rejection, read-only full address, backend coordinate read-back,
 reopening saved fields, coordinate clearing and mobile width.
 Tests use synthetic identities and API responses, not live seller writes.
+
+## Confirmed live contract gap
+
+The user supplied the actual seller profile GET response after attempting save.
+It reports success, but data includes only id, email, phone, first_name,
+last_name, role, status, verification flags and created_at. It omits address,
+city, state, country, postal_code, latitude and longitude entirely. The supplied
+PUT request contains nonzero numeric latitude/longitude and the generated full
+address. No account identifiers, contact details or actual coordinates are
+retained here.
+
+This proves the frontend cannot verify coordinate persistence through that GET.
+It does NOT prove the PUT failed to persist them. Do not hide the verification
+failure or substitute the browser-selected point as proof of saved backend data.
+The separate checkout error establishes that the order service currently
+resolves its pickup to zero; its actual source must be traced on the backend.
+
+Backend follow-up:
+
+1. Check PUT /api/v1/user/profile binds and persists latitude/longitude plus the
+   address fields on the authenticated seller record; ensure zero/missing values
+   are not substituted for supplied values.
+2. GET /api/v1/user/profile must return those persisted fields in data. Check
+   its query, response DTO/serialization and whether it returns an abbreviated
+   authentication record rather than the saved full profile.
+3. During order creation, trace each product's pickup source. Use the intended
+   valid product pickup or the documented seller-profile source. Do not silently
+   fall back to (0, 0), and do not use the buyer's dropoff as pickup.
+4. For existing product snapshots with zero pickup coordinates, provide a
+   documented repair/migration path or defined profile fallback policy.
+5. Rehearse with an authenticated seller: PUT a known valid point, GET and
+   compare the persisted values, then review an order with a separate buyer.
+
+Expected GET data must retain existing fields and add at least numeric latitude
+and longitude plus address/city/state/country/postal_code. A successful PUT
+response alone is insufficient to validate the source used by order creation.

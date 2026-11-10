@@ -34,6 +34,7 @@ function formHarness(brandResponse, createResponse) {
       if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'test-token', user: { id: 'seller-one', status: 'active' } }) };
       if (name.endsWith('localAccountData')) return { accountStamp: () => 'seller-one', checkAccount: () => {} };
       if (name.endsWith('sellerProductForm')) return { uploadProductMedia: async () => 'https://images.example/chair.png' };
+      if (name.endsWith('AddressLocationLookup')) return { default: function AddressLocationLookup() {} };
       return {};
     },
     // Unexpected polling or focus subscriptions fail the test immediately.
@@ -64,11 +65,13 @@ async function prepareProduct(harness, fields = {}) {
   const tree = harness.render();
   for (const [name, value] of Object.entries({
     name: 'Chair', category: 'category-one', type: 'type-one',
-    basePrice: '5000', shortDescription: 'An actual chair', location: 'Lagos', brand: '',
+    basePrice: '5000', shortDescription: 'An actual chair', brand: '',
     ...fields,
   })) {
+    if (name === 'location') continue;
     nodes(tree, node => node.props?.name === name)[0].props.onChange({ target: { name, value } });
   }
+  nodes(tree, node => node.props?.addressName === 'location')[0].props.onAddressChange(fields.location ?? 'Lagos');
   nodes(tree, node => node.type === 'input' && node.props.type === 'file')[0].props.onChange({
     target: { files: [{ name: 'chair.png', size: 100 }] },
   });

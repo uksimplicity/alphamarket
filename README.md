@@ -62,6 +62,17 @@ transaction reference. The hosted `/payment-processing` compatibility route is
 also supported after deploying this frontend change. Backend verification,
 webhooks, saved order amounts, escrow and payout accounting should stay intact.
 
+Deployment verification, 10 November 2026: GitHub commit
+`da2e963be2c0916e622b258a7240897642f15b77` has a successful Vercel deployment
+status. The hosted `/payment-processing` route returns HTTP 307 to
+`/dashboard/checkout/payment` with the supplied reference, and that status page
+returns HTTP 200. The 12 focused payment/return tests and a fresh production
+build pass. The public API documents `callback_url` on payment initialization.
+Admin platform settings require authentication and accept only registered keys;
+the current settings must be read before identifying any redirect setting.
+No backend setting was changed and no payment was initiated during these checks.
+Authenticated backend callback behavior and an end-to-end payment remain pending.
+
 The callback URL must be reachable by the customer's browser and accepted by the backend configuration. The backend must retain its Paystack webhook and verification setup. Seller bank accounts and withdrawals are connected in the `/vendor/payments` workspace.
 
 Order creation and payment initialization forward authentication to the documented `/api/v1` endpoints once, with a 20-second timeout. They do not follow redirects or try alternative URLs after a failure. After an uncertain response, review the existing order before submitting again. Delivery confirmation and admin escrow actions use their separate documented endpoints; payment success alone does not establish that funds have been released.
