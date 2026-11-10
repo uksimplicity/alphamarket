@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
 import { cartSubtotal, formatCurrency, useCart } from "@/components/commerce/store";
-import { checkoutUrl, checkoutStorageKey, readSavedCheckout, createdOrderIds, paymentError, paymentReference, type PendingCheckout } from "@/components/commerce/payments";
+import { checkoutUrl, checkoutStorageKey, readSavedCheckout, createdOrderIds, createdOrderRows, paymentError, paymentReference, type PendingCheckout } from "@/components/commerce/payments";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import { Button, Card } from "@/components/dashboard/ui";
 import styles from "./page.module.css";
@@ -26,7 +26,7 @@ export default function CheckoutPage() {
   const [error, setError] = useState("");
   const [pending, setPending] = useState<PendingCheckout | null>(null);
   const submitting = useRef(false);
-  const review = useCheckoutPricing(pending?.orderIds ?? [], pending?.cartKey);
+  const review = useCheckoutPricing(pending?.orderIds ?? [], pending?.cartKey, pending?.createdOrders);
 
   useEffect(() => {
     const auth = getAuth();
@@ -93,7 +93,7 @@ export default function CheckoutPage() {
           dropoff_lat: Number(latitude), dropoff_lng: Number(longitude), payment_method: "gateway",
           items: cart.items.map((item) => ({ product_id: item.id, quantity: item.qty })),
         });
-        checkout = { ...checkout, orderIds: createdOrderIds(payload) };
+        checkout = { ...checkout, orderIds: createdOrderIds(payload), createdOrders: createdOrderRows(payload) };
         persist(checkout);
         // The saved order supplies delivery and total amounts for review before payment.
         return;
@@ -124,7 +124,7 @@ export default function CheckoutPage() {
       <div className={styles.breadcrumbs}><Link href="/dashboard/cart">Shopping cart</Link><span>/</span><span>Checkout</span></div>
       {error ? <p className={styles.errorMessage} role="alert">{error}</p> : null}
       {pending ? <div className={styles.notice}>
-        {pending.orderIds.length ? "Your order is saved. Review its product subtotal, delivery fee and total before continuing to payment." : "Your previous order submission needs to be checked before another order is placed."}
+        {pending.orderIds.length ? "Your order is saved. Review the total amount and any delivery fee before continuing to payment." : "Your previous order submission needs to be checked before another order is placed."}
         {" "}<Link href="/dashboard/checkout/payment">Check payment status</Link>
       </div> : null}
       <div className={styles.checkoutLayout}>

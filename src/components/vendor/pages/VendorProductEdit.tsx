@@ -417,7 +417,7 @@ export default function VendorProductEdit() {
                   value={form.basePrice}
                   onChange={handleChange}
                 />
-                <p className="helper-text">Enter the product selling price. Your proceeds are this price minus admin commission. Delivery is charged separately to the buyer.</p>
+                <p className="helper-text">Enter your selling price. You receive this full price. Admin commission and delivery are added to the buyer total.</p>
               </div>
               <div className="field">
                 <label>Stock</label>

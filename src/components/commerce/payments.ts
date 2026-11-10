@@ -14,11 +14,15 @@ export function paymentError(payload: unknown, fallback: string): string {
   return typeof message === "string" && message.trim() ? message : fallback;
 }
 
-export function createdOrderIds(payload: unknown): string[] {
+export function createdOrderRows(payload: unknown): unknown[] {
   const data = responseData(payload);
   const root = record(data);
   const rows = Array.isArray(data) ? data : root?.orders ?? root?.order_ids ?? root?.orderIds ?? root?.order ?? data;
-  const ids = (Array.isArray(rows) ? rows : [rows]).map((row) => {
+  return Array.isArray(rows) ? rows : [rows];
+}
+
+export function createdOrderIds(payload: unknown): string[] {
+  const ids = createdOrderRows(payload).map((row) => {
     if (typeof row === "string") return row.trim();
     const item = record(row);
     const id = item?.id ?? item?.order_id ?? item?.orderId ?? item?.ID;
@@ -72,6 +76,7 @@ export type PendingCheckout = {
   cartKey: string;
   checkoutUrl?: string;
   reference?: string;
+  createdOrders?: unknown[];
   // Persisted before submitting so an uncertain response never triggers an automatic retry.
   submitted: boolean;
 };

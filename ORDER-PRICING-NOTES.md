@@ -1,3 +1,26 @@
+# Current pricing rule - 10 November 2026
+
+This section supersedes the older pricing and delivery-inference rules below.
+
+- Buyer total = seller product subtotal + admin commission + delivery fee.
+- Commission uses the order's recorded amount, or its recorded percentage applied to the product subtotal, excluding delivery.
+- Seller proceeds = full seller product subtotal; commission is charged to the buyer.
+- Sellers and admins see commission separately. Buyers see only the amount with commission included, a delivery fee when delivery applies, and the total. Buyer pricing errors do not expose the commission breakdown.
+- RequiresDelivery=false excludes delivery from the buyer charge and hides the delivery row. RequiresDelivery=true includes the returned fee. The current checkout has no separate delivery checkbox; this follows the backend selection flag.
+- A missing delivery fee can be inferred only when both product subtotal and commission are known. Unknown commission must not be labelled as delivery.
+- Historical saved totals remain authoritative and conflicting amounts are flagged. The current global commission setting is never used to reprice saved orders.
+
+The order and payment proxies still send product IDs/quantities and saved order IDs respectively. Actual charging, escrow and payouts are performed by the external backend.
+
+Confirmed Create Order contract: Commission is the admin amount; TotalAmount includes seller price plus commission and excludes DeliveryFee. Buyer total is TotalAmount + DeliveryFee; seller price is TotalAmount - Commission. For the supplied example, 9450 + 1451.64 = 10901.64 paid by the buyer, with 9000 seller proceeds and 450 commission. Delivery is added once. Missing DeliveryFee remains unknown rather than becoming zero. Explicit buyer_total and legacy total_amount fields retain their all-in semantics.
+
+Checkout preserves the Create Order rows with its saved order IDs. Authenticated order-detail refreshes take priority; fields omitted by the later GET can fall back to the matching creation row for the same buyer and order. Errors still block review rather than silently accepting stale pricing. The public Swagger 201 response uses a generic response.APIResponse; the capitalized money-field semantics above were confirmed by the user from a real response.
+
+Review verification (10 November 2026): 60 focused pricing, payment, commission-setting, seller-data, buyer, escrow and payout tests passed. All 18 Chrome browser checks passed against the local preview, including the exact supplied Create Order amounts, delivery disabled, hidden commission, refresh recovery, duplicate prevention, mobile, buyer details, seller proceeds and admin breakdowns. TypeScript and focused lint passed (one existing checkout image warning). The mobile pricing screenshot was visually inspected. No live orders, payments or settings were changed. The externally hosted payment charge and settlement remain unverified.
+
+The review also fixed refresh priority across total aliases: a newly fetched TotalAmount now takes precedence over an older saved buyer_total/total_amount. Invalid fresh totals are flagged instead of being replaced by an old total.
+
+---
 # Product commission and order pricing
 
 The web flow follows these rules:

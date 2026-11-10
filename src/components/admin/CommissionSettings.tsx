@@ -56,7 +56,7 @@ function PercentageForm({ adminId }: { adminId: string }) {
     finally { lock.current = false; if (!controller?.signal.aborted) setSaving(false); }
   }
   return <Card>
-    <SectionTitle title="Product commission percentage" subtitle="Deducted from the product subtotal before the seller receives their proceeds. Buyers pay the product subtotal plus delivery." />
+    <SectionTitle title="Product commission percentage" subtitle="Calculated on the seller's product subtotal and added to the buyer total alongside delivery. Sellers receive their full product price." />
     {isLoading ? <p role="status" className="mt-4 text-sm text-slate-500">Loading saved percentage...</p> : error ? <div className="mt-4"><ErrorState message={error.message} onRetry={() => void refresh()} /></div> : <>
       <p className="mt-4 text-sm text-slate-600">Saved percentage: <strong>{data?.percentage == null ? "Not set" : data.percentage + "%"}</strong></p>
       <form onSubmit={save} className="mt-4 grid max-w-lg gap-3">
