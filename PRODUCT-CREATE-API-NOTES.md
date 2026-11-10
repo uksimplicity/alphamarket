@@ -1,25 +1,20 @@
-# Product city update — 10 November 2026
+# Product Location text field — 10 November 2026
 
-The current CreateProductRequest documents `locationId` as the required supported
-location/region, in addition to the legacy `location` text field. The product
-form now has a single Location selector, loading active cities from
-`GET /api/v1/ads/locations?type=city`, including pagination. Creation sends the
-selected city's ID as `locationId` and name as `location`. At the user's request,
-the entire address/map block has been removed from product creation. It no longer
-collects or submits `address`, `latitude` or `longitude`. Missing/unavailable
-selections are caught before image uploads or a product write. Refresh cities
-retries the read while retaining form contents.
+The seller types their city directly into one Location text field. The form
+trims this text and submits it as `location` to the existing product-create
+endpoint. No supported-city lookup, dropdown, locationId, address or coordinates
+are collected or required by product creation. The city-list helper, proxy and
+frontend locationId requirement have been removed at the user's request.
 
-Live dependency: on 10 November, the public locations endpoint returned
-`data: []` and `meta.total: 0` for both all locations and cities. An administrator
-must register/activate supported cities using the documented authenticated
-`POST /api/v1/admin/ad-locations` endpoint (e.g. name `Lagos`, type `city`,
-is_active `true`, with the appropriate parent if a hierarchy is configured).
-The frontend cannot substitute a state/LGA label or made-up ID for a supported
-location record. No live locations or products were created during this fix.
+The seller proxy checks for a nonblank location and forwards it unchanged to
+POST /api/v1/seller/product. Authenticated backend product creation still needs
+the user's live test; synthetic responses establish the outgoing request, not
+whether the backend accepts city text without a locationId. If it rejects this
+request, the backend must support the requested typed-city workflow.
 
-Checks use synthetic responses for city selection, omission of address/coordinates,
-missing/unavailable cities, public city proxy behavior and seller submission.
+Validation: 22 focused tests and 8 synthetic Chrome checks passed. These cover
+a typed city, trimming, no city-list dependency, omission of address/coordinates,
+blank-city rejection and forwarding without an ID. No live products were created.
 
 ---
 

@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const ts = require('typescript');
 
 // Exercise the form's effect and rendered options without a browser or live account.
-function formHarness(brandResponse, createResponse, citiesResponse = () => Response.json({ data: [{ id: 'city-lagos', name: 'Lagos', type: 'city' }], meta: { total: 1 } })) {
+function formHarness(brandResponse, createResponse) {
   const slots = [], effects = [], calls = [];
   let cursor = 0;
   const react = {
@@ -34,7 +34,6 @@ function formHarness(brandResponse, createResponse, citiesResponse = () => Respo
       if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'test-token', user: { id: 'seller-one', status: 'active' } }) };
       if (name.endsWith('localAccountData')) return { accountStamp: () => 'seller-one', checkAccount: () => {} };
       if (name.endsWith('sellerProductForm')) return { uploadProductMedia: async () => 'https://images.example/chair.png' };
-      if (name.endsWith('productCities')) return require('./support/load-ts.cjs')('src/components/products/productCities.ts');
       return {};
     },
     // Unexpected polling or focus subscriptions fail the test immediately.
@@ -42,7 +41,6 @@ function formHarness(brandResponse, createResponse, citiesResponse = () => Respo
     fetch: async (url, init) => {
       calls.push({ url, init });
       if (init?.method === 'POST' && createResponse) return createResponse();
-      if (url.startsWith('/api/products/locations')) return citiesResponse();
       if (url.includes('resource=brands')) return brandResponse();
       return Response.json({ data: [{ id: 'reference-id', name: 'Reference' }] });
     },
@@ -67,7 +65,7 @@ async function prepareProduct(harness, fields = {}) {
   for (const [name, value] of Object.entries({
     name: 'Chair', category: 'category-one', type: 'type-one',
     basePrice: '5000', shortDescription: 'An actual chair', brand: '',
-    locationId: 'city-lagos',
+    location: '  Lagos  ',
     ...fields,
   })) {
     nodes(tree, node => node.props?.name === name)[0].props.onChange({ target: { name, value } });
@@ -164,31 +162,28 @@ test('overlong brand names are rejected before product submission', async () => 
   cleanup();
 });
 
-test('single Location field submits the selected city name and ID without address or coordinates', async () => {
+test('seller types a city and sends trimmed location with no city lookup, ID, address or coordinates', async () => {
   const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Synthetic rejection' }, { status: 400 }));
-  const cleanup = await prepareProduct(harness);
+  const cleanup = await prepareProduct(harness, { location: '  Port Harcourt  ' });
+  const field = nodes(harness.render(), node => node.props?.name === 'location')[0];
+  assert.equal(field.type, 'input');
+  assert.equal(field.props.type, 'text');
   await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
   const writes = harness.calls.filter(call => call.init?.method === 'POST');
   assert.equal(writes.length, 1);
   const body = JSON.parse(writes[0].init.body);
-  assert.equal(body.locationId, 'city-lagos');
-  assert.equal(body.location, 'Lagos');
-  for (const key of ['address', 'latitude', 'longitude']) assert.equal(Object.hasOwn(body, key), false);
-  assert.equal(nodes(harness.render(), node => node.props?.addressName || node.props?.purpose === 'product').length, 0);
+  assert.equal(body.location, 'Port Harcourt');
+  for (const key of ['locationId', 'address', 'latitude', 'longitude']) assert.equal(Object.hasOwn(body,key),false);
+  assert.equal(harness.calls.some(call => call.url.includes('/locations')), false);
   cleanup();
 });
 
-test('missing, unavailable and forged cities stop before uploads or product submission', async () => {
-  for (const scenario of [
-    { fields: { locationId: '' }, cities: [{ id: 'city-lagos', name: 'Lagos', type: 'city' }], message: 'Select a product city.' },
-    { fields: { locationId: 'invented-city' }, cities: [{ id: 'city-lagos', name: 'Lagos', type: 'city' }], message: 'Select a product city.' },
-    { fields: {}, cities: [], message: 'No product cities are available.' },
-  ]) {
-    const harness = formHarness(() => Response.json({ data: [] }), undefined, () => Response.json({ data: scenario.cities, meta: { total: scenario.cities.length } }));
-    const cleanup = await prepareProduct(harness, scenario.fields);
-    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
-    assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
-    assert.ok(nodes(harness.render(), node => node.props?.className === 'form-error').some(node => String(node.props.children).includes(scenario.message)));
-    cleanup();
-  }
+test('blank city blocks product submission', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }));
+  const cleanup = await prepareProduct(harness, { location: '   ' });
+  await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
+  assert.equal(nodes(harness.render(), node => node.props?.className === 'form-error')[0].props.children, 'Enter the city where this product is located.');
+  cleanup();
 });
+

@@ -6,7 +6,6 @@ import "@/components/products/CreateProduct.css";
 import { getAuth } from "@/components/auth/authStorage";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import { uploadProductMedia } from "@/components/vendor/sellerProductForm";
-import { productCityPage } from "@/components/products/productCities";
 
 const initialForm = {
   name: "",
@@ -17,7 +16,7 @@ const initialForm = {
   shortDescription: "",
   basePrice: "",
   stock: "",
-  locationId: "",
+  location: "",
   tags: "",
   discountTitle: "",
   discountPrice: "",
@@ -345,10 +344,6 @@ export default function CreateProduct({ mode = "seller" }) {
   // Reuse requests across development effect replays for this form instance.
   const catalogRequests = useRef(new Map());
   const [form, setForm] = useState(initialForm);
-  const [cityOptions, setCityOptions] = useState([]);
-  const [citiesLoading, setCitiesLoading] = useState(true);
-  const [citiesError, setCitiesError] = useState("");
-  const [citiesAttempt, setCitiesAttempt] = useState(0);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [typeOptions, setTypeOptions] = useState([]);
   const [brandOptions, setBrandOptions] = useState([]);
@@ -549,36 +544,6 @@ export default function CreateProduct({ mode = "seller" }) {
     };
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    async function loadCities() {
-      setCitiesLoading(true);
-      setCitiesError("");
-      try {
-        const requestKey = `product-cities:${citiesAttempt}`;
-        if (!catalogRequests.current.has(requestKey)) {
-          catalogRequests.current.set(requestKey, (async () => {
-            const cities = new Map();
-            for (let offset = 0; offset < 10000; offset += 100) {
-              const response = await fetch(`/api/products/locations?offset=${offset}`, { headers: { Accept: "application/json" }, cache: "no-store" });
-              if (!response.ok) throw new Error("Product cities could not be loaded. Please retry.");
-              const page = productCityPage(await response.json());
-              page.cities.forEach(city => cities.set(city.id, city));
-              if (!page.count || (page.total !== undefined ? offset + page.count >= page.total : page.count < 100)) return [...cities.values()].sort((a, b) => a.name.localeCompare(b.name));
-            }
-            throw new Error("The city list is too large to load. Please contact support.");
-          })());
-        }
-        const cities = await catalogRequests.current.get(requestKey);
-        if (active) setCityOptions(cities);
-      } catch (failure) {
-        if (active) { setCityOptions([]); setCitiesError(failure instanceof Error ? failure.message : "Product cities could not be loaded."); }
-      } finally { if (active) setCitiesLoading(false); }
-    }
-    void loadCities();
-    return () => { active = false; };
-  }, [citiesAttempt]);
-
   const handleChange = (event) => {
     const { name, value } = event.target;
     setForm((prev) => {
@@ -671,9 +636,8 @@ export default function CreateProduct({ mode = "seller" }) {
       setError("Product description is required.");
       return;
     }
-    const selectedCity = cityOptions.find(city => city.id === form.locationId);
-    if (citiesLoading || citiesError || !selectedCity) {
-      setError(citiesLoading ? "Wait for product cities to load." : citiesError || (cityOptions.length ? "Select a product city." : "No product cities are available. An administrator needs to add an active city before products can be submitted."));
+    if (!form.location.trim()) {
+      setError("Enter the city where this product is located.");
       return;
     }
     if (mode === "seller" && !coverFile && imageFiles.length === 0) {
@@ -744,8 +708,7 @@ export default function CreateProduct({ mode = "seller" }) {
       isPublished: submitIntent !== "draft",
     };
 
-    payload.locationId = selectedCity.id;
-    payload.location = selectedCity.name;
+    payload.location = form.location.trim();
     if (form.shortDescription.trim()) payload.shortDescription = form.shortDescription.trim();
     const selectedBrandId = form.brand.trim();
     if (selectedBrandId && isUuid(selectedBrandId)) {
@@ -1003,13 +966,8 @@ export default function CreateProduct({ mode = "seller" }) {
             <div className="form-grid">
               <div className="field">
                 <label htmlFor="product-city">Location</label>
-                <select id="product-city" name="locationId" value={form.locationId} onChange={handleChange} disabled={loading || citiesLoading || !!citiesError || !cityOptions.length} aria-describedby="product-city-help">
-                  <option value="">{citiesLoading ? "Loading cities…" : "Select city"}</option>
-                  {cityOptions.map(city => <option key={city.id} value={city.id}>{city.name}</option>)}
-                </select>
-                <p id="product-city-help" className="text-sm text-slate-500">Select the city where this product is located.</p>
-                {citiesError ? <p role="alert" className="form-error">{citiesError}</p> : !citiesLoading && !cityOptions.length ? <p role="alert" className="form-error">No product cities are available. Ask an administrator to add an active city before publishing.</p> : null}
-                <button type="button" disabled={loading || citiesLoading} onClick={() => setCitiesAttempt(attempt => attempt + 1)}>Refresh cities</button>
+                <input id="product-city" name="location" type="text" autoComplete="address-level2" value={form.location} onChange={handleChange} disabled={loading} placeholder="Enter your city, e.g. Lagos" aria-describedby="product-city-help" />
+                <p id="product-city-help" className="text-sm text-slate-500">Enter the city where this product is located.</p>
               </div>
             </div>
           </section>
