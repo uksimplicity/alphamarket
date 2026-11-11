@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   if (!body) return problem("A product object is required.");
   const error = invalidProduct(body, true);
   if (error) return problem(error);
-  const locationId = await sellerLocation(req);
+  const locationId = await sellerLocation(req, (body.location as string).trim());
   if (locationId instanceof Response) return locationId;
   return sellerRequest(req, "/seller/product", "POST", { ...body, locationId });
 }

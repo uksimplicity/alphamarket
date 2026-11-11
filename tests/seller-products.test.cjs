@@ -12,7 +12,7 @@ const context = { params: Promise.resolve({ productId: 'product-1' }) };
 test('create preserves selected brand and sends once to singular authenticated endpoint', async () => {
   const calls = [];
   global.fetch = async (url, init) => {
-    if (url.endsWith('/user/profile')) return Response.json({ data: { location_id: 'saved-location' } });
+    if (url.includes('/ads/locations?')) return Response.json({ data: [{ id: 'saved-location', name: 'Lagos', type: 'city', is_active: true }] });
     calls.push({ url, init }); return Response.json({ error: 'failed' }, { status: 500 });
   };
   const response = await load('src/app/api/seller/products/route.ts').POST(request('POST', payload));
@@ -28,7 +28,7 @@ test('seller creation accepts description and a gallery image without other opti
   const minimal = { name: 'Chair', slug: 'chair', sellerId: 'seller-one', basePrice: 5000, categoryId: 'category', productTypeId: 'type', location: 'Lagos', shortDescription: 'An actual chair', media: { images: ['https://images.example/chair.png'] } };
   const calls = [];
   global.fetch = async (url, init) => {
-    if (url.endsWith('/user/profile')) return Response.json({ data: { address: { locationId: 'saved-location' } } });
+    if (url.includes('/ads/locations?')) return Response.json({ data: [{ id: 'saved-location', name: 'Lagos', type: 'city', is_active: true }] });
     calls.push({ url, body: JSON.parse(init.body) }); return Response.json({ data: { id: 'created' } }, { status: 201 });
   };
   const result = await load('src/app/api/seller/products/route.ts').POST(request('POST', minimal));
@@ -43,7 +43,7 @@ test('seller create proxy preserves a typed brand name without adding a brand ID
   const typedBrand = { ...unbranded, brandName: 'Acme' };
   const calls = [];
   global.fetch = async (url, init) => {
-    if (url.endsWith('/user/profile')) return Response.json({ data: { location: { id: 'saved-location' } } });
+    if (url.includes('/ads/locations?')) return Response.json({ data: [{ id: 'saved-location', name: 'Lagos', type: 'city', is_active: true }] });
     calls.push({ url, body: JSON.parse(init.body) }); return Response.json({ data: { id: 'created' } }, { status: 201 });
   };
   const result = await load('src/app/api/seller/products/route.ts').POST(request('POST', typedBrand));
@@ -53,36 +53,42 @@ test('seller create proxy preserves a typed brand name without adding a brand ID
   assert.equal(Object.hasOwn(calls[0].body, 'brandId'), false);
 });
 
-test('create uses the current authenticated seller address and overrides a submitted location ID', async () => {
+test('create resolves the typed city, forwards the product address and overrides a submitted location ID', async () => {
   const calls = [];
   global.fetch = async (url, init) => {
     calls.push({ url, init });
-    if (url.endsWith('/user/profile')) return Response.json({ data: { user: { address: { id: 'address-id', location_id: '  account-location  ' } } } });
+    if (url.includes('/ads/locations?')) return Response.json({ data: [{ id: 'city-location', name: 'Lagos', type: 'city', is_active: true }] });
     return Response.json({ data: { id: 'created' } }, { status: 201 });
   };
-  const response = await load('src/app/api/seller/products/route.ts').POST(request('POST', { ...payload, locationId: 'stale-location' }));
+  const response = await load('src/app/api/seller/products/route.ts').POST(request('POST', { ...payload, address: '12 Example Street', latitude: 6.5, longitude: 3.4, locationId: 'stale-location' }));
   assert.equal(response.status, 201);
   assert.deepEqual(calls.map(call => call.init.method), ['GET', 'POST']);
-  assert.equal(calls[0].url, 'https://marketplace.example/api/v1/user/profile');
+  assert.equal(calls[0].url, 'https://marketplace.example/api/v1/ads/locations?type=city&search=Lagos&limit=100&offset=0');
   assert.equal(calls[0].init.headers.Authorization, 'Bearer seller-token');
   assert.equal(calls[0].init.cache, 'no-store');
   const created = JSON.parse(calls[1].init.body);
-  assert.equal(created.locationId, 'account-location');
+  assert.equal(created.locationId, 'city-location');
   assert.equal(created.location, 'Lagos');
+  assert.equal(created.address, '12 Example Street');
+  assert.equal(created.latitude, 6.5);
+  assert.equal(created.longitude, 3.4);
+  assert.ok(calls.every(call => !call.url.includes('/user/profile')));
 });
 
-test('missing saved location and profile failures prevent product writes without inventing an ID', async () => {
+test('empty, inactive, fuzzy or ambiguous city results prevent incorrect placement', async () => {
   const collection = load('src/app/api/seller/products/route.ts');
-  for (const profile of [
-    { data: { id: 'seller-id', address: { id: 'address-id', city: 'Warri' } } },
-    { data: { location_id: '  ', address: 'Warri' } },
-    { success: false, data: { locationId: 'unusable' } },
+  for (const directory of [
+    { data: [] },
+    { data: [{ id: 'inactive', name: 'Lagos', type: 'city', is_active: false }] },
+    { data: [{ id: 'fuzzy', name: 'Lagos Island', type: 'city' }] },
+    { data: [{ id: 'state', name: 'Lagos', type: 'state' }] },
+    { data: [{ id: 'city-one', name: 'Lagos' }, { id: 'city-two', name: 'Lagos' }] },
   ]) {
     const calls = [];
-    global.fetch = async (url, init) => { calls.push({ url, init }); return Response.json(profile); };
+    global.fetch = async (url, init) => { calls.push({ url, init }); return Response.json(directory); };
     const response = await collection.POST(request('POST', payload));
     assert.ok(response.status >= 400);
-    assert.match((await response.json()).error, /location ID|address could not be loaded/);
+    assert.match((await response.json()).error, /Admin > Catalog > Locations|More than one supported city/);
     assert.deepEqual(calls.map(call => call.init.method), ['GET']);
   }
   for (const status of [401, 500]) {
@@ -93,15 +99,24 @@ test('missing saved location and profile failures prevent product writes without
   }
 });
 
-test('saved location extraction handles profile/address aliases without using unrelated IDs', () => {
-  const { savedLocationId } = load('src/app/api/seller/sellerLocation.ts');
-  for (const profile of [
-    { locationId: 'location-one' }, { location_id: 'location-one' },
-    { data: { profile: { address: { location: { id: 'location-one' } } } } },
-    { result: { pickupAddress: { locationID: 'location-one' } } },
-  ]) assert.equal(savedLocationId(profile), 'location-one');
-  for (const profile of [null, [], { id: 'user-id' }, { address: { id: 'address-id' } }, { location: 'Warri' }]) {
-    assert.equal(savedLocationId(profile), null);
+test('city search checks later pages and normalizes whitespace and case', async () => {
+  const calls = [];
+  global.fetch = async (url, init) => {
+    calls.push({ url, init });
+    if (init.method === 'POST') return Response.json({ data: { id: 'created' } }, { status: 201 });
+    return Response.json({ data: calls.length === 1 ? Array.from({ length: 100 }, (_, i) => ({ id: `other-${i}`, name: `Other city ${i}` })) : [{ id: 'real-city', name: '  LAGOS  ' }] });
+  };
+  assert.equal((await load('src/app/api/seller/products/route.ts').POST(request('POST', payload))).status, 201);
+  assert.match(calls[1].url, /offset=100/);
+  assert.equal(JSON.parse(calls[2].init.body).locationId, 'real-city');
+});
+
+test('malformed and rejected directories are errors, never empty successful searches', async () => {
+  for (const directory of [{ success: false, data: [] }, { data: [{ id: 'user-id' }] }, {}]) {
+    const calls = [];
+    global.fetch = async (url, init) => { calls.push(init.method); return Response.json(directory); };
+    assert.equal((await load('src/app/api/seller/products/route.ts').POST(request('POST', payload))).status, 502);
+    assert.deepEqual(calls, ['GET']);
   }
 });
 

@@ -1,3 +1,45 @@
+# Supported product cities through the existing admin API — 11 November 2026
+
+The user's authenticated profile contains only identity/account fields, with no
+address or location ID. The previous profile-location requirement was incorrect
+and has been replaced. Seller product creation resolves the trimmed typed city
+through `GET /ads/locations?type=city&search=...`, checks every returned page,
+and forwards the unique exact city record's real `id` as `locationId` to the
+existing `POST /seller/product`. Submitted IDs are overridden; fuzzy, inactive,
+non-city and ambiguous matches do not produce a product write. Account profile
+reads are no longer involved. Product address and coordinates are preserved if
+present in the submitted body. The seller form retains its single typed-city
+field and existing optional saved-coordinate forwarding.
+
+The separately deployed admin schema at
+https://marketplace.archintell.com/admin-docs/doc.json already documents:
+
+- `GET /admin/ad-locations` to list locations including inactive records.
+- `POST /admin/ad-locations` to create a supported region.
+- `PUT /admin/ad-locations/{id}` to update it, including `is_active`.
+
+The new `/admin/locations` page (Catalog > Locations) uses these existing APIs
+to add active countries/states/cities/areas and activate/deactivate records.
+Parent selection supports the documented hierarchy. Writes are authenticated,
+sent once without redirects/replay, and followed by a fresh read. Unknown save
+results preserve the draft and require explicit refresh before another write.
+The backend continues to enforce admin authorization. No backend code changes
+are needed; admins must configure supported cities through these existing APIs.
+
+Read-only live verification still found the public location directory empty.
+An administrator must add/activate Warri (type `city`) before a seller can use
+Warri. No live location records or products were created during implementation.
+Authenticated production acceptance remains to be verified after configuration.
+
+Validation: all 42 `npm run test:seller` checks pass, including pagination,
+exact matches, failures, and avoiding duplicate writes. TypeScript and the
+production build pass. Focused lint has no errors (two existing AdminShell
+warnings). All five `tests/ad-locations.browser.cjs` checks pass against the
+local production build: empty directory, creation, activation, unknown save
+handling/draft retention, and mobile layout, with synthetic data only.
+
+---
+
 # Seller account location forwarding — 11 November 2026
 
 At the user's direction, seller product creation now reads the current seller's

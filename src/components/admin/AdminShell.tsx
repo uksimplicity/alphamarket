@@ -16,6 +16,7 @@ const navigation: NavigationGroup[] = [
     { href: "/admin/products/create", label: "Create product" },
     { href: "/admin/products#product-types", label: "Product types" },
     { href: "/admin/categories", label: "Categories" },
+    { href: "/admin/locations", label: "Locations" },
     { href: "/admin/attributes", label: "Attributes" },
     { href: "/admin/tags", label: "Tags" },
     { href: "/admin/brands", label: "Brands" },

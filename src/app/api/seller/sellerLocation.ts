@@ -1,42 +1,28 @@
 import { problem, sellerRequest } from "./productUpstream";
+import { locationRows, type SupportedLocation } from "@/components/products/supportedLocations";
 
-type RecordValue = Record<string, unknown>;
-function record(value: unknown): RecordValue | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as RecordValue : null;
-}
+const normalized = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("en");
 
-// Only explicit location IDs qualify. A user/address ID or city name is not a
-// supported-location ID, even when it happens to be a UUID.
-export function savedLocationId(payload: unknown, depth = 0): string | null {
-  const value = record(payload);
-  if (!value || depth > 6 || value.success === false) return null;
-  for (const key of ["locationId", "location_id", "locationID", "LocationID"]) {
-    const id = value[key];
-    if (typeof id === "string" && id.trim()) return id.trim();
+export async function sellerLocation(req: Request, city: string): Promise<string | Response> {
+  // Resolve the product's region from the directory, never from a user/address ID.
+  const matches = new Map<string, SupportedLocation>();
+  for (let offset = 0; offset < 10_000; offset += 100) {
+    const query = new URLSearchParams({ type: "city", search: city.trim(), limit: "100", offset: String(offset) });
+    const response = await sellerRequest(req, `/ads/locations?${query}`);
+    if (!response.ok) return response;
+    let payload: unknown;
+    try { payload = await response.json(); }
+    catch { return problem("Supported cities could not be read. Please retry.", 502); }
+    const rows = locationRows(payload);
+    if (!rows) return problem("Supported cities could not be read. Please retry.", 502);
+    for (const row of rows) {
+      if (row.id.trim() && normalized(row.name) === normalized(city) && row.is_active !== false && (!row.type || row.type === "city")) matches.set(row.id, row);
+    }
+    if (rows.length < 100) {
+      if (matches.size === 1) return [...matches.keys()][0];
+      if (matches.size > 1) return problem("More than one supported city has this name. Ask an administrator to check the city records before publishing.", 409);
+      return problem(`Product creation is unavailable for ${city.trim()} until an administrator adds or activates this city in Admin > Catalog > Locations. Your account address does not need to be changed.`, 422);
+    }
   }
-  const location = record(value.location);
-  if (location) {
-    const id = location.id;
-    if (typeof id === "string" && id.trim()) return id.trim();
-  }
-  for (const key of ["data", "user", "profile", "result", "address", "pickup_address", "pickupAddress"]) {
-    const id = savedLocationId(value[key], depth + 1);
-    if (id) return id;
-  }
-  return null;
-}
-
-export async function sellerLocation(req: Request): Promise<string | Response> {
-  // Read with the same bearer token as the write; never use a cached address
-  // from another account or trust a location ID supplied by the product form.
-  const response = await sellerRequest(req, "/user/profile");
-  if (!response.ok) {
-    return problem("Could not load your saved seller address. Please retry before creating the product.", response.status);
-  }
-  let payload: unknown;
-  try { payload = await response.json(); }
-  catch { return problem("Your seller address could not be read. Please retry.", 502); }
-  if (record(payload)?.success === false) return problem("Your seller address could not be loaded. Please retry.", 502);
-  const id = savedLocationId(payload);
-  return id ?? problem("Your saved seller address has no location ID. Please contact support to complete your account location.");
+  return problem("The supported-city search could not be completed. Please ask an administrator to check the city records.", 502);
 }
