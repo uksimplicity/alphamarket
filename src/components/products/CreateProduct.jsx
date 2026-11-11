@@ -6,6 +6,7 @@ import "@/components/products/CreateProduct.css";
 import { getAuth } from "@/components/auth/authStorage";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import { uploadProductMedia } from "@/components/vendor/sellerProductForm";
+import { useToast } from "@/components/ToastProvider";
 
 const initialForm = {
   name: "",
@@ -351,7 +352,9 @@ function readCachedAdminProductTypes() {
   }
 }
 
-export default function CreateProduct({ mode = "seller" }) {
+/** @param {{ mode?: string, onCreated?: (() => void) | null }} props */
+export default function CreateProduct({ mode = "seller", onCreated = null }) {
+  const showToast = useToast();
   // Reuse requests across development effect replays for this form instance.
   const catalogRequests = useRef(new Map());
   const [form, setForm] = useState(initialForm);
@@ -800,7 +803,7 @@ export default function CreateProduct({ mode = "seller" }) {
       let { response, data } = await createWithPayload(payload);
       checkAccount(stamp);
 
-      if (!response.ok) {
+      if (!response.ok || data?.success === false) {
         const message =
           data && typeof data === "object"
             ? data.error || data.message || data.details
@@ -813,12 +816,13 @@ export default function CreateProduct({ mode = "seller" }) {
         window.dispatchEvent(new Event(LOCAL_PRODUCTS_UPDATED_EVENT));
       }
 
-      setSuccess(
-        submitIntent === "draft"
+      const successMessage = submitIntent === "draft"
           ? "Draft saved successfully."
-          : "Product published successfully."
-      );
-      router.push(mode === "admin" ? "/admin/products" : "/vendor/products");
+          : "Product published successfully.";
+      setSuccess(successMessage);
+      showToast(successMessage);
+      if (onCreated) onCreated();
+      else router.push(mode === "admin" ? "/admin/products" : "/vendor/products");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Create product failed.");
     } finally {

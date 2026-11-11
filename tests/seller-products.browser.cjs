@@ -84,6 +84,11 @@ async function main() {
     await evaluate(`window.__failUpload=false;window.__uploads=0`);
     await evaluate(`document.querySelector('form.create-form').requestSubmit()`);
     await wait(`sessionStorage.getItem('seller-created-product')`);
+    await wait(`location.pathname==='/vendor/products'&&document.querySelector('[data-app-toast]')?.textContent.includes('Product published successfully.')`);
+    assert.equal(await evaluate(`document.querySelector('[data-app-toast]').getAttribute('role')`), 'status');
+    await evaluate(`document.querySelector('[data-app-toast] button[aria-label="Dismiss notification"]').click()`);
+    await wait(`!document.querySelector('[data-app-toast]')`);
+    console.log('PASS product success toast survives navigation and can be dismissed');
     const created = await evaluate(`JSON.parse(sessionStorage.getItem('seller-created-product'))`);
     assert.equal(created.name, 'Minimal Chair');
     assert.equal(created.slug, 'minimal-chair');
@@ -102,7 +107,7 @@ async function main() {
     assert.equal(await evaluate(`sessionStorage.getItem('seller-created-upload-count')`), '1');
     assert.equal(['brandId','stock','tags','discounts','attributes'].every(key=>!Object.hasOwn(created,key)), true);
     console.log('PASS seller can create with a trimmed typed brand name and gallery photo while unused optional details stay omitted');
-    assert.deepEqual(errors, []); console.log('8 seller product browser checks passed.');
+    assert.deepEqual(errors, []); console.log('9 seller product browser checks passed.');
   } finally { socket.close(); await fetch(chromeUrl + '/json/close/' + target.id).catch(()=>{}); }
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

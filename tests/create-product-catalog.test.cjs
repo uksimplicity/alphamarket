@@ -6,7 +6,7 @@ const ts = require('typescript');
 
 // Exercise the form's effect and rendered options without a browser or live account.
 function formHarness(brandResponse, createResponse, sellerFields = {}) {
-  const slots = [], effects = [], calls = [];
+  const slots = [], effects = [], calls = [], notifications = [];
   let cursor = 0;
   const react = {
     useState(initial) {
@@ -30,14 +30,15 @@ function formHarness(brandResponse, createResponse, sellerFields = {}) {
     require(name) {
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
-      if (name === 'next/navigation') return { useRouter: () => ({}) };
+      if (name === 'next/navigation') return { useRouter: () => ({ push: path => notifications.push({ redirect: path }) }) };
+      if (name.endsWith('ToastProvider')) return { useToast: () => message => notifications.push({ toast: message }) };
       if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'test-token', user: { id: 'seller-one', status: 'active', ...sellerFields } }) };
       if (name.endsWith('localAccountData')) return { accountStamp: () => 'seller-one', checkAccount: () => {} };
       if (name.endsWith('sellerProductForm')) return { uploadProductMedia: async () => 'https://images.example/chair.png' };
       return {};
     },
     // Unexpected polling or focus subscriptions fail the test immediately.
-    window: {}, localStorage: { getItem: () => null },
+    window: { dispatchEvent() {} }, Event, localStorage: { getItem: () => null },
     fetch: async (url, init) => {
       calls.push({ url, init });
       if (init?.method === 'POST' && createResponse) return createResponse();
@@ -46,7 +47,7 @@ function formHarness(brandResponse, createResponse, sellerFields = {}) {
     },
   });
   return {
-    calls, effects,
+    calls, effects, notifications,
     render() { cursor = 0; return loadedModule.exports.default({}); },
   };
 }
@@ -216,5 +217,25 @@ test('missing or invalid saved seller coordinates are not replaced with invented
   assert.equal(Object.hasOwn(body, 'latitude'), false);
   assert.equal(Object.hasOwn(body, 'longitude'), false);
   cleanup();
+});
+
+test('successful creation shows a toast before redirecting to the product list', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ success: true, data: { id: 'created-product' } }, { status: 201 }));
+  const cleanup = await prepareProduct(harness);
+  await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  assert.deepEqual(harness.notifications, [{ toast: 'Product published successfully.' }, { redirect: '/vendor/products' }]);
+  assert.equal(harness.calls.filter(call => call.init?.method === 'POST').length, 1);
+  cleanup();
+});
+
+test('rejected creation never shows a success toast or redirects, including HTTP 200 failures', async () => {
+  for (const status of [200, 422]) {
+    const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ success: false, error: 'City is not supported.' }, { status }));
+    const cleanup = await prepareProduct(harness);
+    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+    assert.deepEqual(harness.notifications, []);
+    assert.equal(nodes(harness.render(), node => node.props?.className === 'form-error')[0].props.children, 'City is not supported.');
+    cleanup();
+  }
 });
 

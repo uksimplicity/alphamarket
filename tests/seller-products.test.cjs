@@ -88,7 +88,7 @@ test('empty, inactive, fuzzy or ambiguous city results prevent incorrect placeme
     global.fetch = async (url, init) => { calls.push({ url, init }); return Response.json(directory); };
     const response = await collection.POST(request('POST', payload));
     assert.ok(response.status >= 400);
-    assert.match((await response.json()).error, /Admin > Catalog > Locations|More than one supported city/);
+    assert.match((await response.json()).error, /adds or activates this city in Admin\.|More than one supported city/);
     assert.deepEqual(calls.map(call => call.init.method), ['GET']);
   }
   for (const status of [401, 500]) {

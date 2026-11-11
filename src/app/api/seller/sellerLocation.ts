@@ -21,7 +21,7 @@ export async function sellerLocation(req: Request, city: string): Promise<string
     if (rows.length < 100) {
       if (matches.size === 1) return [...matches.keys()][0];
       if (matches.size > 1) return problem("More than one supported city has this name. Ask an administrator to check the city records before publishing.", 409);
-      return problem(`Product creation is unavailable for ${city.trim()} until an administrator adds or activates this city in Admin > Catalog > Locations. Your account address does not need to be changed.`, 422);
+      return problem(`Product creation is unavailable for ${city.trim()} until an administrator adds or activates this city in Admin.`, 422);
     }
   }
   return problem("The supported-city search could not be completed. Please ask an administrator to check the city records.", 502);

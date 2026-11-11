@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import DevExtensionErrorGuard from "@/components/DevExtensionErrorGuard";
+import ToastProvider from "@/components/ToastProvider";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-sans",
@@ -22,7 +23,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={spaceGrotesk.variable}>
         <DevExtensionErrorGuard />
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );
