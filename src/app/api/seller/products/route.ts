@@ -1,4 +1,5 @@
 import { invalidProduct, problem, productBody, sellerAccess, sellerRequest } from "../productUpstream";
+import { sellerLocation } from "../sellerLocation";
 
 export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
@@ -19,5 +20,7 @@ export async function POST(req: Request) {
   if (!body) return problem("A product object is required.");
   const error = invalidProduct(body, true);
   if (error) return problem(error);
-  return sellerRequest(req, "/seller/product", "POST", body);
+  const locationId = await sellerLocation(req);
+  if (locationId instanceof Response) return locationId;
+  return sellerRequest(req, "/seller/product", "POST", { ...body, locationId });
 }

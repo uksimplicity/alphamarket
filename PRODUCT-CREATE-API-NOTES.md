@@ -1,3 +1,70 @@
+# Seller account location forwarding — 11 November 2026
+
+At the user's direction, seller product creation now reads the current seller's
+saved account address through authenticated `GET /user/profile`, then sends its
+explicit location ID as `locationId` to `POST /seller/product`. This supersedes
+the earlier conclusion that an empty public location list blocks every possible
+fix: an existing seller may already have a supported-location ID saved.
+
+The server reads with the product request's bearer token and no cache. It accepts
+explicit camel/snake-case location IDs on the profile or its nested address, and
+`location.id` objects. It never substitutes a user ID, address record ID, city
+name, or product-form-supplied ID. The typed city remains `location`; the form's
+existing coordinate forwarding remains in place. No public city lookup or new
+location-selection UI is needed.
+
+Profile failures and accounts without a returned location ID block the write
+with a specific address error. Registration currently collects no address in the
+web form, and the documented profile-update request has no location-ID field;
+therefore a missing ID cannot be repaired merely by resubmitting city text. The
+backend must expose the saved ID in its authenticated profile response for this
+path to work. The live profile response has no detailed Swagger schema, so actual
+account data still needs verification; no authenticated products were created.
+
+Validation: 27 focused product tests pass, covering nested saved addresses,
+overriding stale submitted IDs, missing account location, profile read failures,
+one product write without replay, and existing form behavior. Focused lint and
+TypeScript pass after refreshing generated route types and removing an obsolete
+generated type file for the previously deleted product-locations route.
+
+---
+
+# Live location rejection investigation — 11 November 2026
+
+The user still receives `location is required` after the coordinate restoration.
+A fresh read of the deployed Swagger `dto.CreateProductRequest` now includes
+`locationId`, described as the supported location/region ID and explicitly
+"required" in its description (although omitted from the schema's required
+array). `location` remains a separate string. The current form and seller proxy
+send the typed city as `location`; they do not send `locationId`. Coordinates
+cannot supply the missing supported-location ID.
+
+Read-only live checks against the configured API base,
+https://marketplace.archintell.com/api/v1, returned `success: true`, `data: []`
+and `meta.total: 0` for all of these documented GET requests:
+
+- `/ads/locations?limit=5&offset=0`
+- `/ads/locations?search=Warri&limit=100&offset=0`
+- `/ads/locations?type=city&search=Warri&limit=100&offset=0`
+- `/ads/locations?type=city&search=Lagos&limit=100&offset=0`
+
+The likely cause is the backend's required supported-location ID, rather than
+missing city text. An authenticated failing POST was not replayed, so its exact
+validation branch remains unconfirmed. No live products were created.
+
+To preserve the requested single typed-city workflow, the backend must accept
+nonblank `location` without `locationId`. Alternatively, the backend must first
+populate active supported locations, then the frontend can resolve or select a
+real ID and send it as `locationId`. Do not invent an ID, use the city name as an
+ID, or select an unrelated region. No location-selection UI or lookup dependency
+was added during this investigation; with an empty directory it cannot resolve
+the rejection. The earlier coordinate restoration is not a verified fix.
+
+Source: https://marketplace.archintell.com/swagger/doc.json,
+`POST /seller/product`, `dto.CreateProductRequest`, `GET /ads/locations`.
+
+---
+
 # Restored pre-map product Location submission — 10 November 2026
 
 The seller types a city into one Location text field; the trimmed city is sent
