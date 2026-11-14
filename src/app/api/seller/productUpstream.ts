@@ -41,6 +41,7 @@ export async function productBody(req: Request) {
 }
 
 export function invalidProduct(body: Record<string, unknown>, creating = false) {
+  if (body.status === "draft" && body.isPublished === true) return "A draft cannot be published.";
   if ((creating || "name" in body) && (typeof body.name !== "string" || !body.name.trim())) return "Product name is required.";
   if (creating && (typeof body.categoryId !== "string" || !body.categoryId.trim())) return "Category is required.";
   if (creating && (typeof body.productTypeId !== "string" || !body.productTypeId.trim())) return "Product type is required.";
@@ -57,6 +58,18 @@ export function invalidProduct(body: Record<string, unknown>, creating = false) 
     if (typeof price !== "number" || !Number.isFinite(price) || price <= 0 || price > 1e9) return "Price must be greater than zero and at most 1,000,000,000.";
   }
   if ("stock" in body && (typeof body.stock !== "number" || !Number.isInteger(body.stock) || body.stock < 0 || body.stock > 1e6)) return "Stock must be a whole number between zero and 1,000,000.";
+  if (creating && "discounts" in body) {
+    if (!Array.isArray(body.discounts)) return "Discounts must be a list.";
+    for (const entry of body.discounts) {
+      if (!entry || typeof entry !== "object") return "Invalid discount.";
+      const discount = entry as Record<string, unknown>;
+      if (typeof discount.price !== "number" || !Number.isFinite(discount.price) || discount.price <= 0 || discount.price > 1e9) return "Discount price must be greater than zero and at most 1,000,000,000.";
+      if (typeof body.basePrice === "number" && discount.price >= body.basePrice) return "Discount price must be less than the base price.";
+      const start = typeof discount.startDate === "string" ? Date.parse(discount.startDate) : NaN;
+      const end = typeof discount.endDate === "string" ? Date.parse(discount.endDate) : NaN;
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "Discount end date must be on or after the start date.";
+    }
+  }
   return null;
 }
 

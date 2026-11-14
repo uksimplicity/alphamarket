@@ -9,6 +9,45 @@ const request = (method, body, auth = 'Bearer seller-token') => new Request('htt
 const detail = () => load('src/app/api/seller/products/[productId]/route.ts');
 const context = { params: Promise.resolve({ productId: 'product-1' }) };
 
+test('draft intent does not bypass existing product requirements', async () => {
+  let calls = 0;
+  global.fetch = async () => { calls++; return Response.json({}); };
+  const route = load('src/app/api/seller/products/route.ts');
+  const draft = { ...payload, status: 'draft', isPublished: false };
+  for (const key of ['name', 'categoryId', 'productTypeId', 'basePrice', 'location', 'shortDescription', 'media']) {
+    const body = { ...draft };
+    delete body[key];
+    assert.equal((await route.POST(request('POST', body))).status, 400, key);
+  }
+  assert.equal(calls, 0);
+});
+
+test('invalid discounts and contradictory draft state are rejected before upstream calls', async () => {
+  let calls = 0;
+  global.fetch = async () => { calls++; return Response.json({}); };
+  const route = load('src/app/api/seller/products/route.ts');
+  for (const discounts of [
+    [{ price: 5000, startDate: '2026-11-14', endDate: '2026-11-15' }],
+    [{ price: 4000, startDate: '2026-11-15', endDate: '2026-11-14' }],
+  ]) assert.equal((await route.POST(request('POST', { ...payload, discounts }))).status, 400);
+  assert.equal((await route.POST(request('POST', { ...payload, status: 'draft', isPublished: true }))).status, 400);
+  assert.equal(calls, 0);
+});
+
+test('city preflight authenticates and only reads the supported-city directory', async () => {
+  const calls = [];
+  global.fetch = async (url, init) => { calls.push({ url, init }); return Response.json({ data: [{ id: 'lagos', name: 'Lagos', type: 'city' }] }); };
+  const route = load('src/app/api/seller/products/validate-city/route.ts');
+  const url = 'https://web.example/api/seller/products/validate-city?city=Lagos';
+  assert.equal((await route.GET(new Request(url))).status, 401);
+  const response = await route.GET(new Request(url, { headers: { Authorization: 'Bearer seller-token' } }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { success: true });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].init.method, 'GET');
+  assert.match(calls[0].url, /\/ads\/locations\?/);
+});
+
 test('create preserves selected brand and sends once to singular authenticated endpoint', async () => {
   const calls = [];
   global.fetch = async (url, init) => {

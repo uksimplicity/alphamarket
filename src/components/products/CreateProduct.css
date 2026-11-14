@@ -1,3 +1,32 @@
+.create-form-fields {
+  display: contents;
+}
+
+.product-photo-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.product-photo-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 140px;
+  font-size: 12px;
+}
+
+.product-photo-preview img {
+  width: 140px;
+  height: 110px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.product-photo-preview span { overflow-wrap: anywhere; }
+.product-photo-preview button { padding: 6px; cursor: pointer; color: #b91c1c; }
+
 .create-page {
   min-width: 0;
   background: #f3f4f6;

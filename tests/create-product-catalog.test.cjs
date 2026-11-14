@@ -5,8 +5,8 @@ const vm = require('node:vm');
 const ts = require('typescript');
 
 // Exercise the form's effect and rendered options without a browser or live account.
-function formHarness(brandResponse, createResponse, sellerFields = {}) {
-  const slots = [], effects = [], calls = [], notifications = [];
+function formHarness(brandResponse, createResponse, sellerFields = {}, options = {}) {
+  const slots = [], effects = [], calls = [], notifications = [], uploads = [];
   let cursor = 0;
   const react = {
     useState(initial) {
@@ -34,20 +34,21 @@ function formHarness(brandResponse, createResponse, sellerFields = {}) {
       if (name.endsWith('ToastProvider')) return { useToast: () => message => notifications.push({ toast: message }) };
       if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'test-token', user: { id: 'seller-one', status: 'active', ...sellerFields } }) };
       if (name.endsWith('localAccountData')) return { accountStamp: () => 'seller-one', checkAccount: () => {} };
-      if (name.endsWith('sellerProductForm')) return { uploadProductMedia: async () => 'https://images.example/chair.png' };
+      if (name.endsWith('sellerProductForm')) return { uploadProductMedia: async file => { uploads.push(file); return options.upload ? options.upload(file) : 'https://images.example/chair.png'; } };
       return {};
     },
     // Unexpected polling or focus subscriptions fail the test immediately.
     window: { dispatchEvent() {} }, Event, localStorage: { getItem: () => null },
     fetch: async (url, init) => {
       calls.push({ url, init });
+      if (url.includes('/validate-city?')) return options.cityResponse ? options.cityResponse() : Response.json({ success: true });
       if (init?.method === 'POST' && createResponse) return createResponse();
       if (url.includes('resource=brands')) return brandResponse();
       return Response.json({ data: [{ id: 'reference-id', name: 'Reference' }] });
     },
   });
   return {
-    calls, effects, notifications,
+    calls, effects, notifications, uploads,
     render() { cursor = 0; return loadedModule.exports.default({}); },
   };
 }
@@ -57,6 +58,122 @@ function nodes(tree, match) {
   if (!tree || typeof tree !== 'object') return [];
   return [...(match(tree) ? [tree] : []), ...nodes(tree.props?.children, match)];
 }
+
+test('unsupported city fails before uploading any media', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), null, {}, {
+    cityResponse: () => Response.json({ error: 'City is unsupported.' }, { status: 422 }),
+  });
+  const cleanup = await prepareProduct(harness);
+  await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(harness.uploads.length, 0);
+  assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
+  assert.equal(nodes(harness.render(), node => node.props?.className === 'form-error')[0].props.children, 'City is unsupported.');
+  cleanup();
+});
+
+test('failed product creation retries reuse successfully uploaded files', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Try again' }, { status: 500 }));
+  const cleanup = await prepareProduct(harness);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  }
+  assert.equal(harness.uploads.length, 1);
+  assert.equal(harness.calls.filter(call => call.init?.method === 'POST').length, 2);
+  cleanup();
+});
+
+test('name-only drafts are blocked before city checks, uploads or product writes', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ data: { id: 'draft' } }));
+  harness.render();
+  const cleanup = harness.effects[0]();
+  const tree = harness.render();
+  nodes(tree, node => node.props?.name === 'name')[0].props.onChange({ target: { name: 'name', value: 'Unfinished chair' } });
+  await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {}, nativeEvent: { submitter: { value: 'draft' } } });
+  assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
+  assert.equal(nodes(harness.render(), node => node.props?.className === 'form-error')[0].props.children, 'Please select a category.');
+  assert.equal(harness.uploads.length, 0);
+  assert.equal(harness.calls.some(call => call.url.includes('validate-city')), false);
+  cleanup();
+});
+
+test('complete drafts retain the existing required payload and submission intent', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ data: { id: 'draft' } }));
+  const cleanup = await prepareProduct(harness);
+  await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {}, nativeEvent: { submitter: { value: 'draft' } } });
+  const body = JSON.parse(harness.calls.find(call => call.init?.method === 'POST').init.body);
+  for (const key of ['basePrice', 'categoryId', 'name', 'productTypeId', 'sellerId', 'slug', 'location', 'shortDescription', 'media']) assert.ok(body[key], key);
+  assert.equal(body.status, 'draft');
+  assert.equal(body.isPublished, false);
+  assert.deepEqual(harness.notifications, [{ toast: 'Draft saved successfully.' }, { redirect: '/vendor/products' }]);
+  cleanup();
+});
+
+test('partial media failures only retry failed files', async () => {
+  let fail = true;
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ data: { id: 'created' } }), {}, {
+    upload: async file => {
+      if (file.name === 'retry.png' && fail) { fail = false; throw new Error('Storage unavailable'); }
+      return `https://images.example/${file.name}`;
+    },
+  });
+  const cleanup = await prepareProduct(harness);
+  nodes(harness.render(), node => node.props?.multiple)[0].props.onChange({ target: { files: [{ name: 'saved.png', size: 100 }, { name: 'retry.png', size: 100 }] } });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  }
+  assert.deepEqual(harness.uploads.map(file => file.name), ['chair.png', 'saved.png', 'retry.png', 'retry.png']);
+  assert.equal(harness.calls.filter(call => call.init?.method === 'POST').length, 1);
+  cleanup();
+});
+
+test('an incomplete draft cannot be published and invalid supplied draft prices are rejected', async () => {
+  for (const value of ['', '-1']) {
+    const harness = formHarness(() => Response.json({ data: [] }));
+    harness.render();
+    const cleanup = harness.effects[0]();
+    const tree = harness.render();
+    for (const [name, fieldValue] of Object.entries({ name: 'Chair', basePrice: value })) {
+      nodes(tree, node => node.props?.name === name)[0].props.onChange({ target: { name, value: fieldValue } });
+    }
+    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {}, nativeEvent: { submitter: { value: value ? 'draft' : 'publish' } } });
+    assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
+    cleanup();
+  }
+});
+
+test('invalid discounts block submission before uploads', async () => {
+  for (const fields of [
+    { discountPrice: '5000', discountStartDate: '2026-11-14', discountEndDate: '2026-11-15' },
+    { discountPrice: '4000', discountStartDate: '2026-11-15', discountEndDate: '2026-11-14' },
+  ]) {
+    const harness = formHarness(() => Response.json({ data: [] }));
+    const cleanup = await prepareProduct(harness);
+    nodes(harness.render(), node => node.props?.type === 'checkbox')[0].props.onChange({ target: { checked: true } });
+    const tree = harness.render();
+    for (const [name, value] of Object.entries({ discountTitle: 'Sale', ...fields })) {
+      nodes(tree, node => node.props?.name === name)[0].props.onChange({ target: { name, value } });
+    }
+    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+    assert.equal(harness.uploads.length, 0);
+    assert.match(nodes(harness.render(), node => node.props?.className === 'form-error')[0].props.children, /Discount/);
+    cleanup();
+  }
+});
+
+test('gallery selections append and individual photos can be removed', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }));
+  const cleanup = await prepareProduct(harness);
+  for (const name of ['first.png', 'second.png']) {
+    nodes(harness.render(), node => node.type === 'input' && node.props.multiple)[0].props.onChange({ target: { files: [{ name, size: 100 }] } });
+  }
+  const previews = () => nodes(harness.render(), node => typeof node.type === 'function' && node.props?.file);
+  assert.equal(previews().length, 3);
+  previews().find(node => node.props.file.name === 'first.png').props.onRemove();
+  assert.deepEqual(previews().map(node => node.props.file.name), ['chair.png', 'second.png']);
+  previews()[0].props.onRemove();
+  assert.deepEqual(previews().map(node => node.props.file.name), ['second.png']);
+  cleanup();
+});
 
 async function prepareProduct(harness, fields = {}) {
   harness.render();
@@ -163,7 +280,7 @@ test('overlong brand names are rejected before product submission', async () => 
   cleanup();
 });
 
-test('seller types a city and sends trimmed location with no city lookup, ID, address or coordinates', async () => {
+test('seller types a city and sends trimmed location without a city ID, address or coordinates', async () => {
   const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Synthetic rejection' }, { status: 400 }));
   const cleanup = await prepareProduct(harness, { location: '  Port Harcourt  ' });
   const field = nodes(harness.render(), node => node.props?.name === 'location')[0];

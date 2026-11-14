@@ -288,6 +288,22 @@ const MAX_PRODUCT_PRICE = 1000000000;
 const MAX_PRODUCT_STOCK = 1000000;
 const MAX_DISCOUNT_PRICE = 1000000000;
 
+function PhotoPreview({ file, onRemove, disabled }) {
+  const imageRef = useRef(null);
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(file);
+    imageRef.current.src = objectUrl;
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+  return <div className="product-photo-preview">
+    {/* Local blob previews do not use the image optimization service. */}
+    {/* eslint-disable-next-line @next/next/no-img-element */}
+    <img ref={imageRef} alt={file.name} />
+    <span>{file.name}</span>
+    <button type="button" disabled={disabled} onClick={onRemove} aria-label={`Remove ${file.name}`}>Remove</button>
+  </div>;
+}
+
 function parsePositivePrice(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return null;
@@ -357,6 +373,8 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
   const showToast = useToast();
   // Reuse requests across development effect replays for this form instance.
   const catalogRequests = useRef(new Map());
+  const uploadedFiles = useRef(new WeakMap());
+  const submitting = useRef(false);
   const [form, setForm] = useState(initialForm);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [typeOptions, setTypeOptions] = useState([]);
@@ -581,6 +599,10 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (submitting.current) return;
+    const intent = event.nativeEvent?.submitter?.value || submitIntent;
+    const isDraft = intent === "draft";
+    setSubmitIntent(intent);
     setError("");
     setSuccess("");
 
@@ -685,6 +707,16 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
         setError(`Discount price is too large. Maximum allowed is ${MAX_DISCOUNT_PRICE.toLocaleString()}.`);
         return;
       }
+      if (!form.basePrice.trim() || discountPriceNumber >= basePriceNumber) {
+        setError("Discount price must be less than the base price.");
+        return;
+      }
+      const start = Date.parse(form.discountStartDate);
+      const end = Date.parse(form.discountEndDate);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+        setError("Discount end date must be on or after the start date.");
+        return;
+      }
     }
 
     const coverError = validateFileSize(coverFile, "Cover image");
@@ -718,8 +750,8 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
       productTypeId: form.type.trim(),
       sellerId,
       slug: normalizedSlug,
-      status: submitIntent === "draft" ? "draft" : "publish",
-      isPublished: submitIntent !== "draft",
+      status: isDraft ? "draft" : "publish",
+      isPublished: !isDraft,
     };
 
     payload.location = form.location.trim();
@@ -759,13 +791,34 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
 
     try {
       const stamp = accountStamp();
+      submitting.current = true;
       setLoading(true);
 
-      const coverUrl = coverFile ? await uploadProductMedia(coverFile, authorization) : "";
-      const imageUrls = imageFiles.length
-        ? await Promise.all(imageFiles.map((file) => uploadProductMedia(file, authorization)))
-        : [];
-      const videoUrl = videoFile ? await uploadProductMedia(videoFile, authorization) : "";
+      if (mode === "seller" && form.location.trim()) {
+        const response = await fetch(`/api/seller/products/validate-city?city=${encodeURIComponent(form.location.trim())}`, {
+          headers: { Authorization: authorization },
+        });
+        const result = await response.json();
+        if (!response.ok || result.success === false) throw new Error(result.error || "Could not validate this city.");
+        checkAccount(stamp);
+      }
+
+      async function uploadOnce(file) {
+        checkAccount(stamp);
+        const cached = uploadedFiles.current.get(file);
+        if (cached?.stamp === stamp) return cached.url;
+        const url = await uploadProductMedia(file, authorization);
+        checkAccount(stamp);
+        uploadedFiles.current.set(file, { stamp, url });
+        return url;
+      }
+      const coverUrl = coverFile ? await uploadOnce(coverFile) : "";
+      // Let every gallery upload finish so a retry cannot overlap pending work.
+      const imageResults = await Promise.allSettled(imageFiles.map(uploadOnce));
+      const failedImage = imageResults.find((result) => result.status === "rejected");
+      if (failedImage) throw failedImage.reason;
+      const imageUrls = imageResults.map((result) => result.value);
+      const videoUrl = videoFile ? await uploadOnce(videoFile) : "";
 
       if (coverFile || imageFiles.length || videoFile) {
         payload.media = {
@@ -816,7 +869,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
         window.dispatchEvent(new Event(LOCAL_PRODUCTS_UPDATED_EVENT));
       }
 
-      const successMessage = submitIntent === "draft"
+      const successMessage = isDraft
           ? "Draft saved successfully."
           : "Product published successfully.";
       setSuccess(successMessage);
@@ -826,6 +879,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Create product failed.");
     } finally {
+      submitting.current = false;
       setLoading(false);
     }
   };
@@ -853,6 +907,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
         </div>
 
         <form onSubmit={handleSubmit} className="create-form">
+          <fieldset disabled={loading} className="create-form-fields">
           <p className="text-sm text-slate-500">Product name, category, product type, base price, description, and location are required.{mode === "seller" ? " Add at least one product image." : ""}</p>
           <section className="form-section">
             <div className="section-title">Basic Information</div>
@@ -1006,8 +1061,9 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
               <label className="upload-card">
                 <input
                   type="file"
+                  disabled={loading}
                   accept="image/*,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.avif,.tif,.tiff,.heic,.heif"
-                  onChange={(event) => setCoverFile(event.target.files?.[0] ?? null)}
+                  onChange={(event) => { const file = event.target.files?.[0]; if (file) setCoverFile(file); event.target.value = ""; }}
                 />
                 <span className="upload-icon">&#8593;</span>
                 <div className="upload-title">Upload Cover Photo</div>
@@ -1018,11 +1074,14 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
               <label className="upload-card">
                 <input
                   type="file"
+                  disabled={loading}
                   accept="image/*,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.avif,.tif,.tiff,.heic,.heif"
                   multiple
-                  onChange={(event) =>
-                    setImageFiles(event.target.files ? Array.from(event.target.files) : [])
-                  }
+                  onChange={(event) => {
+                    const files = Array.from(event.target.files || []);
+                    setImageFiles((previous) => [...previous, ...files]);
+                    event.target.value = "";
+                  }}
                 />
                 <span className="upload-icon">&#8593;</span>
                 <div className="upload-title">Upload Product Photos</div>
@@ -1035,8 +1094,9 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
               <label className="upload-card">
                 <input
                   type="file"
+                  disabled={loading}
                   accept=".mp4,.mov,.avi"
-                  onChange={(event) => setVideoFile(event.target.files?.[0] ?? null)}
+                  onChange={(event) => { const file = event.target.files?.[0]; if (file) setVideoFile(file); event.target.value = ""; }}
                 />
                 <span className="upload-icon">&#8593;</span>
                 <div className="upload-title">Upload Video (optional)</div>
@@ -1045,6 +1105,11 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
                 {videoFile ? <div className="upload-filename">{videoFile.name}</div> : null}
               </label>
             </div>
+            <div className="product-photo-previews">
+              {coverFile ? <PhotoPreview file={coverFile} disabled={loading} onRemove={() => setCoverFile(null)} /> : null}
+              {imageFiles.map((file, index) => <PhotoPreview key={index} file={file} disabled={loading} onRemove={() => setImageFiles((previous) => previous.filter((_, position) => position !== index))} />)}
+            </div>
+            {videoFile ? <button type="button" className="btn-outline" disabled={loading} onClick={() => setVideoFile(null)}>Remove video</button> : null}
           </section>
 
           <section className="form-section">
@@ -1137,6 +1202,8 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
               type="submit"
               className="btn-cancel"
               disabled={loading}
+              name="intent"
+              value="draft"
               onClick={() => setSubmitIntent("draft")}
             >
               {loading && submitIntent === "draft" ? "Saving draft..." : "Save Draft"}
@@ -1145,11 +1212,14 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
               type="submit"
               className="btn-save"
               disabled={loading}
+              name="intent"
+              value="publish"
               onClick={() => setSubmitIntent("publish")}
             >
               {loading && submitIntent === "publish" ? "Publishing..." : "Publish Product"}
             </button>
           </div>
+          </fieldset>
         </form>
       </div>
     </div>
