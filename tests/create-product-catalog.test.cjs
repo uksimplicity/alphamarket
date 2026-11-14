@@ -36,6 +36,8 @@ function formHarness(brandResponse, createResponse, sellerFields = {}, options =
       if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'test-token', user: { id: 'seller-one', status: 'active', ...sellerFields } }) };
       if (name.endsWith('localAccountData')) return { accountStamp: () => 'seller-one', checkAccount: () => {} };
       if (name.endsWith('sellerProductForm')) return { uploadProductMedia: async file => { uploads.push(file); return options.upload ? options.upload(file) : 'https://images.example/chair.png'; } };
+      if (name === '@/components/ads/hooks') return { usePostingCost: () => ({ cost: options.costUnavailable ? undefined : options.cost || { fee: 0, balance: 100000 }, error: options.costError, loading: false, refresh() {} }) };
+      if (name === '@/components/ads/client') return { fetchPostingCost: async () => options.freshCost || options.cost || { fee: 0, balance: 100000 } };
       if (name === '@/data/nigeriaLocations') return load('src/data/nigeriaLocations.ts');
       if (name.endsWith('structuredAddress')) return load('src/components/commerce/structuredAddress.ts');
       if (name.endsWith('supportedLocations')) return load('src/components/products/supportedLocations.ts');
@@ -54,7 +56,7 @@ function formHarness(brandResponse, createResponse, sellerFields = {}, options =
   });
   return {
     calls, effects, notifications, uploads,
-    render() { cursor = 0; return loadedModule.exports.default({}); },
+    render() { cursor = 0; return loadedModule.exports.default({ mode: options.mode || 'seller', adsBasePath: options.adsBasePath }); },
   };
 }
 
@@ -74,6 +76,53 @@ test('state selection limits LGAs and clears a previously selected LGA', async (
   assert.equal(lgaField().props.value, '');
   assert.ok(nodes(lgaField(), node => node.type === 'option').some(node => node.props.value === 'Warri South'));
   assert.equal(nodes(lgaField(), node => node.type === 'option').some(node => node.props.value === 'Ikeja'), false);
+  cleanup();
+});
+
+test('insufficient balance, unknown quotes and changed fees block creation before media uploads', async () => {
+  for (const options of [
+    { cost: { fee: 250, balance: 100 } },
+    { cost: { fee: 250, balance: null } },
+    { costUnavailable: true, costError: 'Fee service unavailable' },
+    { cost: { fee: 250, balance: 1000 }, freshCost: { fee: 300, balance: 1000 } },
+  ]) {
+    const harness = formHarness(() => Response.json({ data: [] }), null, {}, options);
+    const cleanup = await prepareProduct(harness);
+    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+    assert.equal(harness.uploads.length, 0);
+    assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
+    assert.equal(harness.notifications.length, 0);
+    cleanup();
+  }
+});
+
+test('an uncertain product creation cannot be submitted again from the same form', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Response uncertain' }, { status: 502 }));
+  const cleanup = await prepareProduct(harness);
+  for (let attempt = 0; attempt < 2; attempt++) await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(harness.calls.filter(call => call.init?.method === 'POST').length, 1);
+  cleanup();
+});
+
+test('My Ads creation uses the buyer-safe schema and the user ads endpoint', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ data: { id: 'ad-one', moderation_status: 'pending' } }, { status: 201 }), { role: 'buyer' }, { mode: 'ad', cost: { fee: 100, balance: 500 } });
+  const cleanup = await prepareProduct(harness);
+  await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  const call = harness.calls.find(call => call.init?.method === 'POST');
+  assert.equal(call.url, '/api/my-ads');
+  const body = JSON.parse(call.init.body);
+  for (const key of ['name', 'basePrice', 'categoryId', 'productTypeId', 'locationId', 'address']) assert.ok(body[key], key);
+  for (const key of ['sellerId', 'status', 'isPublished', 'location', 'latitude', 'longitude']) assert.equal(Object.hasOwn(body, key), false, key);
+  assert.deepEqual(harness.notifications, [{ toast: 'Submitted for review. Your ad is pending approval.' }, { redirect: '/dashboard/my-ads' }]);
+  cleanup();
+});
+
+test('seller My Ads posting keeps wallet links and navigation in the seller workspace', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ data: { id: 'ad-one' } }, { status: 201 }), { role: 'seller' }, { mode: 'ad', adsBasePath: '/vendor/my-ads' });
+  const cleanup = await prepareProduct(harness);
+  assert.equal(nodes(harness.render(), node => node.props?.walletHref)[0].props.walletHref, '/vendor/wallet');
+  await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  assert.deepEqual(harness.notifications.at(-1), { redirect: '/vendor/my-ads' });
   cleanup();
 });
 
@@ -129,8 +178,8 @@ test('unsupported city fails before uploading any media', async () => {
   cleanup();
 });
 
-test('failed product creation retries reuse successfully uploaded files', async () => {
-  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Try again' }, { status: 500 }));
+test('a definitively rejected creation can reuse uploaded files on a manual retry', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Correct the description' }, { status: 422 }));
   const cleanup = await prepareProduct(harness);
   for (let attempt = 0; attempt < 2; attempt++) {
     await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
@@ -154,15 +203,15 @@ test('name-only drafts are blocked before city checks, uploads or product writes
   cleanup();
 });
 
-test('complete drafts retain the existing required payload and submission intent', async () => {
+test('marketplace submissions do not send unsupported publication or draft flags', async () => {
   const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ data: { id: 'draft' } }));
   const cleanup = await prepareProduct(harness);
   await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {}, nativeEvent: { submitter: { value: 'draft' } } });
   const body = JSON.parse(harness.calls.find(call => call.init?.method === 'POST').init.body);
   for (const key of ['basePrice', 'categoryId', 'name', 'productTypeId', 'sellerId', 'slug', 'location', 'shortDescription', 'media']) assert.ok(body[key], key);
-  assert.equal(body.status, 'draft');
-  assert.equal(body.isPublished, false);
-  assert.deepEqual(harness.notifications, [{ toast: 'Draft saved successfully.' }, { redirect: '/vendor/products' }]);
+  assert.equal(Object.hasOwn(body, 'status'), false);
+  assert.equal(Object.hasOwn(body, 'isPublished'), false);
+  assert.deepEqual(harness.notifications, [{ toast: 'Submitted for review. Your ad is pending approval.' }, { redirect: '/vendor/products' }]);
   cleanup();
 });
 
@@ -244,7 +293,9 @@ async function prepareProduct(harness, fields = {}) {
     location: '  Lagos  ', locationId: 'selected-area', houseNumber: '12B', street: 'Allen Avenue', state: 'Lagos', lga: 'Ikeja',
     ...fields,
   })) {
-    nodes(tree, node => node.props?.name === name)[0].props.onChange({ target: { name, value } });
+    const field = nodes(tree, node => node.props?.name === name)[0];
+    if (!field && name === 'location') continue;
+    field.props.onChange({ target: { name, value } });
   }
   nodes(tree, node => node.type === 'input' && node.props.type === 'file')[0].props.onChange({
     target: { files: [{ name: 'chair.png', size: 100 }] },
@@ -401,7 +452,7 @@ test('successful creation shows a toast before redirecting to the product list',
   const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ success: true, data: { id: 'created-product' } }, { status: 201 }));
   const cleanup = await prepareProduct(harness);
   await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
-  assert.deepEqual(harness.notifications, [{ toast: 'Product published successfully.' }, { redirect: '/vendor/products' }]);
+  assert.deepEqual(harness.notifications, [{ toast: 'Submitted for review. Your ad is pending approval.' }, { redirect: '/vendor/products' }]);
   assert.equal(harness.calls.filter(call => call.init?.method === 'POST').length, 1);
   cleanup();
 });

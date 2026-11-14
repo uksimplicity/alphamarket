@@ -10,6 +10,9 @@ import { useToast } from "@/components/ToastProvider";
 import { nigeriaLGAs, nigeriaStates } from "@/data/nigeriaLocations";
 import { fullAddress } from "@/components/commerce/structuredAddress";
 import { locationRows } from "@/components/products/supportedLocations";
+import { usePostingCost } from "@/components/ads/hooks";
+import { fetchPostingCost } from "@/components/ads/client";
+import PostingFee from "@/components/ads/PostingFee";
 
 const initialForm = {
   name: "",
@@ -376,13 +379,16 @@ function readCachedAdminProductTypes() {
   }
 }
 
-/** @param {{ mode?: string, onCreated?: (() => void) | null }} props */
-export default function CreateProduct({ mode = "seller", onCreated = null }) {
+/** @param {{ mode?: string, onCreated?: (() => void) | null, adsBasePath?: string }} props */
+export default function CreateProduct({ mode = "seller", onCreated = null, adsBasePath = "/dashboard/my-ads" }) {
+  const isAd = mode === "ad";
+  const marketplacePost = mode !== "admin";
   const showToast = useToast();
   // Reuse requests across development effect replays for this form instance.
   const catalogRequests = useRef(new Map());
   const uploadedFiles = useRef(new WeakMap());
   const submitting = useRef(false);
+  const uncertainCreation = useRef(false);
   const [form, setForm] = useState(initialForm);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [typeOptions, setTypeOptions] = useState([]);
@@ -404,6 +410,8 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
   const [locationsError, setLocationsError] = useState("");
   const [locationsLoading, setLocationsLoading] = useState(true);
   const [locationsAttempt, setLocationsAttempt] = useState(0);
+  const [creationUncertain, setCreationUncertain] = useState(false);
+  const posting = usePostingCost(marketplacePost ? form.category : "");
   const router = useRouter();
 
 
@@ -442,7 +450,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
         const auth = getAuth();
         const token = auth?.access_token;
         const authorization = buildAuthorizationHeader(token);
-        const response = await fetch("/api/admin/categories/raw", {
+        const response = await fetch(isAd ? "/api/ads/categories?limit=200&offset=0" : "/api/admin/categories/raw", {
           headers: {
             Accept: "application/json",
             ...(authorization ? { Authorization: authorization } : {}),
@@ -588,10 +596,10 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isAd]);
 
   useEffect(() => {
-    if (mode !== "seller") return;
+    if (mode === "admin") return;
     let active = true;
     const key = `locations-${locationsAttempt}`;
     if (!catalogRequests.current.has(key)) {
@@ -637,7 +645,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (submitting.current) return;
+    if (submitting.current || uncertainCreation.current) return;
     const intent = event.nativeEvent?.submitter?.value || submitIntent;
     const isDraft = intent === "draft";
     setSubmitIntent(intent);
@@ -710,11 +718,11 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
       setError("Product description is required.");
       return;
     }
-    if (!form.location.trim()) {
+    if (!isAd && !form.location.trim()) {
       setError("Enter the city where this product is located.");
       return;
     }
-    if (mode === "seller") {
+    if (marketplacePost) {
       if (!form.locationId || !locations.some((row) => row.id === form.locationId)) {
         setError("Select a supported location from the dropdown.");
         return;
@@ -728,7 +736,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
         return;
       }
     }
-    if (mode === "seller" && !coverFile && imageFiles.length === 0) {
+    if (marketplacePost && !coverFile && imageFiles.length === 0) {
       setError("Add at least one product image.");
       return;
     }
@@ -800,14 +808,13 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
       categoryId: form.category.trim(),
       name: form.name.trim(),
       productTypeId: form.type.trim(),
-      sellerId,
+      ...(!isAd ? { sellerId } : {}),
       slug: normalizedSlug,
-      status: isDraft ? "draft" : "publish",
-      isPublished: !isDraft,
+      ...(!marketplacePost ? { status: isDraft ? "draft" : "publish", isPublished: !isDraft } : {}),
     };
 
-    payload.location = form.location.trim();
-    if (mode === "seller") {
+    if (!isAd) payload.location = form.location.trim();
+    if (marketplacePost) {
       payload.locationId = form.locationId;
       payload.address = fullAddress(form);
     }
@@ -847,12 +854,24 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
       ];
     }
 
+    let creationAttempted = false;
     try {
       const stamp = accountStamp();
       submitting.current = true;
       setLoading(true);
 
-      if (mode === "seller" && form.location.trim()) {
+      if (marketplacePost) {
+        if (!posting.cost) throw new Error(posting.error || "Wait for the posting fee and wallet check before submitting.");
+        const fresh = await fetchPostingCost(form.category);
+        checkAccount(stamp);
+        if (fresh.fee !== posting.cost.fee) {
+          posting.refresh();
+          throw new Error("The posting fee changed. Review the refreshed fee before submitting.");
+        }
+        if (fresh.fee > 0 && (fresh.balance === null || fresh.balance < fresh.fee)) {
+          posting.refresh();
+          throw new Error("Your wallet balance is too low or unavailable. Fund your wallet and refresh the balance before submitting.");
+        }
         const response = await fetch(`/api/seller/products/validate-city?locationId=${encodeURIComponent(form.locationId)}`, {
           headers: { Authorization: authorization },
         });
@@ -888,9 +907,10 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
       checkAccount(stamp);
 
       const createEndpoint =
-        mode === "admin" ? "/api/admin/products" : "/api/seller/products";
+        mode === "admin" ? "/api/admin/products" : isAd ? "/api/my-ads" : "/api/seller/products";
 
       async function createWithPayload(nextPayload) {
+        creationAttempted = true;
         const response = await fetch(createEndpoint, {
           method: "POST",
           headers: {
@@ -915,6 +935,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
       checkAccount(stamp);
 
       if (!response.ok || data?.success === false) {
+        if (response.status >= 500) { uncertainCreation.current = true; setCreationUncertain(true); }
         const message =
           data && typeof data === "object"
             ? data.error || data.message || data.details
@@ -927,14 +948,15 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
         window.dispatchEvent(new Event(LOCAL_PRODUCTS_UPDATED_EVENT));
       }
 
-      const successMessage = isDraft
+      const successMessage = marketplacePost ? "Submitted for review. Your ad is pending approval." : isDraft
           ? "Draft saved successfully."
           : "Product published successfully.";
       setSuccess(successMessage);
       showToast(successMessage);
       if (onCreated) onCreated();
-      else router.push(mode === "admin" ? "/admin/products" : "/vendor/products");
+      else router.push(mode === "admin" ? "/admin/products" : isAd ? adsBasePath : "/vendor/products");
     } catch (submitError) {
+      if (creationAttempted) { uncertainCreation.current = true; setCreationUncertain(true); }
       setError(submitError instanceof Error ? submitError.message : "Create product failed.");
     } finally {
       submitting.current = false;
@@ -971,7 +993,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
             <button type="button" className="back-btn" aria-label="Back" onClick={() => router.back()}>
               <span aria-hidden="true">&larr;</span>
             </button>
-            <h1>Create Product</h1>
+            <h1>{isAd ? "Post an ad" : "Create Product"}</h1>
           </div>
           <div className="badge-blue">{loading ? "Submitting..." : "Ready"}</div>
         </div>
@@ -979,6 +1001,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
         <form onSubmit={handleSubmit} className="create-form">
           <fieldset disabled={loading} className="create-form-fields">
           <p className="text-sm text-slate-500">Product name, category, product type, base price, description, and location are required.{mode === "seller" ? " Add at least one product image." : ""}</p>
+          {marketplacePost ? <p className="text-sm text-slate-500">New listings are reviewed by an administrator before they appear publicly.</p> : null}
           <section className="form-section">
             <div className="section-title">Basic Information</div>
             <div className="form-grid">
@@ -1117,7 +1140,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
               />
             </div>
             <div className="form-grid">
-              {mode === "seller" ? <>
+              {marketplacePost ? <>
                 <div className="field full">
                   <label htmlFor="product-location-id">Supported location</label>
                   <select id="product-location-id" name="locationId" value={form.locationId} onChange={handleChange} disabled={loading || locationsLoading} aria-describedby="product-location-id-help">
@@ -1151,11 +1174,11 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
                   </select>
                 </div>
               </> : null}
-              <div className="field">
+              {!isAd ? <div className="field">
                 <label htmlFor="product-city">Location</label>
                 <input id="product-city" name="location" type="text" autoComplete="address-level2" value={form.location} onChange={handleChange} disabled={loading} placeholder="Enter your city, e.g. Lagos" aria-describedby="product-city-help" />
                 <p id="product-city-help" className="text-sm text-slate-500">Describe where the product is located.</p>
-              </div>
+              </div> : null}
             </div>
           </section>
 
@@ -1298,12 +1321,14 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
 
           {error ? <div className="form-error">{error}</div> : null}
           {success ? <div className="form-success">{success}</div> : null}
+          {marketplacePost ? <PostingFee categoryId={form.category} {...posting} walletHref={mode === "seller" || adsBasePath.startsWith("/vendor/") ? "/vendor/wallet" : "/dashboard/wallet"} /> : null}
+          {creationUncertain ? <div role="alert" className="form-error">The creation result is uncertain. Refresh My Ads and your wallet before posting again. <a href={isAd ? adsBasePath : "/vendor/my-ads"}>Check My Ads</a></div> : null}
 
           <div className="form-actions">
             <button type="button" className="btn-cancel" onClick={() => router.back()}>
               Cancel
             </button>
-            <button
+            {!marketplacePost ? <button
               type="submit"
               className="btn-cancel"
               disabled={loading}
@@ -1312,16 +1337,16 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
               onClick={() => setSubmitIntent("draft")}
             >
               {loading && submitIntent === "draft" ? "Saving draft..." : "Save Draft"}
-            </button>
+            </button> : null}
             <button
               type="submit"
               className="btn-save"
-              disabled={loading}
+              disabled={loading || creationUncertain || (marketplacePost && (!posting.cost || posting.loading || Boolean(posting.error) || (posting.cost.fee > 0 && (posting.cost.balance === null || posting.cost.balance < posting.cost.fee))))}
               name="intent"
               value="publish"
               onClick={() => setSubmitIntent("publish")}
             >
-              {loading && submitIntent === "publish" ? "Publishing..." : "Publish Product"}
+              {marketplacePost ? loading ? "Submitting..." : "Submit for review" : loading && submitIntent === "publish" ? "Publishing..." : "Publish Product"}
             </button>
           </div>
           </fieldset>

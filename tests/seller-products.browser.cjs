@@ -18,6 +18,8 @@ async function main() {
     const product={id:'product-1',name:'Chair',slug:'chair',basePrice:5000,stock:3,shortDescription:'An actual chair',categoryId:'category-1',productTypeId:'type-1',brandId:'brand-1',sellerId:'seller-1',media:{cover:'https://images.example/old-cover.png',images:['https://images.example/old-image.png'],video:'https://images.example/old-video.mp4'},attributes:[{attribute_id:'attribute-1',attribute_value_id:'value-1'}]};
     window.fetch=async(input,init={})=>{const url=typeof input==='string'?input:input.url;if(!url.startsWith('/api/'))return realFetch(input,init);
       if(url.startsWith('/api/user/profile'))return Response.json({data:JSON.parse(localStorage.getItem('alpha.auth')).user});
+      if(url.startsWith('/api/my-ads/posting-fee?'))return Response.json({data:{amount:0}});
+      if(url==='/api/wallet/balance')return Response.json({data:{balance:100000}});
       if(url==='/api/seller/locations')return Response.json({data:[{id:'location-nigeria',name:'Nigeria',type:'country'},{id:'location-lagos',name:'Lagos',type:'state',parent_id:'location-nigeria'},{id:'location-ikeja',name:'Ikeja',type:'city',parent_id:'location-lagos'},{id:'location-allen',name:'Allen Avenue',type:'area',parent_id:'location-ikeja'}]});
       if(url.startsWith('/api/seller/products/validate-city?'))return Response.json({success:true});
       if(url.startsWith('/api/seller/catalog')){const p=new URL(url,location.origin).searchParams;const resource=p.get('resource');if(p.get('id'))return Response.json({data:{id:'attribute-1',values:[{id:'value-1',name:'Oak'},{id:'value-2',name:'Walnut'}]}});const data={categories:[{id:'category-1',name:'Furniture'}],'product-types':[{id:'type-1',name:'Physical'}],brands:[{id:'brand-1',name:'Workshop'}],attributes:[{id:'attribute-1',name:'Wood'}]};return Response.json({data:data[resource]||[]});}
@@ -104,7 +106,7 @@ async function main() {
     await evaluate(`window.__failUpload=false;window.__uploads=0`);
     await evaluate(`document.querySelector('form.create-form').requestSubmit()`);
     await wait(`sessionStorage.getItem('seller-created-product')`);
-    await wait(`location.pathname==='/vendor/products'&&document.querySelector('[data-app-toast]')?.textContent.includes('Product published successfully.')`);
+    await wait(`location.pathname==='/vendor/products'&&document.querySelector('[data-app-toast]')?.textContent.includes('Submitted for review.')`);
     assert.equal(await evaluate(`document.querySelector('[data-app-toast]').getAttribute('role')`), 'status');
     await evaluate(`document.querySelector('[data-app-toast] button[aria-label="Dismiss notification"]').click()`);
     await wait(`!document.querySelector('[data-app-toast]')`);

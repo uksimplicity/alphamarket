@@ -11,6 +11,14 @@ import styles from "./admin.module.css";
 type NavigationItem = { href: string; label: string };
 type NavigationGroup = { label: string; icon: AdminIconName; items: NavigationItem[] };
 const navigation: NavigationGroup[] = [
+  { label: "Ads", icon: "catalog", items: [
+    { href: "/admin/ads", label: "Ad moderation" },
+    { href: "/admin/ads/fees", label: "Ad posting fees" },
+    { href: "/admin/ads/history", label: "Ad moderation history" },
+    { href: "/admin/locations", label: "Ad locations" },
+    { href: "/admin/promotion-plans", label: "Ad promotion plans" },
+    { href: "/admin/ad-promotions", label: "Purchased ad promotions" },
+  ] },
   { label: "Catalog", icon: "catalog", items: [
     { href: "/admin/products", label: "All products" },
     { href: "/admin/products/create", label: "Create product" },

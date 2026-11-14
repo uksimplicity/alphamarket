@@ -7,7 +7,7 @@ import MarketplaceHeaderBase, {
 } from "@/components/marketplace/MarketplaceHeaderBase";
 
 const RouterLinkAdapter: LinkComponent = ({ href, ...rest }) => {
-  if (["/dashboard", "/admin", "/products/", "/store/"].some(path => href.startsWith(path))) {
+  if (["/dashboard", "/admin", "/products/", "/store/", "/ads"].some(path => href.startsWith(path))) {
     return <NextLink href={href} {...rest} />;
   }
   return <Link to={href} {...rest} />;

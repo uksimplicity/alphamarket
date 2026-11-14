@@ -26,6 +26,10 @@ const VendorOrderDetail = lazy(() => import("./vendor/pages/VendorOrderDetail"))
 const VendorProfile = lazy(() => import("./vendor/pages/VendorProfile"));
 const VendorStore = lazy(() => import("./vendor/pages/VendorStore"));
 const VendorPayments = lazy(() => import("./vendor/pages/VendorPayments"));
+const VendorMyAds = lazy(() => import("./ads/VendorAdsRoutes").then(module => ({ default: module.VendorMyAds })));
+const VendorAdDetail = lazy(() => import("./ads/VendorAdsRoutes").then(module => ({ default: module.VendorAdDetail })));
+const VendorPostAd = lazy(() => import("./ads/VendorAdsRoutes").then(module => ({ default: module.VendorPostAd })));
+const VendorWallet = lazy(() => import("./ads/VendorAdsRoutes").then(module => ({ default: module.VendorWallet })));
 const ProductDetailRoute = lazy(() => import("./products/ProductDetailRoute"));
 const SellerStoreRoute = lazy(() => import("./store/SellerStoreRoute"));
 import SessionBoundary from "./auth/SessionBoundary";
@@ -68,6 +72,10 @@ export default function AppRouter() {
           <Route path="store" element={page(<VendorStore />)} />
           <Route path="profile" element={page(<VendorProfile />)} />
           <Route path="payments" element={page(<VendorPayments />)} />
+          <Route path="my-ads" element={page(<VendorMyAds />)} />
+          <Route path="my-ads/create" element={page(<VendorPostAd />)} />
+          <Route path="my-ads/:adId" element={page(<VendorAdDetail />)} />
+          <Route path="wallet" element={page(<VendorWallet />)} />
           <Route path="messages" element={page(<ChatWorkspace />)} />
           <Route path="addresses" element={page(<SavedAddresses />)} />
           <Route path="notifications" element={page(<NotificationPreferencesPanel />)} />

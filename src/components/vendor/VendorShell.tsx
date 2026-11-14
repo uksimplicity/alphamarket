@@ -20,6 +20,8 @@ const catalog: Item[] = [
 const mainLinks: Item[] = [
   { label: "Overview", href: "/vendor", icon: "overview" },
   { label: "Orders", href: "/vendor/orders", icon: "orders" },
+  { label: "My Ads", href: "/vendor/my-ads", icon: "catalog" },
+  { label: "Wallet", href: "/vendor/wallet", icon: "wallet" },
   { label: "Messages", href: "/vendor/messages", icon: "chat" },
   { label: "Address Book", href: "/vendor/addresses", icon: "delivery" },
   { label: "Notifications", href: "/vendor/notifications", icon: "bell" },
