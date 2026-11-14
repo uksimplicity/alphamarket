@@ -7,6 +7,9 @@ import { getAuth } from "@/components/auth/authStorage";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import { uploadProductMedia } from "@/components/vendor/sellerProductForm";
 import { useToast } from "@/components/ToastProvider";
+import { nigeriaLGAs, nigeriaStates } from "@/data/nigeriaLocations";
+import { fullAddress } from "@/components/commerce/structuredAddress";
+import { locationRows } from "@/components/products/supportedLocations";
 
 const initialForm = {
   name: "",
@@ -18,6 +21,11 @@ const initialForm = {
   basePrice: "",
   stock: "",
   location: "",
+  locationId: "",
+  houseNumber: "",
+  street: "",
+  state: "",
+  lga: "",
   tags: "",
   discountTitle: "",
   discountPrice: "",
@@ -392,7 +400,13 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
   const [coverFile, setCoverFile] = useState(null);
   const [imageFiles, setImageFiles] = useState([]);
   const [videoFile, setVideoFile] = useState(null);
+  const [locations, setLocations] = useState([]);
+  const [locationsError, setLocationsError] = useState("");
+  const [locationsLoading, setLocationsLoading] = useState(true);
+  const [locationsAttempt, setLocationsAttempt] = useState(0);
   const router = useRouter();
+
+
 
   useEffect(() => {
     let isMounted = true;
@@ -576,12 +590,36 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (mode !== "seller") return;
+    let active = true;
+    const key = `locations-${locationsAttempt}`;
+    if (!catalogRequests.current.has(key)) {
+      catalogRequests.current.set(key, (async () => {
+        const authorization = buildAuthorizationHeader(getAuth()?.access_token);
+        const response = await fetch("/api/seller/locations", { headers: { Authorization: authorization } });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "Could not load supported locations.");
+        const rows = locationRows(payload);
+        if (!rows) throw new Error("Supported locations could not be read. Please retry.");
+        return rows.filter((row) => row.is_active !== false);
+      })());
+    }
+    void catalogRequests.current.get(key).then((rows) => {
+      if (active) { setLocations(rows); setLocationsError(""); setLocationsLoading(false); }
+    }).catch((failure) => {
+      if (active) { setLocationsError(failure instanceof Error ? failure.message : "Could not load supported locations."); setLocationsLoading(false); }
+    });
+    return () => { active = false; };
+  }, [mode, locationsAttempt]);
+
   const handleChange = (event) => {
     const { name, value } = event.target;
     setForm((prev) => {
       if (name === "category") {
         return { ...prev, category: value, type: "" };
       }
+      if (name === "state") return { ...prev, state: value, lga: "" };
       return { ...prev, [name]: value };
     });
   };
@@ -676,6 +714,20 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
       setError("Enter the city where this product is located.");
       return;
     }
+    if (mode === "seller") {
+      if (!form.locationId || !locations.some((row) => row.id === form.locationId)) {
+        setError("Select a supported location from the dropdown.");
+        return;
+      }
+      if (!form.houseNumber.trim() || !form.street.trim() || !form.state || !form.lga) {
+        setError("Complete the house number, street, state and local government area.");
+        return;
+      }
+      if (!nigeriaLGAs[form.state]?.includes(form.lga)) {
+        setError("Select a local government area in the selected state.");
+        return;
+      }
+    }
     if (mode === "seller" && !coverFile && imageFiles.length === 0) {
       setError("Add at least one product image.");
       return;
@@ -755,6 +807,10 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
     };
 
     payload.location = form.location.trim();
+    if (mode === "seller") {
+      payload.locationId = form.locationId;
+      payload.address = fullAddress(form);
+    }
     if (form.shortDescription.trim()) payload.shortDescription = form.shortDescription.trim();
     const selectedBrandId = form.brand.trim();
     if (selectedBrandId && isUuid(selectedBrandId)) {
@@ -774,8 +830,10 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
       auth?.user?.longitude, auth?.user?.lng,
       auth?.user?.profile?.longitude, auth?.user?.profile?.lng
     );
-    if (latitude !== null) payload.latitude = latitude;
-    if (longitude !== null) payload.longitude = longitude;
+    // A new product address is geocoded by the backend; saved account
+    // coordinates may describe a different address.
+    if (!payload.address && latitude !== null) payload.latitude = latitude;
+    if (!payload.address && longitude !== null) payload.longitude = longitude;
 
     if (discountEnabled) {
       payload.discounts = [
@@ -795,7 +853,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
       setLoading(true);
 
       if (mode === "seller" && form.location.trim()) {
-        const response = await fetch(`/api/seller/products/validate-city?city=${encodeURIComponent(form.location.trim())}`, {
+        const response = await fetch(`/api/seller/products/validate-city?locationId=${encodeURIComponent(form.locationId)}`, {
           headers: { Authorization: authorization },
         });
         const result = await response.json();
@@ -892,6 +950,18 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
   });
   const hasTypeOptions = filteredTypeOptions.length > 0;
   const hasBrandOptions = brandOptions.length > 0;
+  const locationsById = new Map(locations.map((row) => [row.id, row]));
+  function locationLabel(row) {
+    const names = [row.name];
+    const seen = new Set([row.id]);
+    let parent = locationsById.get(row.parent_id);
+    while (parent && !seen.has(parent.id)) {
+      names.unshift(parent.name);
+      seen.add(parent.id);
+      parent = locationsById.get(parent.parent_id);
+    }
+    return names.join(" > ");
+  }
 
   return (
     <div className="create-page">
@@ -912,6 +982,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
           <section className="form-section">
             <div className="section-title">Basic Information</div>
             <div className="form-grid">
+
               <div className="field">
                 <label>Product Name</label>
                 <input
@@ -1046,10 +1117,44 @@ export default function CreateProduct({ mode = "seller", onCreated = null }) {
               />
             </div>
             <div className="form-grid">
+              {mode === "seller" ? <>
+                <div className="field full">
+                  <label htmlFor="product-location-id">Supported location</label>
+                  <select id="product-location-id" name="locationId" value={form.locationId} onChange={handleChange} disabled={loading || locationsLoading} aria-describedby="product-location-id-help">
+                    <option value="">{locationsLoading ? "Loading locations..." : "Select supported location"}</option>
+                    {locations.map((row) => <option key={row.id} value={row.id}>{locationLabel(row)}</option>)}
+                  </select>
+                  <p id="product-location-id-help" className="text-sm text-slate-500">Choose the most specific city or area available for your product.</p>
+                  {locationsError ? <div role="alert" className="form-error">{locationsError} <button type="button" className="btn-outline" disabled={loading || locationsLoading} onClick={() => { setLocationsLoading(true); setLocationsAttempt((attempt) => attempt + 1); }}>Retry locations</button></div> : null}
+                  {!locationsLoading && !locationsError && !locations.length ? <p role="status" className="text-sm text-slate-500">No supported locations are available. Ask an administrator to add or activate your location.</p> : null}
+                </div>
+                <div className="field">
+                  <label htmlFor="product-house-number">House number</label>
+                  <input id="product-house-number" name="houseNumber" value={form.houseNumber} onChange={handleChange} placeholder="e.g. 12B" />
+                </div>
+                <div className="field">
+                  <label htmlFor="product-street">Street</label>
+                  <input id="product-street" name="street" value={form.street} onChange={handleChange} autoComplete="street-address" placeholder="e.g. Allen Avenue" />
+                </div>
+                <div className="field">
+                  <label htmlFor="product-state">State</label>
+                  <select id="product-state" name="state" value={form.state} onChange={handleChange} autoComplete="address-level1">
+                    <option value="">Select state</option>
+                    {nigeriaStates.map((state) => <option key={state} value={state}>{state}</option>)}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="product-lga">Local government area</label>
+                  <select id="product-lga" name="lga" value={form.lga} onChange={handleChange} disabled={!form.state} autoComplete="address-level2">
+                    <option value="">{form.state ? "Select local government area" : "Select state first"}</option>
+                    {(nigeriaLGAs[form.state] || []).map((lga) => <option key={lga} value={lga}>{lga}</option>)}
+                  </select>
+                </div>
+              </> : null}
               <div className="field">
                 <label htmlFor="product-city">Location</label>
                 <input id="product-city" name="location" type="text" autoComplete="address-level2" value={form.location} onChange={handleChange} disabled={loading} placeholder="Enter your city, e.g. Lagos" aria-describedby="product-city-help" />
-                <p id="product-city-help" className="text-sm text-slate-500">Enter the city where this product is located.</p>
+                <p id="product-city-help" className="text-sm text-slate-500">Describe where the product is located.</p>
               </div>
             </div>
           </section>

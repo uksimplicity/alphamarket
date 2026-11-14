@@ -1,5 +1,5 @@
 import { invalidProduct, problem, productBody, sellerAccess, sellerRequest } from "../productUpstream";
-import { sellerLocation } from "../sellerLocation";
+import { selectedSellerLocation, sellerLocation } from "../sellerLocation";
 
 export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
@@ -20,7 +20,10 @@ export async function POST(req: Request) {
   if (!body) return problem("A product object is required.");
   const error = invalidProduct(body, true);
   if (error) return problem(error);
-  const locationId = await sellerLocation(req, (body.location as string).trim());
+  if ("locationId" in body && typeof body.locationId !== "string") return problem("Select a supported location.");
+  const locationId = typeof body.locationId === "string"
+    ? await selectedSellerLocation(req, body.locationId)
+    : await sellerLocation(req, (body.location as string).trim());
   if (locationId instanceof Response) return locationId;
   return sellerRequest(req, "/seller/product", "POST", { ...body, locationId });
 }

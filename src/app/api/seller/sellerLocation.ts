@@ -3,6 +3,26 @@ import { locationRows, type SupportedLocation } from "@/components/products/supp
 
 const normalized = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("en");
 
+export async function selectedSellerLocation(req: Request, id: string): Promise<string | Response> {
+  if (!id.trim()) return problem("Select a supported location.");
+  const response = await sellerRequest(req, `/ads/locations/${encodeURIComponent(id.trim())}`);
+  if (!response.ok) return response;
+  let payload: unknown;
+  try { payload = await response.json(); }
+  catch { return problem("The selected location could not be verified. Please retry.", 502); }
+  for (let depth = 0; depth < 5; depth++) {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) break;
+    const row = payload as Record<string, unknown>;
+    if (row.success === false) break;
+    if (row.id === id.trim() && typeof row.name === "string") {
+      if (row.is_active === false) return problem("This location is no longer active. Select another location.", 422);
+      return id.trim();
+    }
+    payload = row.data ?? row.location;
+  }
+  return problem("The selected location could not be verified. Select another location.", 422);
+}
+
 export async function sellerLocation(req: Request, city: string): Promise<string | Response> {
   // Resolve the product's region from the directory, never from a user/address ID.
   const matches = new Map<string, SupportedLocation>();

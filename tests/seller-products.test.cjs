@@ -9,6 +9,54 @@ const request = (method, body, auth = 'Bearer seller-token') => new Request('htt
 const detail = () => load('src/app/api/seller/products/[productId]/route.ts');
 const context = { params: Promise.resolve({ productId: 'product-1' }) };
 
+test('selected locations reject inactive, missing, mismatched and failed records before writes', async () => {
+  const route = load('src/app/api/seller/products/route.ts');
+  for (const record of [
+    { data: { id: 'selected-area', name: 'Area', is_active: false } },
+    { data: { id: 'different-area', name: 'Area' } },
+    { data: {} }, { success: false, data: { id: 'selected-area', name: 'Area' } },
+  ]) {
+    const calls = [];
+    global.fetch = async (url, init) => { calls.push(init.method); return Response.json(record); };
+    assert.ok((await route.POST(request('POST', { ...payload, locationId: 'selected-area' }))).status >= 400);
+    assert.deepEqual(calls, ['GET']);
+  }
+  for (const locationId of ['', '   ', 123]) {
+    global.fetch = async () => { throw new Error('Invalid IDs must fail locally'); };
+    assert.equal((await route.POST(request('POST', { ...payload, locationId }))).status, 400);
+  }
+});
+
+test('selected location preflight verifies an area ID independently of typed location text', async () => {
+  const calls = [];
+  global.fetch = async (url, init) => { calls.push({ url, init }); return Response.json({ data: { location: { id: 'area-one', name: 'Allen Avenue', type: 'area', is_active: true } } }); };
+  const response = await load('src/app/api/seller/products/validate-city/route.ts').GET(new Request('https://web.example/api/seller/products/validate-city?locationId=area-one&city=Different%20text', { headers: { Authorization: 'Bearer seller-token' } }));
+  assert.equal(response.status, 200);
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].url.endsWith('/ads/locations/area-one'));
+  assert.equal(calls[0].init.method, 'GET');
+});
+
+test('location dropdown proxy reads every page and excludes inactive records', async () => {
+  const calls = [];
+  global.fetch = async (url, init) => {
+    calls.push({ url, init });
+    return Response.json({ data: calls.length === 1
+      ? Array.from({ length: 100 }, (_, index) => ({ id: `location-${index}`, name: `Location ${index}`, is_active: index !== 0 }))
+      : [{ id: 'last-area', name: 'Last area', type: 'area' }] });
+  };
+  const route = load('src/app/api/seller/locations/route.ts');
+  assert.equal((await route.GET(new Request('https://web.example/api/seller/locations'))).status, 401);
+  const response = await route.GET(request('GET'));
+  assert.equal(response.status, 200);
+  const { data } = await response.json();
+  assert.equal(data.length, 100);
+  assert.ok(data.some(row => row.id === 'last-area'));
+  assert.equal(data.some(row => row.id === 'location-0'), false);
+  assert.ok(calls[1].url.endsWith('offset=100'));
+  assert.ok(calls.every(call => call.init.method === 'GET' && call.init.cache === 'no-store'));
+});
+
 test('draft intent does not bypass existing product requirements', async () => {
   let calls = 0;
   global.fetch = async () => { calls++; return Response.json({}); };
@@ -92,21 +140,21 @@ test('seller create proxy preserves a typed brand name without adding a brand ID
   assert.equal(Object.hasOwn(calls[0].body, 'brandId'), false);
 });
 
-test('create resolves the typed city, forwards the product address and overrides a submitted location ID', async () => {
+test('create verifies the selected admin location and forwards the address and typed location independently', async () => {
   const calls = [];
   global.fetch = async (url, init) => {
     calls.push({ url, init });
-    if (url.includes('/ads/locations?')) return Response.json({ data: [{ id: 'city-location', name: 'Lagos', type: 'city', is_active: true }] });
+    if (url.endsWith('/ads/locations/selected-area')) return Response.json({ data: { id: 'selected-area', name: 'Allen Avenue', type: 'area', is_active: true } });
     return Response.json({ data: { id: 'created' } }, { status: 201 });
   };
-  const response = await load('src/app/api/seller/products/route.ts').POST(request('POST', { ...payload, address: '12 Example Street', latitude: 6.5, longitude: 3.4, locationId: 'stale-location' }));
+  const response = await load('src/app/api/seller/products/route.ts').POST(request('POST', { ...payload, address: '12 Example Street', latitude: 6.5, longitude: 3.4, locationId: 'selected-area' }));
   assert.equal(response.status, 201);
   assert.deepEqual(calls.map(call => call.init.method), ['GET', 'POST']);
-  assert.equal(calls[0].url, 'https://marketplace.example/api/v1/ads/locations?type=city&search=Lagos&limit=100&offset=0');
+  assert.equal(calls[0].url, 'https://marketplace.example/api/v1/ads/locations/selected-area');
   assert.equal(calls[0].init.headers.Authorization, 'Bearer seller-token');
   assert.equal(calls[0].init.cache, 'no-store');
   const created = JSON.parse(calls[1].init.body);
-  assert.equal(created.locationId, 'city-location');
+  assert.equal(created.locationId, 'selected-area');
   assert.equal(created.location, 'Lagos');
   assert.equal(created.address, '12 Example Street');
   assert.equal(created.latitude, 6.5);

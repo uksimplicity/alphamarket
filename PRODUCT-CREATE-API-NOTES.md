@@ -1,3 +1,27 @@
+# Seller product address and selected supported location — 14 November 2026
+
+Seller product creation now collects an admin-configured supported location ID
+separately from the existing free-text `location`. The dropdown reads all pages
+of `GET /ads/locations`; hierarchy labels distinguish locations with the same
+name. Both preflight and submission validate the selected ID with
+`GET /ads/locations/{id}`. A selected area is preserved, rather than resolving
+the typed text to a different city. Older clients that omit `locationId` retain
+the existing city-text resolution path.
+
+The seller enters house number, street, state, and LGA. State/LGA choices reuse
+the existing Nigerian regions data; changing state clears the LGA. These fields
+are combined into the documented `address` string, for example
+`12B Allen Avenue, Ikeja, Lagos, Nigeria`. They are not sent as invented API
+fields. The user confirmed that the backend geocodes and saves this address.
+The seller form does not send saved account coordinates with the new product
+address because those coordinates may belong to a different address. Admin
+product creation and existing API clients retain their previous behavior.
+
+This change covers product address/location entry, not the separate My Ads,
+posting-fee, moderation, or promotion interfaces. No live products were created.
+
+---
+
 # Supported product cities through the existing admin API — 11 November 2026
 
 The user's authenticated profile contains only identity/account fields, with no

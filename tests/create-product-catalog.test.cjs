@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
+const load = require('./support/load-ts.cjs');
 
 // Exercise the form's effect and rendered options without a browser or live account.
 function formHarness(brandResponse, createResponse, sellerFields = {}, options = {}) {
@@ -35,12 +36,16 @@ function formHarness(brandResponse, createResponse, sellerFields = {}, options =
       if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'test-token', user: { id: 'seller-one', status: 'active', ...sellerFields } }) };
       if (name.endsWith('localAccountData')) return { accountStamp: () => 'seller-one', checkAccount: () => {} };
       if (name.endsWith('sellerProductForm')) return { uploadProductMedia: async file => { uploads.push(file); return options.upload ? options.upload(file) : 'https://images.example/chair.png'; } };
+      if (name === '@/data/nigeriaLocations') return load('src/data/nigeriaLocations.ts');
+      if (name.endsWith('structuredAddress')) return load('src/components/commerce/structuredAddress.ts');
+      if (name.endsWith('supportedLocations')) return load('src/components/products/supportedLocations.ts');
       return {};
     },
     // Unexpected polling or focus subscriptions fail the test immediately.
     window: { dispatchEvent() {} }, Event, localStorage: { getItem: () => null },
     fetch: async (url, init) => {
       calls.push({ url, init });
+      if (url === '/api/seller/locations') return options.locationsResponse ? options.locationsResponse() : Response.json({ data: [{ id: 'selected-area', name: 'Allen Avenue', type: 'area' }] });
       if (url.includes('/validate-city?')) return options.cityResponse ? options.cityResponse() : Response.json({ success: true });
       if (init?.method === 'POST' && createResponse) return createResponse();
       if (url.includes('resource=brands')) return brandResponse();
@@ -58,6 +63,59 @@ function nodes(tree, match) {
   if (!tree || typeof tree !== 'object') return [];
   return [...(match(tree) ? [tree] : []), ...nodes(tree.props?.children, match)];
 }
+
+test('state selection limits LGAs and clears a previously selected LGA', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }));
+  const cleanup = await prepareProduct(harness);
+  const lgaField = () => nodes(harness.render(), node => node.props?.name === 'lga')[0];
+  assert.equal(lgaField().props.value, 'Ikeja');
+  assert.ok(nodes(lgaField(), node => node.type === 'option').some(node => node.props.value === 'Ikeja'));
+  nodes(harness.render(), node => node.props?.name === 'state')[0].props.onChange({ target: { name: 'state', value: 'Delta' } });
+  assert.equal(lgaField().props.value, '');
+  assert.ok(nodes(lgaField(), node => node.type === 'option').some(node => node.props.value === 'Warri South'));
+  assert.equal(nodes(lgaField(), node => node.type === 'option').some(node => node.props.value === 'Ikeja'), false);
+  cleanup();
+});
+
+test('incomplete address, invalid state/LGA pairs and unselected admin locations block uploads', async () => {
+  for (const fields of [{ houseNumber: '' }, { street: '   ' }, { state: '' }, { lga: '' }, { state: 'Delta', lga: 'Ikeja' }, { locationId: '' }, { locationId: 'not-listed' }]) {
+    const harness = formHarness(() => Response.json({ data: [] }));
+    const cleanup = await prepareProduct(harness, fields);
+    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+    assert.equal(harness.uploads.length, 0, JSON.stringify(fields));
+    assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
+    cleanup();
+  }
+});
+
+test('location dropdown uses active admin records, hierarchy labels and independent IDs', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), null, {}, {
+    locationsResponse: () => Response.json({ data: [
+      { id: 'nigeria', name: 'Nigeria', type: 'country' },
+      { id: 'lagos', name: 'Lagos', type: 'state', parent_id: 'nigeria' },
+      { id: 'ikeja', name: 'Ikeja', type: 'city', parent_id: 'lagos' },
+      { id: 'selected-area', name: 'Allen Avenue', type: 'area', parent_id: 'ikeja' },
+      { id: 'inactive', name: 'Old location', is_active: false },
+    ] }),
+  });
+  const cleanup = await prepareProduct(harness);
+  const options = nodes(nodes(harness.render(), node => node.props?.name === 'locationId')[0], node => node.type === 'option');
+  assert.ok(options.some(node => node.props.value === 'selected-area' && node.props.children === 'Nigeria > Lagos > Ikeja > Allen Avenue'));
+  assert.equal(options.some(node => node.props.value === 'inactive'), false);
+  cleanup();
+});
+
+test('empty or failed location directories do not manufacture selectable locations', async () => {
+  for (const locationsResponse of [() => Response.json({ data: [] }), () => Response.json({ error: 'Directory unavailable' }, { status: 503 })]) {
+    const harness = formHarness(() => Response.json({ data: [] }), null, {}, { locationsResponse });
+    const cleanup = await prepareProduct(harness);
+    const options = nodes(nodes(harness.render(), node => node.props?.name === 'locationId')[0], node => node.type === 'option');
+    assert.equal(options.length, 1);
+    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+    assert.equal(harness.uploads.length, 0);
+    cleanup();
+  }
+});
 
 test('unsupported city fails before uploading any media', async () => {
   const harness = formHarness(() => Response.json({ data: [] }), null, {}, {
@@ -183,7 +241,7 @@ async function prepareProduct(harness, fields = {}) {
   for (const [name, value] of Object.entries({
     name: 'Chair', category: 'category-one', type: 'type-one',
     basePrice: '5000', shortDescription: 'An actual chair', brand: '',
-    location: '  Lagos  ',
+    location: '  Lagos  ', locationId: 'selected-area', houseNumber: '12B', street: 'Allen Avenue', state: 'Lagos', lga: 'Ikeja',
     ...fields,
   })) {
     nodes(tree, node => node.props?.name === name)[0].props.onChange({ target: { name, value } });
@@ -280,7 +338,7 @@ test('overlong brand names are rejected before product submission', async () => 
   cleanup();
 });
 
-test('seller types a city and sends trimmed location without a city ID, address or coordinates', async () => {
+test('seller sends typed location, selected location ID and combined address without stale account coordinates', async () => {
   const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Synthetic rejection' }, { status: 400 }));
   const cleanup = await prepareProduct(harness, { location: '  Port Harcourt  ' });
   const field = nodes(harness.render(), node => node.props?.name === 'location')[0];
@@ -291,8 +349,10 @@ test('seller types a city and sends trimmed location without a city ID, address 
   assert.equal(writes.length, 1);
   const body = JSON.parse(writes[0].init.body);
   assert.equal(body.location, 'Port Harcourt');
-  for (const key of ['locationId', 'address', 'latitude', 'longitude']) assert.equal(Object.hasOwn(body,key),false);
-  assert.equal(harness.calls.some(call => call.url.includes('/locations')), false);
+  assert.equal(body.locationId, 'selected-area');
+  assert.equal(body.address, '12B Allen Avenue, Ikeja, Lagos, Nigeria');
+  for (const key of ['latitude', 'longitude', 'houseNumber', 'street', 'state', 'lga']) assert.equal(Object.hasOwn(body,key),false);
+  assert.ok(harness.calls.some(call => call.url.includes('validate-city?locationId=selected-area')));
   cleanup();
 });
 
@@ -305,7 +365,7 @@ test('blank city blocks product submission', async () => {
   cleanup();
 });
 
-test('typed city retains saved seller coordinates from the pre-map submission contract', async () => {
+test('a new product address leaves coordinates to the backend instead of reusing seller profile coordinates', async () => {
   for (const seller of [
     { latitude: 5.52, longitude: 5.75 },
     { lat: '5.52', lng: '5.75' },
@@ -319,9 +379,10 @@ test('typed city retains saved seller coordinates from the pre-map submission co
     assert.equal(writes.length, 1);
     const body = JSON.parse(writes[0].init.body);
     assert.equal(body.location, 'Warri');
-    assert.equal(body.latitude, 5.52); assert.equal(body.longitude, 5.75);
-    assert.equal(Object.hasOwn(body, 'locationId'), false);
-    assert.equal(Object.hasOwn(body, 'address'), false);
+    assert.equal(Object.hasOwn(body, 'latitude'), false);
+    assert.equal(Object.hasOwn(body, 'longitude'), false);
+    assert.equal(body.locationId, 'selected-area');
+    assert.equal(body.address, '12B Allen Avenue, Ikeja, Lagos, Nigeria');
     cleanup();
   }
 });
