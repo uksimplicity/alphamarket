@@ -8,6 +8,7 @@ export type RiderRecord = {
   phone: string;
   address: string;
   availability: string;
+  verificationStatus: "verified" | "pending" | "rejected" | "suspended" | "unknown";
   vehicleType: string;
   vehicleModel: string;
   vehiclePlate: string;
@@ -33,6 +34,17 @@ function read(sources: RecordData[], keys: string[]): string {
   return "";
 }
 
+function verificationStatus(sources: RecordData[]): RiderRecord["verificationStatus"] {
+  const states = sources.flatMap(source => ["verification_status", "verificationStatus", "kyc_status", "approval_status"]
+    .map(key => typeof source[key] === "string" ? String(source[key]).trim().toLowerCase() : ""));
+  const flags = sources.flatMap(source => ["is_verified", "isVerified", "verified", "is_approved"].map(key => source[key]));
+  if (states.some(state => ["suspended", "blocked"].includes(state))) return "suspended";
+  if (states.some(state => ["rejected", "declined"].includes(state))) return "rejected";
+  if (flags.includes(false) || states.some(state => ["pending", "unverified", "not_verified", "in_review", "submitted"].includes(state))) return "pending";
+  if (flags.includes(true) || states.some(state => ["verified", "approved"].includes(state))) return "verified";
+  return "unknown";
+}
+
 export function safeRiderDocumentUrl(value: unknown): string {
   if (typeof value !== "string" || !value.trim()) return "";
   const url = value.trim();
@@ -52,7 +64,8 @@ function labelFor(key: string): string {
 }
 
 export function parseRider(value: unknown): RiderRecord {
-  const root = record(value);
+  let root = record(value);
+  for (let depth = 0; depth < 5 && root.data && typeof root.data === "object" && !Array.isArray(root.data); depth++) root = record(root.data);
   const rider = record(root.rider);
   const profile = record(root.profile ?? rider.profile ?? root.rider_profile ?? root.riderProfile);
   const user = record(root.user ?? rider.user ?? profile.user);
@@ -86,6 +99,8 @@ export function parseRider(value: unknown): RiderRecord {
     phone: read(contact, ["phone", "phone_number", "phoneNumber", "mobile", "telephone"]),
     address: read(contact, ["address", "residential_address", "home_address"]),
     availability: read([rider, root, profile], ["availability_status", "availability", "status"]),
+    // Account/email verification under user is separate from rider approval.
+    verificationStatus: verificationStatus([rider, root, profile]),
     vehicleType: read(vehicle, ["vehicle_type", "vehicleType", "type"]),
     vehicleModel: read(vehicle, ["vehicle_model", "vehicleModel", "model"]),
     vehiclePlate: read(vehicle, ["vehicle_plate_number", "plate_number", "registration_number", "license_plate", "vehicle_number", "vehicleNumber", "plateNumber"]),
@@ -116,8 +131,9 @@ export function mergeRiderDetails(summary: RiderRecord, payload: unknown): Rider
   // The queue's identifier is the authoritative target of the verification action.
   const merged = {...summary};
   for (const key of Object.keys(detail) as Array<keyof RiderRecord>) {
-    if (key !== "id" && key !== "documents" && detail[key]) merged[key] = detail[key];
+    if (key !== "id" && key !== "documents" && key !== "verificationStatus" && detail[key]) merged[key] = detail[key];
   }
+  if (detail.verificationStatus !== "unknown") merged.verificationStatus = detail.verificationStatus;
   merged.documents = [...summary.documents, ...detail.documents.filter(document => !summary.documents.some(existing => existing.url === document.url))];
   return merged;
 }

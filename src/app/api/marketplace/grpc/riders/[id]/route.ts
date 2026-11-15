@@ -1,62 +1,21 @@
-import type { NextRequest } from "next/server";
-
-const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
-const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
-const API_V1_BASE = API_BASE.endsWith("/api/v1") ? API_BASE : `${API_BASE}/api/v1`;
-
-export async function GET(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  if (!API_BASE) {
-    return new Response(
-      JSON.stringify({ error: "NEXT_PUBLIC_API_BASE_URL is not set" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
+export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
+  const rawBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim().replace(/\/+$/, "");
+  const fail = (error: string, status = 502) => Response.json({ error }, { status, headers: { "Cache-Control": "no-store" } });
+  if (!rawBase) return fail("The rider service is not configured.", 503);
+  const authorization = req.headers.get("authorization")?.trim();
+  if (!authorization || !/^Bearer\s+\S+$/i.test(authorization)) return fail("Sign in to view rider details.", 401);
   const { id } = await context.params;
-  const safeId = encodeURIComponent(id);
-  const { search } = new URL(req.url);
-
-  const authHeader = req.headers.get("authorization") ?? "";
-  const cookieHeader = req.headers.get("cookie") ?? "";
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    ...(authHeader ? { Authorization: authHeader } : {}),
-    ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-  };
-
-  const urls = Array.from(
-    new Set([
-      `${API_V1_BASE}/marketplace/grpc/riders/${safeId}${search}`,
-      `${API_BASE}/marketplace/grpc/riders/${safeId}${search}`,
-    ])
-  );
-
-  let res: Response | null = null;
-  for (const target of urls) {
-    const candidate = await fetch(target, { method: "GET", headers, cache: "no-store" });
-    if (candidate.status === 404) continue;
-    res = candidate;
-    break;
+  const base = rawBase.endsWith("/api/v1") ? rawBase : `${rawBase}/api/v1`;
+  try {
+    const response = await fetch(`${base}/marketplace/grpc/riders/${encodeURIComponent(id)}`, {
+      headers: { Authorization: authorization, Accept: "application/json" },
+      cache: "no-store", redirect: "manual", signal: AbortSignal.timeout(20000),
+    });
+    if (response.status >= 300 && response.status < 400) return fail("The rider service returned an unexpected redirect.");
+    const text = await response.text();
+    try { JSON.parse(text); } catch { return fail("The rider service returned an unreadable response."); }
+    return new Response(text, { status: response.status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  } catch {
+    return fail("The rider service could not be reached. Retry rider details shortly.");
   }
-
-  if (!res) {
-    return new Response(
-      JSON.stringify({
-        error: "Marketplace rider details endpoint not found on upstream.",
-        tried: urls,
-      }),
-      { status: 502, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  const text = await res.text();
-  return new Response(text, {
-    status: res.status,
-    headers: {
-      "Content-Type": res.headers.get("content-type") ?? "application/json",
-    },
-  });
 }

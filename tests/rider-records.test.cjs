@@ -115,3 +115,12 @@ test('another account or a missing account ID cannot supply the rider identity',
   assert.throws(() => mergeRiderAccount(rider, {data: {name: 'Unknown person'}}), /does not match/);
   assert.throws(() => mergeRiderAccount(parseRider({id: 'rider-1'}), {data: {id: 'rider-1', name: 'Wrong association'}}), /does not match/);
 });
+
+test('rider verification is separate from offline availability and account verification', () => {
+  assert.equal(parseRider({ id: 'rider', status: 'offline', is_verified: true }).verificationStatus, 'verified');
+  assert.equal(parseRider({ id: 'rider', status: 'online', is_verified: false }).verificationStatus, 'pending');
+  assert.equal(parseRider({ id: 'rider', user: { is_verified: true, email_verified: true } }).verificationStatus, 'unknown');
+  assert.equal(parseRider({ data: { rider: { id: 'rider', verification_status: 'rejected' } } }).verificationStatus, 'rejected');
+  const summary = parseRider({ id: 'rider', is_verified: true });
+  assert.equal(mergeRiderDetails(summary, { data: { id: 'rider', status: 'offline' } }).verificationStatus, 'verified');
+});
