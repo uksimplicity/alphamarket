@@ -158,6 +158,7 @@ async function main() {
 
     await navigate('/admin/ads', 'marketplace_admin'); await wait(`document.body.innerText.includes('pending Chair')`);
     await navigate('/admin/ads/ad-pending', 'marketplace_admin'); await wait(`Boolean([...document.querySelectorAll('button')].find(el=>el.textContent.trim()==='Approve'))`);
+    assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(el=>['Edit ad','Delete','Request changes'].includes(el.textContent.trim()))`),false);
     await wait(`document.querySelector('[aria-label^="Enlarge photo"] img')?.naturalWidth>0`);
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('[aria-label^="Enlarge photo"] img')).objectFit==='contain'`), true);
     await evaluate(`document.querySelector('[aria-label="View photo 2"]').click()`);

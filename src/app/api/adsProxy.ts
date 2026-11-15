@@ -10,9 +10,9 @@ const rules: Record<AdsScope, Record<string, RegExp>> = {
   },
   admin: {
     GET: new RegExp(`^(|fees|fees/quote|stats|moderation-logs|${id}|${id}/moderation-logs)$`),
-    PUT: new RegExp(`^(${id}|fees/default|fees/categories/${id})$`),
-    DELETE: new RegExp(`^(${id}|fees/categories/${id})$`),
-    POST: new RegExp(`^${id}/(approve|reject|request-changes|suspend|unsuspend)$`),
+    PUT: new RegExp(`^(fees/default|fees/categories/${id})$`),
+    DELETE: new RegExp(`^fees/categories/${id}$`),
+    POST: new RegExp(`^${id}/(approve|reject|suspend|unsuspend)$`),
   },
   plans: { GET: new RegExp(`^(|${id})$`), POST: /^$/, PUT: new RegExp(`^${id}$`), DELETE: new RegExp(`^${id}$`) },
   promotions: { GET: /^$/, POST: new RegExp(`^${id}/cancel$`) },

@@ -49,20 +49,32 @@ test('admin moderation, fee overrides, plans and refund cancellation preserve ba
   const calls = [];
   global.fetch = async (url, init) => { calls.push({ url, init }); return Response.json({ success: true }); };
   const { forwardAds } = load('src/app/api/adsProxy.ts');
-  for (const action of ['approve', 'reject', 'request-changes', 'suspend', 'unsuspend']) {
+  for (const action of ['approve', 'reject', 'suspend', 'unsuspend']) {
     await forwardAds(request('POST', action === 'suspend' ? { reason: 'Verify details', duration_hours: 24 } : { reason: 'Review reason', note: 'Review note' }), 'admin', ['ad-one', action]);
   }
-  await forwardAds(request('DELETE', { reason: 'Duplicate listing' }), 'admin', ['ad-one']);
-  assert.deepEqual(JSON.parse(calls[5].init.body), { reason: 'Duplicate listing' }, 'DELETE must forward the required audit reason');
   await forwardAds(request('PUT', { amount: 250, is_active: true }), 'admin', ['fees', 'categories', 'category']);
   await forwardAds(request('DELETE'), 'admin', ['fees', 'categories', 'category']);
   const plan = { name: 'VIP week', type: 'vip', price: 1000, duration_days: 7, category_ids: ['category'], location_ids: ['area'] };
   await forwardAds(request('POST', plan), 'plans');
   await forwardAds(request('POST', { reason: 'Stopped by admin', refund: true }), 'promotions', ['promotion-one', 'cancel']);
-  assert.ok(calls[8].url.endsWith('/admin/promotion-plans'));
-  assert.deepEqual(JSON.parse(calls[8].init.body), plan);
-  assert.ok(calls[9].url.endsWith('/admin/promotions/promotion-one/cancel'));
-  assert.deepEqual(JSON.parse(calls[9].init.body), { reason: 'Stopped by admin', refund: true });
+  assert.ok(calls[6].url.endsWith('/admin/promotion-plans'));
+  assert.deepEqual(JSON.parse(calls[6].init.body), plan);
+  assert.ok(calls[7].url.endsWith('/admin/promotions/promotion-one/cancel'));
+  assert.deepEqual(JSON.parse(calls[7].init.body), { reason: 'Stopped by admin', refund: true });
+});
+
+test('admin ad editing, deletion and change requests are blocked before any upstream write', async () => {
+  let calls = 0;
+  global.fetch = async () => { calls++; return Response.json({ success: true }); };
+  const { forwardAds } = load('src/app/api/adsProxy.ts');
+  for (const [method, path, body] of [
+    ['PUT', ['ad-one'], { name: 'Changed by admin' }],
+    ['DELETE', ['ad-one'], { reason: 'Remove ad' }],
+    ['POST', ['ad-one', 'request-changes'], { reason: 'Change content' }],
+  ]) assert.equal((await forwardAds(request(method, body), 'admin', path)).status, 405);
+  assert.equal(calls, 0);
+  assert.equal((await forwardAds(request('PUT', { name: 'Changed by owner' }), 'mine', ['ad-one'])).status, 200);
+  assert.equal(calls, 1);
 });
 
 test('protected reads/writes and invalid routes fail before any upstream call', async () => {
@@ -113,6 +125,20 @@ test('only approved, published, non-deleted ads can be promoted', () => {
   const { canPromote } = load('src/components/ads/data.ts');
   assert.equal(canPromote({ moderation_status: 'approved', is_active: true }), true);
   for (const item of [{ moderation_status: 'pending' }, { moderation_status: 'rejected' }, { moderation_status: 'changes_requested' }, { moderation_status: 'suspended' }, { moderation_status: 'approved', is_active: false }, { moderation_status: 'approved', is_published: false }, { moderation_status: 'approved', deleted_at: '2026-11-14' }]) assert.equal(canPromote(item), false);
+});
+
+test('nested moderation status drives badges and eligibility independently of owner and activity status', () => {
+  const { statusOf, canPromote } = load('src/components/ads/data.ts');
+  const liveShape = { owner: { id: 'seller-one', status: 'active' }, is_active: true, moderation: { status: 'pending', posting_fee: '0' } };
+  assert.equal(statusOf(liveShape), 'pending');
+  assert.equal(canPromote(liveShape), false);
+  assert.equal(statusOf({ ...liveShape, moderation_status: 'approved', status: 'active' }), 'pending');
+  assert.equal(statusOf({ moderation: { status: ' APPROVED ' } }), 'approved');
+  assert.equal(canPromote({ moderation: { status: 'approved' }, is_active: true }), true);
+  for (const field of ['moderation_status', 'moderationStatus', 'status']) assert.equal(statusOf({ [field]: 'rejected' }), 'rejected');
+  assert.equal(statusOf({ moderation: { status: ' ' }, moderation_status: '', moderationStatus: ' suspended ' }), 'suspended');
+  assert.equal(statusOf({ moderation: { status: null }, moderation_status: {}, status: 'pending' }), 'pending');
+  assert.equal(statusOf({ owner: { status: 'active' }, is_active: true }), '');
 });
 
 test('posting cost requires a backend quote and never treats a wallet failure as a zero balance', async () => {

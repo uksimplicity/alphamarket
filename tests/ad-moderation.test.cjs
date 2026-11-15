@@ -101,3 +101,26 @@ test('unknown moderation status still does not expose approve or reject actions'
   const h = harness({ item: { moderation_status: '' } });
   assert.equal(nodes(h.render(), node => node.type === 'button' && ['Approve', 'Reject'].includes(text(node))).length, 0);
 });
+
+test('admin review exposes moderation actions without editing, deletion or change requests', () => {
+  for (const moderation_status of ['pending', 'approved', 'suspended', '']) {
+    const h = harness({ item: { moderation_status } });
+    const buttons = nodes(h.render(), node => node.type === 'button').map(text);
+    for (const removed of ['Edit ad', 'Delete', 'Delete ad', 'Request changes']) assert.equal(buttons.includes(removed), false, moderation_status + ': ' + removed);
+    if (moderation_status === 'pending') assert.ok(buttons.includes('Approve') && buttons.includes('Reject') && buttons.includes('Suspend'));
+    if (moderation_status === 'suspended') assert.ok(buttons.includes('Unsuspend'));
+  }
+  const owner = harness({ admin: false });
+  assert.ok(nodes(owner.render(), node => node.type === 'button' && text(node) === 'Edit ad').length);
+});
+
+test('API nested moderation states expose the matching admin controls', () => {
+  for (const status of ['pending', 'approved', 'suspended']) {
+    const h = harness({ item: { moderation_status: undefined, moderation: { status }, owner: { status: 'active' }, is_active: true } });
+    const buttons = nodes(h.render(), node => node.type === 'button').map(text);
+    if (status === 'pending') assert.ok(buttons.includes('Approve') && buttons.includes('Reject'));
+    if (status === 'approved') assert.ok(buttons.includes('Suspend') && !buttons.includes('Approve'));
+    if (status === 'suspended') assert.ok(buttons.includes('Unsuspend') && !buttons.includes('Suspend'));
+    assert.equal(buttons.includes('Edit ad'), false);
+  }
+});

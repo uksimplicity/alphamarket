@@ -45,7 +45,10 @@ export const money = (value: unknown) => {
   const number = numeric(value);
   return number === null ? "Unavailable" : new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 2 }).format(number);
 };
-export const statusOf = (item: AdRecord) => text(item.moderation_status ?? item.moderationStatus ?? item.status).toLowerCase();
+export function statusOf(item: AdRecord): string {
+  const values = [record(item.moderation).status, item.moderation_status, item.moderationStatus, item.status];
+  return values.find((value): value is string => typeof value === "string" && Boolean(value.trim()))?.trim().toLowerCase() || "";
+}
 export const label = (value: unknown) => text(value).replace(/_/g, " ");
 export const date = (value: unknown) => {
   const parsed = new Date(text(value));
