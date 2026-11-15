@@ -16,7 +16,9 @@ import BuyerOrderSeller from "@/components/commerce/BuyerOrderSeller";
 import {
   formatCurrency,
 } from "@/components/commerce/store";
-import { Badge, Button, Card, ErrorState, SectionTitle } from "@/components/dashboard/ui";
+import { Button, ErrorState } from "@/components/dashboard/ui";
+import ShopperIcon from "@/components/marketplace/ShopperIcon";
+import styles from "@/components/commerce/orderDetails.module.css";
 
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -70,55 +72,60 @@ export default function OrderDetailPage() {
   }
 
   return (
-    <div className="grid gap-6">
+    <div className={styles.page}>
+      <Link href="/dashboard/orders" className={styles.back}><ShopperIcon name="arrow" size={15} />Back to my orders</Link>
       {feedback ? <p role="status" className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-slate-700">{feedback}</p> : null}
-      <Card>
-        <SectionTitle title={`Order ${order.id}`} />
-        <p className="mt-1 text-sm text-slate-500"><BuyerOrderSeller order={order} /></p>
-        {["delivered", "confirmed"].includes(order.status) ? <div className="mt-4"><ReviewDraftButton orderId={order.id} /></div> : null}
-        <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-          <Badge>{order.status}</Badge>
-          <span className="font-semibold text-slate-800">
-            {order.total === null ? "Total unavailable" : `Total ${formatCurrency(order.total)}`}
-          </span>
-          <span className="text-xs text-slate-500">Placed {order.createdAt}</span>
-          <Badge>Payment: {order.paymentStatus}</Badge>
+      <header className={styles.hero}>
+        <div className={styles.heroTop}>
+          <div><p className={styles.eyebrow}>A little closer to your doorstep</p><h1 className={styles.title}>Order #{order.id.slice(-8).toUpperCase()}</h1><p className={styles.seller}><BuyerOrderSeller order={order} /></p></div>
+          <div className={styles.total}><span>Order total</span><strong>{order.total === null ? "Total unavailable" : formatCurrency(order.total)}</strong></div>
         </div>
-      </Card>
+        {["delivered", "confirmed"].includes(order.status) ? <div className="mt-4"><ReviewDraftButton orderId={order.id} /></div> : null}
+        <div className={styles.heroBottom}>
+          <div className={styles.badges}><span className={styles.badge}>Order: {order.status.replaceAll("_", " ")}</span><span className={`${styles.badge} ${order.paymentStatus === "paid" ? styles.paid : ""}`}><ShopperIcon name="shield" size={13} />Payment: {order.paymentStatus.replaceAll("_", " ")}</span></div>
+          <span className={styles.placed}>{Number.isFinite(Date.parse(order.createdAt)) ? <>Placed <time dateTime={order.createdAt}>{new Date(order.createdAt).toLocaleString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}</time></> : "Order date unavailable"}</span>
+        </div>
+        <p className={styles.reference}>Order ID: {order.id}</p>
+      </header>
 
+      <div className={styles.columns}>
+      <div className={styles.main}>
       <BuyerDeliveryTracking order={order} checkedAt={checkedAt} refreshing={refreshing} reload={reload} />
 
-      <Card>
-        <SectionTitle title="Order pricing" />
-        <OrderMoneyBreakdown pricing={order.pricing} />
-      </Card>
-
-      <Card>
-        <EscrowStatus status={order.escrowStatus} />
-        {canConfirmReceipt(order, user?.id) ? <div className="mt-4"><p className="mb-3 text-sm text-slate-600">Confirm only after you have received your order. Confirming receipt can release the funds held for this order.</p><Button disabled={submitting || receiptSent || uncertain} onClick={() => confirmation.current?.showModal()}>{receiptSent ? "Receipt confirmed" : "Confirm receipt"}</Button></div> : null}
-        <div className="mt-3"><Button variant="ghost" disabled={submitting} onClick={reload}>Refresh order status</Button></div>
-      </Card>
-
-      <Card>
-        <SectionTitle title="Products" />
-        <div className="mt-4 space-y-2 text-sm">
+      <section className={styles.panel} aria-label="Products">
+        <div className={styles.panelHeading}><div className={styles.headingLabel}><span className={styles.icon}><ShopperIcon name="orders" size={18} /></span><h2>In your order</h2></div><span className={styles.caption}>{order.items.length} {order.items.length === 1 ? "item" : "items"} listed</span></div>
+        <div>
           {order.items.map((product) => (
-            <div key={product.id} className="flex justify-between">
-              <span>
-                {product.name} x{product.qty}
-              </span>
-              <span>{product.price === null ? "" : formatCurrency(product.price * product.qty)}</span>
+            <div key={product.id} className={styles.product}>
+              <span className={styles.icon}><ShopperIcon name="orders" size={17} /></span>
+              <span className={styles.productName}>{product.name}<small>Quantity: {product.qty}</small></span>
+              <strong>{product.price === null ? "" : formatCurrency(product.price * product.qty)}</strong>
             </div>
           ))}
+          {!order.items.length ? <p className={styles.caption}>Product details will appear when available.</p> : null}
         </div>
-      </Card>
+      </section>
 
-      <Card>
-        <SectionTitle title="Delivery Address" />
-        <p className="mt-3 text-sm text-slate-600">{order.address}</p>
-      </Card>
+      <section className={styles.panel} aria-label="Delivery address">
+        <div className={styles.panelHeading}><div className={styles.headingLabel}><span className={styles.icon}><ShopperIcon name="pin" size={18} /></span><h2>Delivery address</h2></div></div>
+        <address className={styles.address}>{order.address || "Delivery address unavailable"}</address>
+      </section>
+      </div>
+      <aside className={styles.aside} aria-label="Payment and order summary">
+        <section className={`${styles.panel} ${styles.pricing}`}>
+          <div className={styles.panelHeading}><h2>Order summary</h2><span className={styles.caption}>NGN</span></div>
+          <OrderMoneyBreakdown pricing={order.pricing} />
+          <p className={styles.security}><ShopperIcon name="shield" size={16} />Payment and delivery updates are shown as confirmed by Alpha Marketplace.</p>
+        </section>
+        <section className={styles.panel} aria-label="Payment protection">
+          <div className={styles.panelHeading}><div className={styles.headingLabel}><span className={styles.icon}><ShopperIcon name="shield" size={18} /></span><h2>Payment & receipt</h2></div></div>
+          <EscrowStatus status={order.escrowStatus} />
+          {canConfirmReceipt(order, user?.id) ? <div className="mt-4"><p className="mb-3 text-sm text-slate-600">Confirm only after you have received your order. Confirming receipt can release the funds held for this order.</p><Button disabled={submitting || receiptSent || uncertain} onClick={() => confirmation.current?.showModal()}>{receiptSent ? "Receipt confirmed" : "Confirm receipt"}</Button></div> : null}
+          <div className="mt-4"><button type="button" className={styles.refresh} disabled={submitting || refreshing} onClick={reload}><ShopperIcon name="refresh" size={13} />Refresh order status</button></div>
+        </section>
+      </aside>
+      </div>
 
-      <Link href="/dashboard/orders" className="text-sm font-semibold text-brand">Back to orders</Link>
       <dialog ref={confirmation} aria-labelledby="receipt-title" onCancel={event => { if (submitting) event.preventDefault(); }} className="w-[calc(100%_-_32px)] max-w-md rounded-xl border border-slate-200 p-6 backdrop:bg-slate-900/40">
         <h2 id="receipt-title" className="text-lg font-semibold text-slate-900">Have you received your order?</h2><p className="mt-3 text-sm leading-relaxed text-slate-600">Confirming receipt may release the funds held for this order. Continue only when you have received it and are ready to confirm delivery.</p><div className="mt-5 flex justify-end gap-2"><Button autoFocus variant="ghost" disabled={submitting} onClick={() => confirmation.current?.close()}>Cancel</Button><Button disabled={submitting} onClick={() => void confirmReceipt()}>{submitting ? "Confirming..." : "Yes, confirm receipt"}</Button></div>
       </dialog>
