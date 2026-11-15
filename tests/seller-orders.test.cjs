@@ -89,15 +89,22 @@ test('only a readable empty list becomes zero; failures and malformed responses 
 });
 
 function pageHarness(response, component = 'VendorOrders') {
-  const slots = [], effects = [];
+  const slots = [], effects = [], calls = [], timers = new Map(), focusListeners = new Map(), visibilityListeners = new Map();
   let cursor = 0;
+  let timerId = 0, user = { id: 'seller' };
+  const document = { visibilityState: 'visible', addEventListener: (name, fn) => visibilityListeners.set(name, fn), removeEventListener: name => visibilityListeners.delete(name) };
+  const window = {
+    setInterval: (fn, ms) => { const id = ++timerId; timers.set(id, { fn, ms }); return id; },
+    clearInterval: id => timers.delete(id),
+    addEventListener: (name, fn) => focusListeners.set(name, fn), removeEventListener: name => focusListeners.delete(name),
+  };
   const jsx = (type, props) => ({ type, props });
   const loaded = { exports: {} };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/vendor/pages/' + component + '.tsx', 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText, {
-    module: loaded, exports: loaded.exports, Error, AbortController,
-    fetch: async () => response(),
+    module: loaded, exports: loaded.exports, Error, AbortController, AbortSignal, document, window,
+    fetch: async (url, init) => { calls.push({ url, init }); return response(url, init); },
     require(name) {
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
       if (name === 'react') return {
@@ -105,16 +112,16 @@ function pageHarness(response, component = 'VendorOrders') {
         useMemo(fn) { return fn(); }, useEffect(effect) { effects.push(effect); },
       };
       if (name === 'react-router-dom') return { Link: 'link', useParams: () => ({ orderId: 'order-uuid' }), useNavigate: () => () => {} };
-      if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'seller-token', user: { id: 'seller' } }) };
-      if (name.endsWith('useAuthUser')) return { useAuthUser: () => ({ id: 'seller' }) };
-      if (name.endsWith('localAccountData')) return { accountStamp: () => 'seller', checkAccount() {} };
+      if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'seller-token', user }) };
+      if (name.endsWith('useAuthUser')) return { useAuthUser: () => user };
+      if (name.endsWith('localAccountData')) return { accountStamp: () => user.id, checkAccount(stamp) { if (stamp !== user.id) throw new Error('Account changed'); } };
       if (name.endsWith('.css')) return { default: new Proxy({}, { get: (_, key) => key }) };
       if (name.endsWith('EscrowStatus') || name.endsWith('OrderMoneyBreakdown')) return { default: 'status-component' };
       if (name.startsWith('@/')) return load('src/' + name.slice(2) + '.ts');
       throw new Error(name);
     },
   });
-  return { effects, render() { cursor = 0; return loaded.exports.default(); } };
+  return { effects, calls, timers, document, focusListeners, visibilityListeners, changeUser: id => { user = { id }; }, render() { cursor = 0; return loaded.exports.default(); } };
 }
 function nodes(tree, match) {
   if (Array.isArray(tree)) return tree.flatMap(child => nodes(child, match));
@@ -174,4 +181,73 @@ test('notification destination renders nested order details including payment st
   assert.ok(nodes(tree, node => node.props?.children === 'paid').length);
   assert.ok(nodes(tree, node => node.props?.children === 'Example address').length);
   assert.equal(nodes(tree, node => node.props?.children === 'Unable to load order').length, 0);
+});
+
+test('seller tracking queries only the assigned rider and displays backend progress and contact', async () => {
+  const h = pageHarness(url => url.includes('/grpc/riders/')
+    ? Response.json({ data: { rider: { id: 'rider one', user: { first_name: 'Example', last_name: 'Rider', phone: '08000000000' } } } })
+    : Response.json({ data: { ...fixture, RiderID: 'rider one', DeliveryStatus: 'heading_to_pickup' } }), 'VendorOrderDetail');
+  h.render(); const cleanup = h.effects[0](); await settle();
+  const tree = h.render();
+  assert.deepEqual(h.calls.map(call => call.url), ['/api/seller/orders/order-uuid', '/api/marketplace/grpc/riders/rider%20one']);
+  assert.ok(h.calls.every(call => call.init.headers.Authorization === 'Bearer seller-token' && call.init.cache === 'no-store'));
+  for (const text of ['Example Rider', '08000000000', 'Heading to pickup']) assert.ok(nodes(tree, node => node.props?.children === text).length, text);
+  assert.equal([...h.timers.values()][0].ms, 30000);
+  cleanup();
+  assert.equal(h.timers.size, 0);
+  assert.equal(h.focusListeners.size, 0);
+  assert.equal(h.visibilityListeners.size, 0);
+});
+
+test('missing assignment is explicit; hidden pages do not poll and refreshed assignment is loaded', async () => {
+  let assigned = false;
+  const h = pageHarness(url => url.includes('/grpc/riders/')
+    ? Response.json({ data: { id: 'rider-2', name: 'New Rider' } })
+    : Response.json({ data: { ...fixture, delivery_id: 'delivery-1', ...(assigned ? { rider_id: 'rider-2' } : {}) } }), 'VendorOrderDetail');
+  h.render(); h.effects[0](); await settle();
+  assert.equal(h.calls.length, 1);
+  assert.ok(nodes(h.render(), node => node.props?.children === 'Rider assignment has not been reported.').length);
+  assert.ok(nodes(h.render(), node => node.props?.children === 'Not reported').length);
+  const poll = [...h.timers.values()][0].fn;
+  h.document.visibilityState = 'hidden'; poll(); await settle();
+  assert.equal(h.calls.length, 1);
+  assigned = true; h.document.visibilityState = 'visible'; poll(); await settle();
+  assert.equal(h.calls.length, 3);
+  assert.ok(nodes(h.render(), node => node.props?.children === 'New Rider').length);
+});
+
+test('rider lookup failure preserves order details, clears old rider contact and offers refresh', async () => {
+  let failed = false;
+  const h = pageHarness(url => url.includes('/grpc/riders/')
+    ? failed ? Response.json({ error: 'Rider service unavailable' }, { status: 503 }) : Response.json({ data: { id: 'rider', name: 'Old Rider', phone: '08000000000' } })
+    : Response.json({ data: { ...fixture, rider_id: 'rider' } }), 'VendorOrderDetail');
+  h.render(); h.effects[0](); await settle();
+  assert.ok(nodes(h.render(), node => node.props?.children === 'Old Rider').length);
+  failed = true; [...h.timers.values()][0].fn(); await settle();
+  const tree = h.render();
+  assert.ok(nodes(tree, node => node.props?.children === 'Order Details').length);
+  assert.ok(nodes(tree, node => node.props?.role === 'alert').length);
+  assert.equal(nodes(tree, node => node.props?.children === 'Old Rider').length, 0);
+  assert.ok(nodes(tree, node => node.type === 'button' && node.props.children === 'Refresh tracking').length);
+});
+
+test('orders without delivery never query a rider and do not show rider progress', async () => {
+  const h = pageHarness(() => Response.json({ data: { ...fixture, RequiresDelivery: false, rider_id: 'stale-rider' } }), 'VendorOrderDetail');
+  h.render(); h.effects[0](); await settle();
+  const tree = h.render();
+  assert.equal(h.calls.length, 1);
+  assert.ok(nodes(tree, node => node.props?.children === 'No rider delivery is required for this order.').length);
+  assert.equal(nodes(tree, node => node.props?.children === 'Assigned rider').length, 0);
+});
+
+test('late tracking responses cannot populate another seller or an unmounted page', async () => {
+  for (const cancel of [true, false]) {
+    let finish;
+    const h = pageHarness(() => new Promise(resolve => { finish = resolve; }), 'VendorOrderDetail');
+    h.render(); const cleanup = h.effects[0]();
+    if (cancel) cleanup(); else h.changeUser('other-seller');
+    finish(Response.json({ data: { ...fixture, rider_id: 'private-rider' } })); await settle();
+    assert.equal(h.calls.length, 1);
+    assert.equal(nodes(h.render(), node => node.props?.children === 'Order Details').length, 0);
+  }
 });

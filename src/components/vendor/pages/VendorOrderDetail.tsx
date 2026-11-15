@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getAuth } from "@/components/auth/authStorage";
+import { useAuthUser } from "@/components/auth/useAuthUser";
+import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
+import { assignedRider, deliveryStatusLabel, orderDelivery, type AssignedRider } from "@/components/vendor/orderDelivery";
 import { escrowStatusFromOrder } from "@/components/commerce/escrow";
 import { orderPaymentStatus } from "@/components/commerce/payments";
 import EscrowStatus from "@/components/commerce/EscrowStatus";
@@ -27,47 +30,78 @@ function formatNaira(value: unknown) {
 export default function VendorOrderDetail() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
-  const [order, setOrder] = useState<Record<string, unknown> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const user = useAuthUser();
+  const key = `${user?.id || ""}:${orderId || ""}`;
+  const [snapshot, setSnapshot] = useState<{
+    key: string; order: Record<string, unknown> | null; rider: AssignedRider | null;
+    riderError: string; error: string; checkedAt: string;
+  } | null>(null);
+  const [refreshing, setRefreshing] = useState(true);
+  const [revision, setRevision] = useState(0);
+  const current = snapshot?.key === key ? snapshot : null;
+  const order = current?.order ?? null;
+  const error = current?.error || "";
+  const loading = !current;
 
   useEffect(() => {
+    const controller = new AbortController();
+    let inFlight = false;
     async function loadOrder() {
-      if (!orderId) return;
-      setLoading(true);
-      setError("");
+      if (inFlight || controller.signal.aborted) return;
+      inFlight = true;
+      setRefreshing(true);
       try {
-        const auth = getAuth();
-        const token = auth?.access_token;
-        const response = await fetch(`/api/seller/orders/${encodeURIComponent(orderId)}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        const text = await response.text();
-        let payload: unknown = null;
-        try {
-          payload = text ? JSON.parse(text) : null;
-        } catch {
-          payload = text;
+        if (!orderId || !user?.id) throw new Error("Sign in with your seller account to view this order.");
+        const stamp = accountStamp();
+        const token = getAuth()?.access_token || "";
+        const headers = { Authorization: `Bearer ${token.replace(/^Bearer\s+/i, "").trim()}`, Accept: "application/json" };
+        async function request(path: string) {
+          checkAccount(stamp);
+          const response = await fetch(path, { headers, cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]) });
+          const payload: unknown = await response.json();
+          checkAccount(stamp);
+          const root = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+          if (!response.ok || root.success === false) throw new Error(
+            typeof root.error === "string" ? root.error : typeof root.message === "string" ? root.message : `Details could not be loaded (${response.status}).`
+          );
+          return payload;
         }
-        if (!response.ok) {
-          const message =
-            payload && typeof payload === "object" && "error" in payload
-              ? String((payload as { error: unknown }).error)
-              : `Failed to load order (${response.status}).`;
-          throw new Error(message);
+        const next = sellerOrderDetail(await request(`/api/seller/orders/${encodeURIComponent(orderId)}`));
+        if (controller.signal.aborted) return;
+        const tracking = orderDelivery(next);
+        let rider: AssignedRider | null = null, riderError = "";
+        if (tracking.required !== false && tracking.riderId) {
+          try {
+            rider = assignedRider(await request(`/api/marketplace/grpc/riders/${encodeURIComponent(tracking.riderId)}`), tracking.riderId);
+          } catch (failure) {
+            if (controller.signal.aborted) return;
+            checkAccount(stamp);
+            riderError = failure instanceof Error ? failure.message : "Rider details could not be loaded. Refresh to try again.";
+          }
         }
-
-        setOrder(sellerOrderDetail(payload));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load order details.");
-        setOrder(null);
+        if (controller.signal.aborted) return;
+        checkAccount(stamp);
+        setSnapshot({ key, order: next, rider, riderError, error: "", checkedAt: new Date().toISOString() });
+      } catch (failure) {
+        if (controller.signal.aborted) return;
+        setSnapshot({ key, order: null, rider: null, riderError: "", error: failure instanceof Error ? failure.message : "Failed to load order details.", checkedAt: "" });
       } finally {
-        setLoading(false);
+        inFlight = false;
+        if (!controller.signal.aborted) setRefreshing(false);
       }
     }
-
     void loadOrder();
-  }, [orderId]);
+    const visibleRefresh = () => { if (document.visibilityState === "visible") void loadOrder(); };
+    const timer = window.setInterval(visibleRefresh, 30000);
+    window.addEventListener("focus", visibleRefresh);
+    document.addEventListener("visibilitychange", visibleRefresh);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+      window.removeEventListener("focus", visibleRefresh);
+      document.removeEventListener("visibilitychange", visibleRefresh);
+    };
+  }, [orderId, user?.id, key, revision]);
 
   const summary = useMemo(() => {
     if (!order) return null;
@@ -92,6 +126,8 @@ export default function VendorOrderDetail() {
     };
   }, [order, orderId]);
 
+  const tracking = order ? orderDelivery(order) : null;
+
   if (loading) {
     return (
       <section className={styles.card}>
@@ -104,7 +140,8 @@ export default function VendorOrderDetail() {
     return (
       <section className={styles.card}>
         <div className={styles.cardTitle}>Unable to load order</div>
-        <div className={styles.cardSubtitle}>{error}</div>
+        <div role="alert" className={styles.cardSubtitle}>{error}</div>
+        <button type="button" className={styles.actionBtn} disabled={refreshing} onClick={() => setRevision(value => value + 1)}>Refresh tracking</button>
       </section>
     );
   }
@@ -132,6 +169,23 @@ export default function VendorOrderDetail() {
           Back to orders
         </button>
       </div>
+
+      <section aria-label="Delivery and rider tracking" className={styles.progressList}>
+        <div className={styles.cardHeader}>
+          <h2 className={styles.cardTitle}>Delivery &amp; rider</h2>
+          <button type="button" className={styles.actionBtn} disabled={refreshing} onClick={() => setRevision(value => value + 1)}>
+            {refreshing ? "Refreshing..." : "Refresh tracking"}
+          </button>
+        </div>
+        {tracking?.required === false ? <p>No rider delivery is required for this order.</p> : <>
+          <div className={styles.progressRow}><span>Delivery status</span><span className={styles.pill}>{deliveryStatusLabel(tracking?.status || "")}</span></div>
+          <div className={styles.progressRow}><span>Assigned rider</span><span>{tracking?.riderId ? current?.rider?.name || "Assigned; name not reported" : "Rider assignment has not been reported."}</span></div>
+          {tracking?.riderId ? <div className={styles.progressRow}><span>Rider contact</span><span>{current?.rider?.phone || "Not reported"}</span></div> : null}
+          {current?.riderError ? <p role="alert">{current.riderError} Use Refresh tracking to check again.</p> : null}
+          {tracking?.updatedAt && Number.isFinite(Date.parse(tracking.updatedAt)) ? <div className={styles.progressRow}><span>Delivery updated</span><time dateTime={tracking.updatedAt}>{new Date(tracking.updatedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time></div> : null}
+        </>}
+        {current?.checkedAt ? <p className={styles.cardSubtitle}>Last checked: <time dateTime={current.checkedAt}>{new Date(current.checkedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time>. Updates every 30 seconds while this page is visible.</p> : null}
+      </section>
 
       <div className={styles.progressList}>
         <OrderMoneyBreakdown pricing={orderPricing(order)} seller />

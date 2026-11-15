@@ -10,6 +10,13 @@ import { pricingMoney } from "@/components/commerce/orderPricing";
 import { loadSellerOrders } from "@/components/vendor/sellerOrders";
 import { type SellerOrder } from "@/components/vendor/sellerData";
 
+function createdDate(value: string) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? date.toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Lagos" })
+    : "—";
+}
+
 export default function VendorOrders() {
   const user = useAuthUser();
   const [snapshot, setSnapshot] = useState<{ owner: string; orders: SellerOrder[] | null }>({ owner: "", orders: null });
@@ -115,7 +122,7 @@ export default function VendorOrders() {
                     <td>
                       <span className={styles.pill}>{order.status}</span>
                     </td>
-                    <td>{order.createdAt}</td>
+                    <td>{createdDate(order.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>
