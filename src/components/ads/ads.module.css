@@ -33,7 +33,37 @@
 .photo { width: 100%; height: 200px; border-radius: 10px; overflow: hidden; background: #f1f4f8; margin-bottom: 14px; }
 .photo img { width: 100%; height: 100%; object-fit: cover; }
 .photo > span { display: block; width: 100%; height: 100%; }
-.details { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 22px; }
+.details { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+.adGallery { margin: 0 0 24px; }
+.page .galleryMain { display: grid; place-items: center; width: 100%; height: clamp(240px, 32vw, 420px); padding: 12px; overflow: hidden; border: 1px solid #e0e6ef; border-radius: 10px; background: #f4f6fa; }
+.page .galleryMain:disabled { opacity: 1; color: #617087; cursor: default; }
+.galleryMain img { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.galleryCaption { margin-top: 9px; font-size: 12px; color: #617087; }
+.galleryThumbnails { display: flex; gap: 8px; overflow-x: auto; padding: 10px 2px 4px; }
+.page .galleryThumbnails button { padding: 4px; width: 76px; height: 76px; flex: 0 0 76px; overflow: hidden; }
+.galleryThumbnails button[aria-pressed=true] { border: 2px solid #2860db; }
+.galleryThumbnails img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.imageDialog { position: fixed; inset: 0; width: min(1100px, 94vw); max-height: 94dvh; margin: auto; padding: 60px 16px 16px; border: 0; border-radius: 12px; background: white; }
+.imageDialog::backdrop, .moderationDialog::backdrop { background: #10233b99; }
+.imageDialog img { display: block; width: 100%; max-height: 76dvh; object-fit: contain; }
+.page .closeImage { position: absolute; top: 12px; right: 16px; }
+.facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; margin: 0; padding: 0; }
+.facts > div { min-width: 0; }
+.facts dt, .factLabel { display: block; font-size: 12px; color: #617087; margin-bottom: 6px; }
+.facts dd { margin: 0; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.factWide { grid-column: 1 / -1; }
+.description { white-space: pre-wrap; overflow-wrap: anywhere; }
+.poster { margin-top: 24px; padding-top: 20px; border-top: 1px solid #e0e6ef; }
+.poster > strong { font-size: 14px; }
+.posterRole { display: inline-block; margin-left: 10px; color: #617087; font-size: 12px; text-transform: capitalize; }
+.posterId { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: #617087; }
+.posterId code { min-width: 0; overflow-wrap: anywhere; user-select: all; }
+.page .posterId button { padding: 6px 10px; font-size: 12px; }
+.detailLink { display: inline-block; margin-top: 18px; color: #2259b7; text-decoration: underline; }
+.moderationCard { margin-bottom: 0; }
+.moderationDialog { max-height: 90dvh; overflow-y: auto; }
+.moderationDialog label { margin-top: 20px; }
+.page :is(button, a, textarea):focus-visible { outline: 2px solid #2860db; outline-offset: 3px; }
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
 .gallery img { height: 100px; object-fit: cover; width: 100%; border-radius: 8px; }
 .list { display: grid; gap: 12px; }

@@ -1,5 +1,6 @@
 // Browser regression with synthetic responses only. No live Ads or wallet mutations.
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const preview = process.env.ALPHA_PREVIEW_URL || 'http://127.0.0.1:3011';
 const chrome = process.env.ALPHA_CHROME_URL || 'http://127.0.0.1:9228';
 
@@ -33,6 +34,7 @@ async function main() {
     await evaluate(`(() => { const row=[...document.querySelectorAll('label')].find(el=>el.textContent.trim().startsWith(${JSON.stringify(label)}));const el=row?.querySelector('input,select,textarea');if(!el)throw new Error('Missing label: '+${JSON.stringify(label)});Object.getOwnPropertyDescriptor(el.tagName==='SELECT'?HTMLSelectElement.prototype:el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value').set.call(el,${JSON.stringify(value)});el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true})); })()`);
   }
   async function click(text) {
+    await wait(`Boolean([...document.querySelectorAll('button')].find(el=>el.textContent.trim()===${JSON.stringify(text)}&&!el.disabled))`);
     await evaluate(`(() => {const el=[...document.querySelectorAll('button')].find(el=>el.textContent.trim()===${JSON.stringify(text)});if(!el)throw new Error('Missing button: '+${JSON.stringify(text)});el.click();})()`);
   }
   async function navigate(path, role) {
@@ -45,7 +47,7 @@ async function main() {
       window.__adsPath=location.pathname;const role=sessionStorage.getItem('__adsRole')||'public';
       if(role==='public')localStorage.removeItem('alpha.auth');
       else localStorage.setItem('alpha.auth',JSON.stringify({access_token:'synthetic-ads-token',user:{id:'qa-owner',role,first_name:'QA',last_name:'Poster',status:'active'}}));
-      const base={owner_id:'qa-owner',poster_role:'seller',description:'A useful chair',base_price:'5000',stock:3,category_id:'category-one',category:{id:'category-one',name:'Furniture'},location_id:'area-one',location:{id:'area-one',name:'Ikeja'},product_type_id:'type-one',address:'12 Allen Avenue, Ikeja, Lagos, Nigeria',is_active:true,media:{cover:'',images:[],video:''},created_at:'2026-11-14T08:00:00Z',updated_at:'2026-11-14T08:00:00Z'};
+      const base={owner_id:'qa-owner',poster_role:'seller',description:'A useful chair',base_price:'5000',stock:3,category_id:'category-one',category:{id:'category-one',name:'Furniture'},location_id:'area-one',location:{id:'area-one',name:'Ikeja'},product_type_id:'type-one',address:'12 Allen Avenue, Ikeja, Lagos, Nigeria',is_active:true,media:{cover:location.origin+'/buyer/buyer-tech.jpg',images:[location.origin+'/buyer/buyer-style.jpg'],video:''},created_at:'2026-11-14T08:00:00Z',updated_at:'2026-11-14T08:00:00Z'};
       const initial={balance:1000,fee:100,ads:['pending','approved','rejected','changes_requested','suspended'].map(status=>({...base,id:'ad-'+status,name:status+' Chair',moderation_status:status,moderation_note:status==='rejected'?'Please correct the photo':'Review note'})),plans:[{id:'plan-one',name:'Featured week',type:'featured',price:'40',duration_days:7,is_active:true,category_ids:[],location_ids:[]}],promotions:[],fees:[{id:'default-fee',category_id:null,amount:100,is_active:true}],logs:[{id:'log-one',product_id:'ad-rejected',action:'rejected',reason:'Please correct the photo',created_at:'2026-11-14T09:00:00Z'}],writes:[]};
       const state=JSON.parse(sessionStorage.getItem('__adsFixture')||JSON.stringify(initial));window.__adsState=state;
       const persist=()=>sessionStorage.setItem('__adsFixture',JSON.stringify(state));window.__saveAdsState=persist;
@@ -90,7 +92,7 @@ async function main() {
           if(action==='promotions'){const plan=state.plans.find(plan=>plan.id===body.plan_id);if(ad.moderation_status!=='approved')return fail('Only published ads may be promoted');if(!plan||state.balance<Number(plan.price))return fail('Insufficient funds',402);state.balance-=Number(plan.price);state.promotions.push({id:'promotion-new',product_id:adId,type:plan.type,plan:{name:plan.name},price:plan.price,status:'active',starts_at:'2026-11-14T10:00:00Z',ends_at:'2026-11-21T10:00:00Z'});ad.is_promoted=true;persist();return json({},201);}
           if(method==='PUT'){if(admin){if(body.name)ad.name=body.name;if(body.description!==undefined)ad.description=body.description;}else{if(body.name)ad.name=body.name;if(body.shortDescription!==undefined)ad.description=body.shortDescription;if(['approved','changes_requested'].includes(ad.moderation_status))ad.moderation_status='pending';}if(body.media)ad.media=body.media;ad.updated_at=new Date().toISOString();persist();return json(ad);}
           if(method==='DELETE'){ad.deleted_at=new Date().toISOString();persist();return json({});}
-          if(method==='POST'){if(action==='resubmit'){if(ad.moderation_status==='rejected'){if(state.balance<state.fee)return fail('Wallet balance too low',402);state.balance-=state.fee;}ad.moderation_status='pending';}else if(action==='approve')ad.moderation_status='approved';else if(action==='reject'){ad.moderation_status='rejected';state.balance+=state.fee;}else if(action==='request-changes')ad.moderation_status='changes_requested';else if(action==='suspend'){ad.previous_status=ad.moderation_status;ad.moderation_status='suspended';}else if(action==='unsuspend')ad.moderation_status=ad.previous_status||'approved';state.logs.unshift({id:'log-'+state.logs.length,product_id:adId,action,reason:body.reason||body.note,created_at:new Date().toISOString()});persist();return json(ad);}
+          if(method==='POST'){if(action==='reject'&&window.__rejectFailure)return fail('Rejection was not saved. Please retry.',400);if(action==='resubmit'){if(ad.moderation_status==='rejected'){if(state.balance<state.fee)return fail('Wallet balance too low',402);state.balance-=state.fee;}ad.moderation_status='pending';}else if(action==='approve')ad.moderation_status='approved';else if(action==='reject'){ad.moderation_status='rejected';state.balance+=state.fee;}else if(action==='request-changes')ad.moderation_status='changes_requested';else if(action==='suspend'){ad.previous_status=ad.moderation_status;ad.moderation_status='suspended';}else if(action==='unsuspend')ad.moderation_status=ad.previous_status||'approved';state.logs.unshift({id:'log-'+state.logs.length,product_id:adId,action,reason:body.reason||body.note,created_at:new Date().toISOString()});persist();return json(ad);}
           return json(ad);
         }
         return json([]);
@@ -155,17 +157,32 @@ async function main() {
     console.log('PASS seller My Ads is separate from the existing Products navigation');
 
     await navigate('/admin/ads', 'marketplace_admin'); await wait(`document.body.innerText.includes('pending Chair')`);
-    await navigate('/admin/ads/ad-pending', 'marketplace_admin'); await wait(`Boolean([...document.querySelectorAll('button')].find(el=>el.textContent.trim()==='approve'))`);
-    await click('approve'); await input('dialog[open] textarea', 'Ready to publish'); await click('Confirm approve');
+    await navigate('/admin/ads/ad-pending', 'marketplace_admin'); await wait(`Boolean([...document.querySelectorAll('button')].find(el=>el.textContent.trim()==='Approve'))`);
+    await wait(`document.querySelector('[aria-label^="Enlarge photo"] img')?.naturalWidth>0`);
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('[aria-label^="Enlarge photo"] img')).objectFit==='contain'`), true);
+    await evaluate(`document.querySelector('[aria-label="View photo 2"]').click()`);
+    await wait(`document.querySelector('[aria-label^="Enlarge photo"] img')?.src.endsWith('/buyer/buyer-style.jpg')`);
+    await evaluate(`document.querySelector('[aria-label^="Enlarge photo"]').click()`);
+    await wait(`Boolean(document.querySelector('dialog[open] img'))`); await click('Close photo');
+    assert.equal(await evaluate(`!document.querySelector('dialog[open]')`), true);
+    console.log('PASS ad photos fit fully, gallery selection and enlargement work');
+    fs.writeFileSync('.admin-preview-ad-review-desktop.png', Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+    await click('Approve'); await input('dialog[open] textarea', 'Ready to publish'); await click('Confirm approve');
     await wait(`document.querySelector('h1')?.parentElement?.querySelector('span')?.textContent==='approved'`);
-    await click('suspend'); await labelInput('Suspension', 'duration'); await labelInput('Hours', '24'); await input('dialog[open] textarea', 'Verify the address'); await click('Confirm suspend');
+    await click('Suspend'); await labelInput('Suspension', 'duration'); await labelInput('Hours', '24'); await input('dialog[open] textarea', 'Verify the address'); await click('Confirm suspend');
     await wait(`document.querySelector('h1')?.parentElement?.querySelector('span')?.textContent==='suspended'`);
     assert.equal(await evaluate(`__adsState.writes.find(write=>write.path==='/api/admin/ads/ad-pending/suspend').body.duration_hours`), 24);
-    await click('unsuspend'); await click('Confirm unsuspend'); await wait(`document.querySelector('h1')?.parentElement?.querySelector('span')?.textContent==='approved'`);
+    await click('Unsuspend'); await click('Confirm unsuspend'); await wait(`document.querySelector('h1')?.parentElement?.querySelector('span')?.textContent==='approved'`);
     console.log('PASS admins can approve, temporarily suspend and unsuspend an ad with audit notes');
 
-    await navigate('/admin/ads/ad-created', 'marketplace_admin'); await wait(`Boolean([...document.querySelectorAll('button')].find(el=>el.textContent.trim()==='reject'))`);
-    await click('reject'); await input('dialog[open] textarea', 'Please improve the listing photo'); await click('Confirm reject');
+    await navigate('/admin/ads/ad-created', 'marketplace_admin'); await wait(`Boolean([...document.querySelectorAll('button')].find(el=>el.textContent.trim()==='Reject'))`);
+    await click('Reject');
+    assert.equal(await evaluate(`document.querySelector('dialog[open] textarea').required && document.querySelector('dialog[open]').innerText.includes('Reason for rejection')`), true);
+    await input('dialog[open] textarea', 'Please improve the listing photo');
+    await evaluate(`window.__rejectFailure=true`); await click('Reject ad');
+    await wait(`document.querySelector('dialog[open]')?.innerText.includes('Rejection was not saved')`);
+    assert.equal(await evaluate(`document.querySelector('dialog[open] textarea').value==='Please improve the listing photo'`), true);
+    await evaluate(`window.__rejectFailure=false`); await click('Reject ad');
     await wait(`document.querySelector('h1')?.parentElement?.querySelector('span')?.textContent==='rejected'`);
     assert.equal(await evaluate(`__adsState.writes.find(write=>write.path==='/api/admin/ads/ad-created/reject').body.reason`), 'Please improve the listing photo');
     console.log('PASS admin rejection submits the poster-facing reason through the refund-capable backend action');
@@ -199,7 +216,11 @@ async function main() {
     assert.equal(await evaluate(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`),true);
     console.log('PASS Ads lists, admin history and promotion management fit a mobile viewport');
     assert.deepEqual(errors, []);
-    console.log('12 Ads browser scenarios passed. All mutations used synthetic responses.');
+    await navigate('/admin/ads/ad-created', 'marketplace_admin'); await wait(`document.body.innerText.includes('Ad details')`);
+    assert.equal(await evaluate(`document.documentElement.scrollWidth<=document.documentElement.clientWidth`),true);
+    console.log('PASS ad detail layout fits a mobile viewport');
+    fs.writeFileSync('.admin-preview-ad-review-mobile.png', Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+    console.log('14 Ads browser scenarios passed. All mutations used synthetic responses.');
   } finally { socket.close(); await fetch(chrome + '/json/close/' + target.id).catch(()=>{}); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
