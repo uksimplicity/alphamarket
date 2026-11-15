@@ -1,9 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
+import { adminFetcher } from "@/components/admin/api";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
+
+import { deliveryStatuses, loadAdminDeliveries, searchDeliveries, type DeliveryFilters } from "@/components/admin/deliveryData";
+import { useAuthUser } from "@/components/auth/useAuthUser";
+import { authGeneration } from "@/components/auth/authStorage";
+import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
+const emptyFilters: DeliveryFilters = { status: "", riderId: "", orderId: "" };
 
 function pretty(value: unknown) {
   try {
@@ -14,31 +20,41 @@ function pretty(value: unknown) {
 }
 
 export default function AdminDeliveriesPage() {
-  const [filters, setFilters] = useState({ status: "", riderId: "" });
+  const user = useAuthUser();
+  const [draft, setDraft] = useState<DeliveryFilters>(emptyFilters);
+  const [filters, setFilters] = useState<DeliveryFilters>(emptyFilters);
   const [lookupId, setLookupId] = useState("");
   const [assignForm, setAssignForm] = useState({ deliveryId: "", riderId: "" });
   const [result, setResult] = useState("");
   const [message, setMessage] = useState("");
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["admin-deliveries", filters],
-    queryFn: async () => {
-      const params = new URLSearchParams({ limit: "20", offset: "0" });
-      if (filters.status.trim()) params.set("status", filters.status.trim());
-      if (filters.riderId.trim()) params.set("rider_id", filters.riderId.trim());
-
-      const payload = await adminFetcher<unknown>(`/deliveries?${params.toString()}`);
-      return asArray(payload).map((row, index) => {
-        const record = asRecord(row);
-        return {
-          id: pickString(record, ["id", "delivery_id"], `delivery-${index}`),
-          orderId: pickString(record, ["order_id", "orderID"], "-"),
-          riderId: pickString(record, ["rider_id", "riderID"], "-"),
-          status: pickString(record, ["status"], "unknown"),
-        };
-      });
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ["admin-deliveries", user?.id, authGeneration(), filters.status, filters.riderId],
+    enabled: !!user?.id,
+    queryFn: async ({ signal }) => {
+      const stamp = accountStamp();
+      return loadAdminDeliveries(async path => {
+        checkAccount(stamp);
+        const payload = await adminFetcher<unknown>(path, { signal });
+        checkAccount(stamp);
+        return payload;
+      }, filters);
     },
   });
+  const visible = searchDeliveries(data || [], filters.orderId);
+
+  function applyFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const next = { status: draft.status, riderId: draft.riderId.trim(), orderId: draft.orderId.trim() };
+    setFilters(next);
+    if (next.status === filters.status && next.riderId === filters.riderId) void refetch();
+  }
+
+  function resetFilters() {
+    setDraft(emptyFilters);
+    setFilters(emptyFilters);
+    if (!filters.status && !filters.riderId) void refetch();
+  }
 
   async function lookupDelivery() {
     if (!lookupId.trim()) {
@@ -75,45 +91,43 @@ export default function AdminDeliveriesPage() {
     }
   }
 
-  if (isLoading) {
-    return (
-      <div className="grid gap-6">
-        <Skeleton className="h-10" />
-        <Skeleton className="h-64" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <ErrorState
-        message={error instanceof Error ? error.message : "Failed to load deliveries."}
-        onRetry={refetch}
-      />
-    );
-  }
-
   return (
     <div className="grid gap-6">
       <Card>
         <SectionTitle title="Deliveries" subtitle="Monitor and filter admin delivery queue." />
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="status" value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))} />
-          <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="rider_id" value={filters.riderId} onChange={(event) => setFilters((prev) => ({ ...prev, riderId: event.target.value }))} />
-        </div>
-        <div className="mt-3 flex gap-2">
-          <Button onClick={() => refetch()}>Apply Filters</Button>
-          <Button variant="ghost" onClick={() => setFilters({ status: "", riderId: "" })}>Reset</Button>
-        </div>
+        <form onSubmit={applyFilters}>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <label className="grid gap-1 text-sm">Order ID or reference
+              <input className="min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm" name="orderId" placeholder="Enter the marketplace order ID" value={draft.orderId} onChange={event => setDraft(previous => ({ ...previous, orderId: event.target.value }))} />
+            </label>
+            <label className="grid gap-1 text-sm">Delivery status
+              <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" name="status" value={draft.status} onChange={event => setDraft(previous => ({ ...previous, status: event.target.value }))}>
+                <option value="">All statuses</option>
+                {deliveryStatuses.map(status => <option key={status} value={status}>{status.replaceAll("_", " ")}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">Rider ID
+              <input className="min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm" name="riderId" placeholder="Any rider" value={draft.riderId} onChange={event => setDraft(previous => ({ ...previous, riderId: event.target.value }))} />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="submit" disabled={isFetching}>{isFetching ? "Loading..." : "Apply Filters"}</Button>
+            <Button type="button" variant="ghost" onClick={resetFilters} disabled={isFetching}>Reset</Button>
+          </div>
+        </form>
         <div className="mt-4 space-y-3 text-sm">
-          {data?.map((row) => (
-            <div key={row.id} className="grid gap-2 rounded-xl border border-slate-200 p-3 md:grid-cols-4">
-              <div>{row.id}</div>
-              <div>{row.orderId}</div>
-              <div>{row.riderId}</div>
-              <div>{row.status}</div>
-            </div>
-          ))}
+          {isLoading ? <Skeleton className="h-20" /> : error ? <ErrorState message={error instanceof Error ? error.message : "Failed to load deliveries."} onRetry={refetch} /> : <>
+            <p role="status">{visible.length ? `${visible.length} deliveries found.` : "No deliveries match the applied filters."}</p>
+            {visible.length ? <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead><tr><th className="p-3">Delivery ID</th><th className="p-3">Order ID</th><th className="p-3">Rider ID</th><th className="p-3">Status</th></tr></thead>
+                <tbody>{visible.map(row => <tr key={row.id} className="border-t border-slate-200">
+                  <td className="break-all p-3">{row.id}</td><td className="break-all p-3">{row.orderId || row.orderNumber || "Not reported"}</td>
+                  <td className="break-all p-3">{row.riderId || "Not assigned"}</td><td className="p-3">{row.status.replaceAll("_", " ")}</td>
+                </tr>)}</tbody>
+              </table>
+            </div> : null}
+          </>}
         </div>
       </Card>
 
