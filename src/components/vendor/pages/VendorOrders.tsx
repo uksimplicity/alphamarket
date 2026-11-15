@@ -7,8 +7,8 @@ import { useAuthUser } from "@/components/auth/useAuthUser";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import styles from "@/components/vendor/vendor.module.css";
 import { pricingMoney } from "@/components/commerce/orderPricing";
-import { loadSellerOrders } from "@/components/vendor/sellerOrders";
-import { type SellerOrder } from "@/components/vendor/sellerData";
+import { loadOrderCustomerNames, loadSellerOrders } from "@/components/vendor/sellerOrders";
+import { needsFulfillment, type SellerOrder } from "@/components/vendor/sellerData";
 
 function createdDate(value: string) {
   const date = new Date(value);
@@ -37,18 +37,25 @@ export default function VendorOrders() {
         if (!auth?.access_token || !auth.user?.id) throw new Error("Sign in with your seller account to view orders.");
         const owner = auth.user.id;
         const headers = { Authorization: `Bearer ${auth.access_token.replace(/^Bearer\s+/i, "").trim()}`, Accept: "application/json" };
-        const rows = await loadSellerOrders(async path => {
-          const response = await fetch(path, { headers, cache: "no-store", signal: controller.signal });
+        const request = async (path: string) => {
+          controller.signal.throwIfAborted();
+          checkAccount(stamp);
+          const response = await fetch(path, { headers, cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]) });
           const payload: unknown = await response.json();
+          checkAccount(stamp);
           if (!response.ok) {
             const row = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
             throw new Error(typeof row.error === "string" ? row.error : typeof row.message === "string" ? row.message : `Failed to load orders (${response.status}).`);
           }
           return payload;
-        }, owner);
+        };
+        const rows = await loadSellerOrders(request, owner);
+        if (controller.signal.aborted) return;
+        setSnapshot({ owner, orders: rows });
+        const namedRows = await loadOrderCustomerNames(request, rows);
         if (controller.signal.aborted) return;
         checkAccount(stamp);
-        setSnapshot({ owner, orders: rows });
+        setSnapshot({ owner, orders: namedRows });
       } catch (err) {
         if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : "Failed to load orders.");
@@ -62,20 +69,25 @@ export default function VendorOrders() {
 
   const summary = useMemo(() => ({
     total: orders?.length ?? "—",
-    pending: orders ? orders.filter(item => item.status === "pending").length : "—",
+    awaitingPayment: orders ? orders.filter(item => item.paymentStatus === "pending" && !["cancelled", "returned", "failed", "failed_delivery", "completed", "delivered", "confirmed"].includes(item.status)).length : "—",
+    fulfillment: orders ? orders.filter(needsFulfillment).length : "—",
     completed: orders ? orders.filter(item => ["completed", "delivered", "confirmed"].includes(item.status)).length : "—",
   }), [orders]);
 
   return (
     <>
-      <section className={styles.gridStats}>
+      <section className={`${styles.gridStats} ${styles.orderStats}`}>
         <div className={styles.statCard}>
           <div className={styles.statLabel}>Total Orders</div>
           <div className={styles.statValue}>{summary.total}</div>
         </div>
         <div className={styles.statCard}>
-          <div className={styles.statLabel}>Pending</div>
-          <div className={styles.statValue}>{summary.pending}</div>
+          <div className={styles.statLabel}>Awaiting payment</div>
+          <div className={styles.statValue}>{summary.awaitingPayment}</div>
+        </div>
+        <div className={styles.statCard}>
+          <div className={styles.statLabel}>Paid — awaiting fulfillment</div>
+          <div className={styles.statValue}>{summary.fulfillment}</div>
         </div>
         <div className={styles.statCard}>
           <div className={styles.statLabel}>Completed</div>
@@ -98,7 +110,7 @@ export default function VendorOrders() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Order ID</th>
+                  <th>Order reference</th>
                   <th>Customer</th>
                   <th>Buyer total</th>
                   <th>Admin commission</th>
@@ -113,13 +125,13 @@ export default function VendorOrders() {
                   <tr key={order.id}>
                     <td>
                       <Link to={`/vendor/orders/${encodeURIComponent(order.id)}`} className="text-brand">
-                        {order.id}
+                        {order.orderNumber || order.id}
                       </Link>
                     </td>
-                    <td>{order.customer}</td>
+                    <td>{order.customer === "Customer" ? <Link to={`/vendor/orders/${encodeURIComponent(order.id)}`}>View customer details</Link> : order.customer}</td>
                     <td>{pricingMoney(order.pricing.buyerTotal ?? order.amount)}</td>
                     <td>{pricingMoney(order.pricing.adminCommission)}</td>
-                    <td>{pricingMoney(order.pricing.sellerProceeds)}</td>
+                    <td>{order.pricing.issues.length ? <span title={order.pricing.issues.join(" ")}>Pricing needs review</span> : pricingMoney(order.pricing.sellerProceeds)}</td>
                     <td><span className={styles.pill}>{order.paymentStatus.replaceAll("_", " ")}</span></td>
                     <td>
                       <span className={styles.pill}>{order.status}</span>

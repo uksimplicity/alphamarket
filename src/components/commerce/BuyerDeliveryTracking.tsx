@@ -45,10 +45,10 @@ export default function BuyerDeliveryTracking({ order, checkedAt, refreshing, re
     <section aria-label="Delivery and rider tracking">
       <SectionTitle title="Delivery & rider" />
       {tracking.required === false ? <p className="mt-3 text-sm">No rider delivery is required for this order.</p> : <dl className="mt-3 grid gap-3 text-sm">
-        <div><dt className="text-slate-500">Delivery status</dt><dd>{deliveryStatusLabel(tracking.status)}</dd></div>
-        {!tracking.id ? <p>A delivery has not been linked to this order yet.</p> : null}
-        <div><dt className="text-slate-500">Assigned rider</dt><dd>{tracking.riderId ? current?.rider?.name || (current ? "Assigned; name not reported" : "Loading rider details...") : "Rider assignment has not been reported."}</dd></div>
-        {tracking.riderId ? <div><dt className="text-slate-500">Rider contact</dt><dd>{current?.rider?.phone || "Not reported"}</dd></div> : null}
+        <div><dt className="text-slate-500">Delivery status</dt><dd>{tracking.status ? deliveryStatusLabel(tracking.status) : "Awaiting delivery update"}</dd></div>
+        {!tracking.id ? <p>Your delivery is being arranged.</p> : null}
+        <div><dt className="text-slate-500">Assigned rider</dt><dd>{tracking.riderId ? current?.rider?.name || (current ? "Rider assigned; awaiting details" : "Loading rider details...") : "Awaiting rider assignment"}</dd></div>
+        {tracking.riderId ? <div><dt className="text-slate-500">Rider contact</dt><dd>{current?.rider?.phone || "Contact details pending"}</dd></div> : null}
         {current?.error ? <p role="alert">{current.error} Use Refresh tracking to check again.</p> : null}
         {tracking.updatedAt && Number.isFinite(Date.parse(tracking.updatedAt)) ? <div><dt className="text-slate-500">Delivery updated</dt><dd><time dateTime={tracking.updatedAt}>{new Date(tracking.updatedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time></dd></div> : null}
       </dl>}

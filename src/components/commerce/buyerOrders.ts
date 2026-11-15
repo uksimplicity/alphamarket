@@ -19,7 +19,7 @@ function amount(value: unknown): number | null {
 }
 
 export type BuyerOrder = {
-  id: string; buyerId: string; status: string; paymentStatus: string; escrowStatus: string; vendor: string;
+  id: string; buyerId: string; sellerId: string; status: string; paymentStatus: string; escrowStatus: string; vendor: string;
   total: number | null; address: string; createdAt: string;
   pricing: OrderPricing;
   delivery: ReturnType<typeof orderDelivery>;
@@ -35,7 +35,8 @@ export function parseBuyerOrder(payload: unknown): BuyerOrder | null {
   return {
     id, buyerId: text(row.buyer_id ?? row.buyerId ?? row.BuyerID ?? record(row.buyer).id),
     status: text(row.status ?? row.Status).toLowerCase() || "pending", paymentStatus: orderPaymentStatus(row), escrowStatus: escrowStatusFromOrder(row),
-    vendor: text(row.seller_name ?? row.vendor_name ?? record(row.seller).name) || "Seller",
+    sellerId: text(row.seller_id ?? row.sellerId ?? row.SellerID ?? record(row.seller ?? row.Seller).id ?? record(row.seller ?? row.Seller).ID).trim(),
+    vendor: [row.seller_name, row.sellerName, row.SellerName, row.vendor_name, record(row.seller ?? row.Seller).name, record(row.seller ?? row.Seller).Name].map(text).map(value => value.trim()).find(Boolean) || "Seller",
     total: orderPricing(row).buyerTotal, pricing: orderPricing(row), delivery: orderDelivery(row),
     address: text(row.dropoff_address ?? row.dropoffAddress ?? row.address ?? row.DeliveryAddress),
     createdAt: text(row.created_at ?? row.createdAt ?? row.CreatedAt),

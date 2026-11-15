@@ -7,7 +7,7 @@ export type SellerProduct = {
 };
 export type SellerOrder = {
   id: string; amount: number | null; status: string; paymentStatus: string;
-  customer: string; createdAt: string;
+  customer: string; createdAt: string; orderNumber: string; buyerId: string;
   pricing: OrderPricing;
 };
 type Row = Record<string, unknown>;
@@ -36,7 +36,7 @@ export function collection(payload: unknown): unknown[] {
   return [];
 }
 function ownedBy(row: Row, sellerId: string): boolean {
-  const owner = text(row.seller_id ?? row.sellerId ?? row.vendor_id ?? row.vendorId ?? row.owner_id ?? row.ownerId ?? asRow(row.seller).id);
+  const owner = text(row.seller_id ?? row.sellerId ?? row.SellerID ?? row.vendor_id ?? row.vendorId ?? row.owner_id ?? row.ownerId ?? asRow(row.seller).id);
   return !owner || owner === sellerId;
 }
 // Load every inventory page so counts and stock alerts include the whole store.
@@ -91,14 +91,23 @@ export function parseSellerProducts(payload: unknown, sellerId: string, categori
 }
 export function parseSellerOrders(payload: unknown, sellerId: string): SellerOrder[] {
   return collection(payload).map(asRow).filter(row => ownedBy(row, sellerId)).map(row => ({
-    id: text(row.id ?? row.order_id ?? row.uuid),
-    amount: number(row.total_amount ?? row.totalAmount ?? row.amount ?? row.total),
+    id: text(row.id ?? row.order_id ?? row.uuid ?? row.ID),
+    orderNumber: text(row.order_number ?? row.orderNumber ?? row.OrderNumber),
+    buyerId: text(row.buyer_id ?? row.buyerId ?? row.BuyerID ?? asRow(row.customer ?? row.buyer ?? row.Buyer).id),
+    amount: orderPricing(row).buyerTotal ?? number(row.total_amount ?? row.totalAmount ?? row.amount ?? row.total ?? row.TotalAmount),
     pricing: orderPricing(row),
-    status: text(row.status).toLowerCase() || "unknown",
-    paymentStatus: text(row.payment_status ?? row.paymentStatus).toLowerCase() || "unknown",
-    customer: text(row.customer_name ?? row.customerName ?? row.buyer_name ?? asRow(row.customer ?? row.buyer).name) || "Customer",
-    createdAt: text(row.created_at ?? row.createdAt ?? row.ordered_at),
+    status: text(row.status ?? row.Status).toLowerCase() || "unknown",
+    paymentStatus: text(row.payment_status ?? row.paymentStatus ?? row.PaymentStatus).toLowerCase() || "unknown",
+    customer: customerName(row) || "Customer",
+    createdAt: text(row.created_at ?? row.createdAt ?? row.ordered_at ?? row.CreatedAt),
   })).filter(row => row.id);
+}
+export function customerName(row: Row) {
+  const buyer = asRow(row.customer ?? row.buyer ?? row.Buyer ?? row.Customer);
+  const profile = asRow(buyer.profile);
+  return [row.customer_name, row.customerName, row.CustomerName, row.buyer_name, row.buyerName, row.BuyerName, buyer.name, buyer.Name, buyer.full_name, profile.name,
+    [text(buyer.first_name ?? buyer.firstName ?? buyer.FirstName ?? profile.first_name), text(buyer.last_name ?? buyer.lastName ?? buyer.LastName ?? profile.last_name)].filter(Boolean).join(" ")]
+    .map(text).find(value => value && value.toLowerCase() !== "customer") || "";
 }
 export function isPaid(order: SellerOrder) { return order.paymentStatus === "paid"; }
 export function needsFulfillment(order: SellerOrder) {

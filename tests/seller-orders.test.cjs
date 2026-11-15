@@ -134,7 +134,7 @@ test('Orders page renders a nested backend order with working detail link and no
   const h = pageHarness(() => Response.json({ data: { orders: [fixture] } }));
   h.render(); h.effects[0](); await settle();
   const tree = h.render();
-  assert.deepEqual(nodes(tree, node => node.props?.className === 'statValue').map(node => node.props.children), [1, 1, 0]);
+  assert.deepEqual(nodes(tree, node => node.props?.className === 'statValue').map(node => node.props.children), [1, 0, 1, 0]);
   const link = nodes(tree, node => node.type === 'link')[0];
   assert.equal(link.props.to, '/vendor/orders/order-uuid');
   assert.equal(link.props.children, 'order-uuid');
@@ -162,7 +162,7 @@ test('Orders page reports zero only after a genuine successful empty response', 
   const h = pageHarness(() => Response.json({ data: { orders: [] } }));
   h.render(); h.effects[0](); await settle();
   const tree = h.render();
-  assert.deepEqual(nodes(tree, node => node.props?.className === 'statValue').map(node => node.props.children), [0, 0, 0]);
+  assert.deepEqual(nodes(tree, node => node.props?.className === 'statValue').map(node => node.props.children), [0, 0, 0, 0]);
   assert.equal(nodes(tree, node => node.props?.children === 'No orders yet.').length, 1);
 });
 
@@ -173,6 +173,52 @@ test('Orders page rejects HTTP 200 logical failures instead of displaying zero',
   assert.equal(nodes(tree, node => node.props?.role === 'alert')[0].props.children, 'Service unavailable');
   assert.equal(nodes(tree, node => node.props?.children === 'No orders yet.').length, 0);
   assert.ok(nodes(tree, node => node.props?.className === 'statValue').every(node => node.props.children === '—'));
+});
+
+test('seller order references, buyer identity aliases and delivery-inclusive totals survive normalization', async () => {
+  const { loadSellerOrders } = load('src/components/vendor/sellerOrders.ts');
+  const [order] = await loadSellerOrders(async () => ({ data: { orders: [{ ...fixture, OrderNumber: 'ORD-readable', BuyerID: 'buyer-one', Buyer: { FirstName: 'Amara', LastName: 'Okafor' }, Commission: '15000', DeliveryFee: '500', RequiresDelivery: true }] } }), 'seller');
+  assert.equal(order.orderNumber, 'ORD-readable');
+  assert.equal(order.buyerId, 'buyer-one');
+  assert.equal(order.customer, 'Amara Okafor');
+  assert.equal(order.pricing.buyerTotal, 265500);
+  assert.equal(order.amount, 265500);
+  assert.equal(order.pricing.sellerProceeds, 250000);
+  assert.deepEqual(order.pricing.issues, []);
+});
+
+test('customer detail enrichment matches order and buyer and cannot replace names with unrelated records', async () => {
+  const { loadSellerOrders, loadOrderCustomerNames } = load('src/components/vendor/sellerOrders.ts');
+  const orders = await loadSellerOrders(async () => ({ data: { orders: [{ ...fixture, BuyerID: 'buyer-one' }] } }), 'seller');
+  const named = await loadOrderCustomerNames(async path => {
+    assert.equal(path, '/api/seller/orders/order-uuid');
+    return { data: { order: { ...fixture, BuyerID: 'buyer-one', BuyerName: 'Actual Buyer' } } };
+  }, orders);
+  assert.equal(named[0].customer, 'Actual Buyer');
+  assert.equal(orders[0].customer, 'Customer');
+  for (const payload of [
+    { data: { ...fixture, ID: 'other-order', BuyerName: 'Wrong Order' } },
+    { data: { ...fixture, BuyerID: 'other-buyer', BuyerName: 'Wrong Buyer' } },
+    { success: false, error: 'Unavailable' },
+  ]) assert.equal((await loadOrderCustomerNames(async () => payload, orders))[0].customer, 'Customer');
+  let calls = 0;
+  await loadOrderCustomerNames(async () => { calls++; }, named);
+  assert.equal(calls, 0);
+});
+
+test('seller summary separates unpaid orders from fulfillment and displays references and pricing warnings', async () => {
+  const h = pageHarness(url => url.includes('/orders?') ? Response.json({ data: { orders: [
+    { ...fixture, OrderNumber: 'ORD-paid', BuyerName: 'Actual Buyer', Commission: '15000', DeliveryFee: '0', seller_proceeds: '249500' },
+    { ...fixture, ID: 'unpaid', PaymentStatus: 'pending', BuyerName: 'Second Buyer' },
+    { ...fixture, ID: 'cancelled', PaymentStatus: 'pending', Status: 'cancelled', BuyerName: 'Third Buyer' },
+  ] } }) : Response.json({ data: fixture }));
+  h.render(); h.effects[0](); await settle(); await settle();
+  const tree = h.render();
+  assert.deepEqual(nodes(tree, node => node.props?.className === 'statValue').map(node => node.props.children), [3, 1, 1, 0]);
+  assert.ok(nodes(tree, node => node.props?.children === 'Actual Buyer').length);
+  assert.ok(nodes(tree, node => node.props?.children === 'Pricing needs review').length);
+  const link = nodes(tree, node => node.type === 'link' && node.props.children === 'ORD-paid')[0];
+  assert.equal(link.props.to, '/vendor/orders/order-uuid');
 });
 
 test('notification destination renders nested order details including payment status and delivery address', async () => {

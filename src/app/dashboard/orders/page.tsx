@@ -10,6 +10,7 @@ import {
 } from "@/components/commerce/store";
 import { Button, Card, SectionTitle } from "@/components/dashboard/ui";
 import ReviewDraftButton from "@/components/commerce/ReviewDraftButton";
+import BuyerOrderSeller from "@/components/commerce/BuyerOrderSeller";
 
 export default function OrdersPage() {
   const { orders, loading, error, reload } = useBuyerOrders();
@@ -44,7 +45,7 @@ export default function OrdersPage() {
                       Order {order.id}
                     </div>
                     <div className="text-xs text-slate-500">
-                      Vendor: {order.vendor}
+                      <BuyerOrderSeller order={order} />
                     </div>
                   </div>
                   <div className="flex items-center gap-3">

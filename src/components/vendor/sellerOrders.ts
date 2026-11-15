@@ -1,15 +1,40 @@
-import { asRow, parseSellerOrders, type SellerOrder } from "./sellerData";
+import { asRow, customerName, parseSellerOrders, type SellerOrder } from "./sellerData";
 
 // Both backend order serializers are also supported by the mobile application.
 export function normalizeOrder(value: unknown): Record<string, unknown> {
   const row = { ...asRow(value) };
   for (const [key, alias] of Object.entries({
     id: "ID", order_number: "OrderNumber", buyer_id: "BuyerID", seller_id: "SellerID",
-    total_amount: "TotalAmount", status: "Status", payment_status: "PaymentStatus",
+    status: "Status", payment_status: "PaymentStatus",
     dropoff_address: "DeliveryAddress", delivery_id: "DeliveryID", requires_delivery: "RequiresDelivery",
     escrow_id: "EscrowID", created_at: "CreatedAt", updated_at: "UpdatedAt", items: "Items",
   })) if (row[key] == null && row[alias] != null) row[key] = row[alias];
   return row;
+}
+
+// The authenticated order detail is the source for customer names omitted by lists.
+// Identity errors or unavailable details never replace a name with another buyer.
+export async function loadOrderCustomerNames(request: (path: string) => Promise<unknown>, orders: SellerOrder[]): Promise<SellerOrder[]> {
+  const result = orders.map(order => ({ ...order }));
+  const missing = result.filter(order => !order.customer || order.customer === "Customer");
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(4, missing.length) }, async () => {
+    while (cursor < missing.length) {
+      const order = missing[cursor++];
+      try {
+        const detail = sellerOrderDetail(await request(`/api/seller/orders/${encodeURIComponent(order.id)}`));
+        if ((detail.id ?? detail.order_id) !== order.id) continue;
+        const buyerId = String(detail.buyer_id ?? detail.buyerId ?? "");
+        if (order.buyerId && buyerId && buyerId !== order.buyerId) continue;
+        const name = customerName(detail);
+        if (name) order.customer = name;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+        // Preserve readable orders; missing names remain explicit.
+      }
+    }
+  }));
+  return result;
 }
 
 function checked(value: unknown) {

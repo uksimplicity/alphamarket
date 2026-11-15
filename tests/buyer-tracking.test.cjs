@@ -9,6 +9,7 @@ const fixture = { ID: 'order-one', BuyerID: 'buyer', PaymentStatus: 'paid', Stat
 
 function harness(file, response) {
   const slots = [], dependencies = [], cleanups = [], pending = [], calls = [], timers = new Map(), listeners = new Map();
+  let sellerDirectory = [];
   let cursor = 0, timerId = 0, user = { id: 'buyer' }, generation = 0;
   const stamp = () => `${user.id}:${generation}`;
   const document = { visibilityState: 'visible', addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) };
@@ -25,6 +26,7 @@ function harness(file, response) {
       };
       if (name.endsWith('authStorage')) return { getAuth: () => ({ user, access_token: 'buyer-token' }), authGeneration: () => generation };
       if (name.endsWith('useAuthUser')) return { useAuthUser: () => user };
+      if (name.endsWith('useSellerName')) return { useSellerName: seller => load('src/components/dashboard/sellerNames.ts').resolveSellerName(seller, sellerDirectory) };
       if (name.endsWith('localAccountData')) return { accountStamp: stamp, checkAccount: previous => { if (previous !== stamp()) throw new Error('Account changed'); } };
       if (name.endsWith('/ui')) return { Card: 'card', SectionTitle: 'title', Button: 'button' };
       if (name.startsWith('@/')) return load('src/' + name.slice(2) + '.ts');
@@ -37,6 +39,7 @@ function harness(file, response) {
     render(fn, ...args) { cursor = 0; return fn(...args); },
     effects() { pending.splice(0).forEach(fn => fn()); },
     switchUser() { user = { id: 'other-buyer' }; generation++; },
+    directory(value) { sellerDirectory = value; },
     cleanup() { cleanups.forEach(fn => fn?.()); },
   };
 }
@@ -58,6 +61,21 @@ test('buyer parsing preserves explicit delivery fields in both backend serialize
   assert.equal(result.delivery.status, 'on_the_way');
   assert.equal(result.delivery.riderId, 'rider');
   assert.equal(parse({ ...fixture, DeliveryStatus: 'assigned', RiderID: 'rider' }).delivery.status, 'assigned');
+});
+
+test('buyer orders show the matching seller name and preserve supplied names without substituting another seller', () => {
+  const hook = harness(hookFile, () => {});
+  const parse = hook.exports.parseBuyerOrder;
+  const h = harness('src/components/commerce/BuyerOrderSeller.tsx', () => {});
+  h.directory([{ id: 'other', name: 'Wrong Store', role: 'seller' }, { id: 'seller-id', name: 'FNUK Tech', role: 'seller' }]);
+  const render = order => h.render(h.exports.default, { order }).props.children.join('');
+  assert.equal(parse({ ...fixture, SellerID: 'seller-id' }).sellerId, 'seller-id');
+  assert.equal(render(parse({ ...fixture, SellerID: 'seller-id' })), 'Seller: FNUK Tech');
+  assert.equal(render(parse({ ...fixture, seller_id: 'seller-id', seller_name: 'Actual Store Name' })), 'Seller: Actual Store Name');
+  assert.equal(render(parse({ ...fixture, Seller: { ID: 'seller-id', Name: 'Nested Store' } })), 'Seller: Nested Store');
+  assert.equal(render(parse({ ...fixture, SellerID: 'unlisted' })), 'Seller: Name not reported');
+  h.directory([{ id: 'seller-id', name: 'Buyer Account', role: 'buyer' }]);
+  assert.equal(render(parse({ ...fixture, SellerID: 'seller-id' })), 'Seller: Name not reported');
 });
 
 test('visible polling updates buyer delivery state, blocks overlap and removes listeners on cleanup', async () => {
@@ -107,9 +125,9 @@ test('buyer tracking shows missing delivery and no assignment explicitly without
   const h = harness(componentFile, () => { throw new Error('Unexpected rider lookup'); });
   const props = { order: hook.exports.parseBuyerOrder(fixture), checkedAt: '2026-11-15T16:27:00Z', refreshing: false, reload() {} };
   const tree = h.render(h.exports.default, props); h.effects();
-  assert.ok(contains(tree, 'A delivery has not been linked to this order yet.'));
-  assert.ok(contains(tree, 'Rider assignment has not been reported.'));
-  assert.ok(contains(tree, 'Not reported')); assert.equal(h.calls.length, 0);
+  assert.ok(contains(tree, 'Your delivery is being arranged.'));
+  assert.ok(contains(tree, 'Awaiting rider assignment'));
+  assert.ok(contains(tree, 'Awaiting delivery update')); assert.equal(h.calls.length, 0);
   const noDelivery = h.render(h.exports.default, { ...props, order: hook.exports.parseBuyerOrder({ ...fixture, RequiresDelivery: false }) }); h.effects();
   assert.ok(contains(noDelivery, 'No rider delivery is required for this order.')); assert.equal(h.calls.length, 0);
 });
@@ -131,5 +149,5 @@ test('buyer tracking loads only the assigned rider, clears old contacts and pres
   assert.equal(contains(tree, '08000000000'), false);
   props.order = hook.exports.parseBuyerOrder({ ...fixture, DeliveryID: 'delivery' });
   tree = h.render(h.exports.default, props); h.effects();
-  assert.ok(contains(tree, 'Rider assignment has not been reported.')); assert.equal(h.calls.length, 2); h.cleanup();
+  assert.ok(contains(tree, 'Awaiting rider assignment')); assert.equal(h.calls.length, 2); h.cleanup();
 });

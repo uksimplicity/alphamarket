@@ -12,6 +12,7 @@ import OrderMoneyBreakdown from "@/components/commerce/OrderMoneyBreakdown";
 import { paymentError } from "@/components/commerce/payments";
 import { useBuyerOrders } from "@/components/commerce/buyerOrders";
 import BuyerDeliveryTracking from "@/components/commerce/BuyerDeliveryTracking";
+import BuyerOrderSeller from "@/components/commerce/BuyerOrderSeller";
 import {
   formatCurrency,
 } from "@/components/commerce/store";
@@ -72,7 +73,8 @@ export default function OrderDetailPage() {
     <div className="grid gap-6">
       {feedback ? <p role="status" className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-slate-700">{feedback}</p> : null}
       <Card>
-        <SectionTitle title={`Order ${order.id}`} subtitle={`Vendor: ${order.vendor}`} />
+        <SectionTitle title={`Order ${order.id}`} />
+        <p className="mt-1 text-sm text-slate-500"><BuyerOrderSeller order={order} /></p>
         {["delivered", "confirmed"].includes(order.status) ? <div className="mt-4"><ReviewDraftButton orderId={order.id} /></div> : null}
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
           <Badge>{order.status}</Badge>
