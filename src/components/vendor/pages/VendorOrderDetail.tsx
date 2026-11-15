@@ -8,6 +8,7 @@ import { orderPaymentStatus } from "@/components/commerce/payments";
 import EscrowStatus from "@/components/commerce/EscrowStatus";
 import OrderMoneyBreakdown from "@/components/commerce/OrderMoneyBreakdown";
 import { orderPricing } from "@/components/commerce/orderPricing";
+import { sellerOrderDetail } from "@/components/vendor/sellerOrders";
 import styles from "@/components/vendor/vendor.module.css";
 
 function formatNaira(value: unknown) {
@@ -56,17 +57,7 @@ export default function VendorOrderDetail() {
           throw new Error(message);
         }
 
-        const row =
-          payload && typeof payload === "object"
-            ? ((payload as Record<string, unknown>).data ??
-                (payload as Record<string, unknown>).order ??
-                (payload as Record<string, unknown>).item ??
-                payload)
-            : payload;
-
-        setOrder(
-          row && typeof row === "object" ? (row as Record<string, unknown>) : null
-        );
+        setOrder(sellerOrderDetail(payload));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load order details.");
         setOrder(null);

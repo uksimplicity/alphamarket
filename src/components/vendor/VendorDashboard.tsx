@@ -6,7 +6,8 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { getAuth, getDisplayName } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
 import Icon, { type AdminIconName } from "@/components/admin/AdminIcon";
-import { asRow, humanize, isPaid, loadSellerProducts, money, needsFulfillment, orderTone, parseSellerOrders, salesSeries, scopedOrders, type SellerOrder, type SellerProduct } from "./sellerData";
+import { asRow, humanize, isPaid, loadSellerProducts, money, needsFulfillment, orderTone, salesSeries, scopedOrders, type SellerOrder, type SellerProduct } from "./sellerData";
+import { loadSellerOrders } from "./sellerOrders";
 import styles from "./sellerDashboard.module.css";
 import { pricingTotal, pricingMoney } from "@/components/commerce/orderPricing";
 
@@ -54,7 +55,7 @@ export default function VendorDashboard() {
         return payload;
       }
       const results = await Promise.allSettled([
-        loadSellerProducts(request, owner), request("/api/seller/orders?limit=200&offset=0"),
+        loadSellerProducts(request, owner), loadSellerOrders(request, owner),
       ]);
       if (controller.signal.aborted) return;
       setSnapshot(previous => {
@@ -62,7 +63,7 @@ export default function VendorDashboard() {
         const errors: string[] = [];
         if (results[0].status === "fulfilled") next.products = results[0].value;
         else errors.push("Products could not be refreshed. " + (results[0].reason instanceof Error ? results[0].reason.message : "Please try again."));
-        if (results[1].status === "fulfilled") next.orders = parseSellerOrders(results[1].value, owner);
+        if (results[1].status === "fulfilled") next.orders = results[1].value;
         else errors.push("Orders could not be refreshed. " + (results[1].reason instanceof Error ? results[1].reason.message : "Please try again."));
         next.errors = errors;
         if (!errors.length) next.updatedAt = new Date();

@@ -3,122 +3,61 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { getAuth } from "@/components/auth/authStorage";
+import { useAuthUser } from "@/components/auth/useAuthUser";
+import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import styles from "@/components/vendor/vendor.module.css";
-import { orderPricing, pricingMoney, type OrderPricing } from "@/components/commerce/orderPricing";
-
-type SellerOrder = {
-  id: string;
-  customer: string;
-  status: string;
-  amount: number | null;
-  pricing: OrderPricing;
-  createdAt: string;
-};
-
-function normalizeList(payload: unknown): unknown[] {
-  if (Array.isArray(payload)) return payload;
-  if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>;
-    const candidates = [record.data, record.orders, record.items, record.rows];
-    for (const candidate of candidates) {
-      if (Array.isArray(candidate)) return candidate;
-    }
-  }
-  return [];
-}
-
-function pickAmount(record: Record<string, unknown>) {
-  const candidates = [record.amount, record.total, record.total_amount, record.price];
-  for (const value of candidates) {
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string" && value.trim()) {
-      const parsed = Number(value);
-      if (!Number.isNaN(parsed)) return parsed;
-    }
-  }
-  return null;
-}
-
-function formatNaira(value: number | null) {
-  if (value === null) return "-";
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
+import { pricingMoney } from "@/components/commerce/orderPricing";
+import { loadSellerOrders } from "@/components/vendor/sellerOrders";
+import { type SellerOrder } from "@/components/vendor/sellerData";
 
 export default function VendorOrders() {
-  const [orders, setOrders] = useState<SellerOrder[]>([]);
+  const user = useAuthUser();
+  const [snapshot, setSnapshot] = useState<{ owner: string; orders: SellerOrder[] | null }>({ owner: "", orders: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
+  const orders = snapshot.owner === user?.id ? snapshot.orders : null;
 
   useEffect(() => {
+    const controller = new AbortController();
     async function loadOrders() {
       setLoading(true);
       setError("");
+      setSnapshot({ owner: "", orders: null });
       try {
+        const stamp = accountStamp();
         const auth = getAuth();
-        const token = auth?.access_token;
-        const response = await fetch("/api/seller/orders", {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        const text = await response.text();
-        let payload: unknown = null;
-        try {
-          payload = text ? JSON.parse(text) : null;
-        } catch {
-          payload = text;
-        }
-
-        if (!response.ok) {
-          const message =
-            payload && typeof payload === "object" && "error" in payload
-              ? String((payload as { error: unknown }).error)
-              : `Failed to load orders (${response.status}).`;
-          throw new Error(message);
-        }
-
-        const rows = normalizeList(payload);
-        const mapped = rows.map((row, index) => {
-          const record =
-            row && typeof row === "object" ? (row as Record<string, unknown>) : {};
-          return {
-            id: String(record.id ?? record.order_id ?? record.uuid ?? `order-${index}`),
-            customer: String(
-              record.customer_name ??
-                record.customerName ??
-                (record.customer && typeof record.customer === "object"
-                  ? (record.customer as Record<string, unknown>).name
-                  : null) ??
-                "Customer"
-            ),
-            status: String(record.status ?? "pending"),
-            amount: pickAmount(record),
-            pricing: orderPricing(record),
-            createdAt: String(record.created_at ?? record.createdAt ?? "-"),
-          } satisfies SellerOrder;
-        });
-
-        setOrders(mapped);
+        if (!auth?.access_token || !auth.user?.id) throw new Error("Sign in with your seller account to view orders.");
+        const owner = auth.user.id;
+        const headers = { Authorization: `Bearer ${auth.access_token.replace(/^Bearer\s+/i, "").trim()}`, Accept: "application/json" };
+        const rows = await loadSellerOrders(async path => {
+          const response = await fetch(path, { headers, cache: "no-store", signal: controller.signal });
+          const payload: unknown = await response.json();
+          if (!response.ok) {
+            const row = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+            throw new Error(typeof row.error === "string" ? row.error : typeof row.message === "string" ? row.message : `Failed to load orders (${response.status}).`);
+          }
+          return payload;
+        }, owner);
+        if (controller.signal.aborted) return;
+        checkAccount(stamp);
+        setSnapshot({ owner, orders: rows });
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : "Failed to load orders.");
-        setOrders([]);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
-
     void loadOrders();
-  }, []);
+    return () => controller.abort();
+  }, [user?.id, revision]);
 
-  const summary = useMemo(() => {
-    return {
-      total: orders.length,
-      pending: orders.filter((item) => item.status.toLowerCase().includes("pend")).length,
-      completed: orders.filter((item) => item.status.toLowerCase().includes("complete")).length,
-    };
-  }, [orders]);
+  const summary = useMemo(() => ({
+    total: orders?.length ?? "—",
+    pending: orders ? orders.filter(item => item.status === "pending").length : "—",
+    completed: orders ? orders.filter(item => ["completed", "delivered", "confirmed"].includes(item.status)).length : "—",
+  }), [orders]);
 
   return (
     <>
@@ -138,13 +77,16 @@ export default function VendorOrders() {
       </section>
 
       <section className={styles.card}>
-        <div className={styles.cardTitle}>Orders</div>
+        <div className={styles.cardHeader}>
+          <div className={styles.cardTitle}>Orders</div>
+          <button type="button" className={styles.actionBtn} disabled={loading} onClick={() => setRevision(value => value + 1)}>Refresh</button>
+        </div>
         {loading ? <div className={styles.cardSubtitle}>Loading orders...</div> : null}
-        {error ? <div className={styles.cardSubtitle}>{error}</div> : null}
-        {!loading && !error && orders.length === 0 ? (
+        {error ? <div role="alert" className={styles.cardSubtitle}>{error}</div> : null}
+        {!loading && !error && orders?.length === 0 ? (
           <div className={styles.cardSubtitle}>No orders yet.</div>
         ) : null}
-        {orders.length > 0 ? (
+        {orders && orders.length > 0 ? (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead>
@@ -167,7 +109,7 @@ export default function VendorOrders() {
                       </Link>
                     </td>
                     <td>{order.customer}</td>
-                    <td>{formatNaira(order.amount)}</td>
+                    <td>{pricingMoney(order.pricing.buyerTotal ?? order.amount)}</td>
                     <td>{pricingMoney(order.pricing.adminCommission)}</td>
                     <td>{pricingMoney(order.pricing.sellerProceeds)}</td>
                     <td>
