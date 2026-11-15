@@ -14,10 +14,10 @@ export function cachedSession(saved: AuthPayload | null): AuthUser | null {
 export function rememberSession(saved: AuthPayload, profile: AuthUser) {
   verified = { token: saved.access_token, identity: identity(saved), epoch: authGeneration(), profile, checked: verified?.token === saved.access_token && verified.identity === identity(saved) && verified.profile === profile ? verified.checked : Date.now() };
 }
-export function verifySession(saved: AuthPayload): Promise<AuthUser> {
+export function verifySession(saved: AuthPayload, force = false): Promise<AuthUser> {
   if (tokenExpired(saved.access_token)) return Promise.reject(new Error("Your session has expired. Please sign in again."));
   const cached = cachedSession(saved);
-  if (cached) return Promise.resolve(cached);
+  if (cached && !force) return Promise.resolve(cached);
   if (pending && matches(pending, saved)) return pending.promise;
   const epoch = authGeneration();
   const request = { token: saved.access_token, identity: identity(saved), epoch, promise: Promise.resolve(saved.user) };

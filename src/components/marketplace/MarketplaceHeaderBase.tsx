@@ -13,6 +13,8 @@ import {
 } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
 import { useAdminCategoryNames } from "@/components/marketplace/useAdminCategoryNames";
+import NotificationBadge from "@/components/notifications/NotificationBadge";
+import { isSellerRole } from "@/components/auth/authStorage";
 
 type LinkComponentProps = {
   href: string;
@@ -62,7 +64,7 @@ export default function MarketplaceHeaderBase({
 
         <div className={styles.actions}>
           <div className={styles.iconLabel}>
-            <LinkComponent className={styles.iconBtn} aria-label="Alerts" href="/dashboard/notifications">
+            <LinkComponent className={styles.iconBtn} aria-label="Alerts" href={isSellerRole(user?.role) ? "/vendor/notifications" : "/dashboard/notifications"}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"
@@ -79,6 +81,7 @@ export default function MarketplaceHeaderBase({
                   strokeLinecap="round"
                 />
               </svg>
+              <NotificationBadge />
             </LinkComponent>
             Alerts
           </div>

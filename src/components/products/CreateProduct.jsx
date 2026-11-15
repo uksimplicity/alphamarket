@@ -656,7 +656,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null, adsBa
     const auth = getAuth();
     const token = auth?.access_token;
     const authorization = buildAuthorizationHeader(token);
-    const userStatus = auth?.user?.status;
+    const userStatus = auth?.user?.status?.trim().toLowerCase();
 
     if (!authorization) {
       setError("You must be logged in to create a product.");
@@ -665,7 +665,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null, adsBa
 
     if (mode === "seller" && userStatus && userStatus !== "active") {
       setError(
-        "You can not submit product until your vendor account is activated. Please contact admin."
+        "Your seller account must be verified and activated before you can submit products. Contact seller support, then use Check activation in the banner above."
       );
       return;
     }

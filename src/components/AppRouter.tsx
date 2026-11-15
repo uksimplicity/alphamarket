@@ -35,7 +35,7 @@ const SellerStoreRoute = lazy(() => import("./store/SellerStoreRoute"));
 import SessionBoundary from "./auth/SessionBoundary";
 const ChatWorkspace = lazy(() => import("./chat/ChatWorkspace"));
 const SavedAddresses = lazy(() => import("./commerce/SavedAddresses"));
-const NotificationPreferencesPanel = lazy(() => import("./commerce/NotificationPreferencesPanel"));
+const NotificationsPanel = lazy(() => import("./notifications/NotificationsPanel"));
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 function page(children: ReactNode) { return <Suspense fallback={<PagePending />}>{children}</Suspense>; }
@@ -78,7 +78,7 @@ export default function AppRouter() {
           <Route path="wallet" element={page(<VendorWallet />)} />
           <Route path="messages" element={page(<ChatWorkspace />)} />
           <Route path="addresses" element={page(<SavedAddresses />)} />
-          <Route path="notifications" element={page(<NotificationPreferencesPanel />)} />
+          <Route path="notifications" element={page(<NotificationsPanel />)} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

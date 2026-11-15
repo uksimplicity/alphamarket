@@ -24,5 +24,6 @@ export function verifiedProfile(payload: unknown, saved: AuthPayload): AuthUser 
     role: (string("role", "user_role", "userRole", "account_role") || "").toLowerCase(),
     first_name: string("first_name", "firstName") || saved.user.first_name,
     last_name: string("last_name", "lastName") || saved.user.last_name,
+    status: (string("status", "account_status", "accountStatus") || saved.user.status)?.trim().toLowerCase(),
   };
 }

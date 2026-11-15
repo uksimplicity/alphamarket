@@ -8,6 +8,8 @@ import { useAuthUser } from "@/components/auth/useAuthUser";
 import Icon, { type AdminIconName } from "@/components/admin/AdminIcon";
 import { getCurrentSellerStoreProfile } from "@/components/store/storeProfileClient";
 import styles from "./sellerShell.module.css";
+import SellerOnboardingBanner from "./SellerOnboardingBanner";
+import NotificationBadge from "@/components/notifications/NotificationBadge";
 
 type Item = { label: string; href: string; icon: AdminIconName };
 const catalog: Item[] = [
@@ -45,6 +47,7 @@ export default function VendorShell() {
   }
   const [signingOut, setSigningOut] = useState(false);
   const [store, setStore] = useState<ReturnType<typeof getCurrentSellerStoreProfile>>(null);
+  const [storeOwner, setStoreOwner] = useState<string | undefined>();
   const searchRef = useRef<HTMLInputElement>(null);
   const drawer = useRef<HTMLDialogElement>(null);
   const logout = useRef<HTMLDialogElement>(null);
@@ -55,7 +58,7 @@ export default function VendorShell() {
     .find(item => active(item.href))?.label ?? (location.pathname.includes("orders/") ? "Order details" : productRoute ? "Products" : "Seller workspace");
 
   useEffect(() => {
-    const updateStore = () => setStore(getCurrentSellerStoreProfile());
+    const updateStore = () => { setStore(getCurrentSellerStoreProfile()); setStoreOwner(user?.id); };
     updateStore();
     window.addEventListener("alpha-vendor-store-updated", updateStore);
     window.addEventListener("storage", updateStore);
@@ -135,11 +138,12 @@ export default function VendorShell() {
         <div className={styles.breadcrumb}><span>Workspace</span><Icon name="chevron" size={12} /><strong>{title}</strong></div>
         <form className={styles.search} onSubmit={findProducts} role="search"><Icon name="search" size={17} /><input ref={searchRef} value={search} onChange={event => setSearch(event.target.value)} aria-label="Search your products" placeholder="Search your products..." /><kbd>Ctrl K</kbd><button type="submit" aria-label="Search products"><Icon name="chevron" size={15} /></button></form>
         <Link to="/vendor/products/create" className={styles.headerAdd}><Icon name="plus" size={17} /><span>Add product</span></Link>
+        <Link to="/vendor/notifications" className={styles.iconButton} style={{ position: "relative" }} aria-label="Notifications"><Icon name="bell" size={19} /><NotificationBadge /></Link>
         <details className={styles.account} ref={account}><summary aria-label="Account menu"><span className={styles.avatar}>{initials}</span><span className={styles.accountName}><strong>{name}</strong><small>Seller account</small></span><Icon name="chevron" size={13} /></summary>
           <div className={styles.accountDropdown}><div><strong>{name}</strong><span>{user?.email}</span></div><Link to="/vendor/profile"><Icon name="accounts" size={16} />Your profile</Link><Link to="/vendor/store"><Icon name="settings" size={16} />Store settings</Link>{store?.slug ? <a href={`/store/${encodeURIComponent(store.slug)}`}><Icon name="external" size={16} />View public store</a> : null}<button onClick={() => { if (account.current) account.current.open = false; logout.current?.showModal(); }}><Icon name="logout" size={16} />Sign out</button></div>
         </details>
       </header>
-      <main id="seller-content" tabIndex={-1} className={styles.content}><Outlet /></main>
+      <main id="seller-content" tabIndex={-1} className={styles.content}>{user?.id && storeOwner === user.id ? <SellerOnboardingBanner key={user.id} status={user.status} hasStore={Boolean(store)} /> : null}<Outlet /></main>
       <footer className={styles.footer}><span>Alpha Marketplace · Seller workspace</span><span>Built for your next chapter.</span></footer>
     </div>
     <nav className={styles.mobileNav} aria-label="Seller quick navigation">{[mainLinks[0], mainLinks[1], catalog[0], { label: "Account", href: "/vendor/profile", icon: "accounts" as const }].map(item => <Link key={item.href} to={item.href} aria-current={active(item.href) ? "page" : undefined} className={active(item.href) ? styles.mobileActive : ""}><Icon name={item.icon} size={20} /><span>{item.label === "All products" ? "Products" : item.label}</span></Link>)}</nav>

@@ -96,6 +96,16 @@ test('insufficient balance, unknown quotes and changed fees block creation befor
   }
 });
 
+test('inactive sellers receive setup guidance before any upload or product submission', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), () => { throw new Error('Must not create'); }, { status: 'pending' });
+  const cleanup = await prepareProduct(harness);
+  await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(harness.uploads.length, 0);
+  assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
+  assert.ok(nodes(harness.render(), node => typeof node.props?.children === 'string' && node.props.children.includes('Contact seller support')).length);
+  cleanup();
+});
+
 test('an uncertain product creation cannot be submitted again from the same form', async () => {
   const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Response uncertain' }, { status: 502 }));
   const cleanup = await prepareProduct(harness);

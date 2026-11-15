@@ -1,2 +1,2 @@
-import NotificationPreferencesPanel from "@/components/commerce/NotificationPreferencesPanel";
-export default function NotificationsPage() { return <NotificationPreferencesPanel />; }
+import NotificationsPanel from "@/components/notifications/NotificationsPanel";
+export default function NotificationsPage() { return <NotificationsPanel />; }

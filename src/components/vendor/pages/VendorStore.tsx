@@ -140,7 +140,7 @@ export default function VendorStore() {
       });
       setLogoFile(null);
       setFailedLogoSrc("");
-      setSuccess(hasStore ? "Store updated successfully." : "Store created successfully.");
+      setSuccess("Store details saved in this browser. Seller account verification and activation are handled separately.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save store.");
     } finally {
@@ -162,7 +162,7 @@ export default function VendorStore() {
         <div>
           <div className={styles.cardTitle}>My Store</div>
           <div className={styles.cardSubtitle}>
-            Create and manage your storefront details as buyers will see them.
+            Optional storefront details, saved in this browser. Saving these details does not submit a verification request or activate your seller account.
           </div>
         </div>
       </div>

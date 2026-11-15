@@ -64,3 +64,28 @@ test('failed checks can be retried and unauthorized or expired sessions are reje
   const expired = 'header.' + Buffer.from(JSON.stringify({ exp: 1 })).toString('base64url') + '.signature';
   await assert.rejects(api.verifySession({ ...auth.getAuth(), access_token: expired }), /session has expired/);
 });
+
+test('activation refresh bypasses the session cache and replaces stale account status', async () => {
+  auth.setAuth({ access_token: 'seller-token', user: { id: 'seller', role: 'seller', status: 'pending' } });
+  let status = 'pending';
+  global.fetch = async () => { calls++; return Response.json({ data: { id: 'seller', role: 'seller', status } }); };
+  const saved = auth.getAuth();
+  assert.equal((await api.verifySession(saved)).status, 'pending');
+  status = ' ACTIVE ';
+  assert.equal((await api.verifySession(saved)).status, 'pending');
+  assert.equal((await api.verifySession(saved, true)).status, 'active');
+  assert.equal(calls, 2);
+  status = 'suspended';
+  assert.equal((await api.verifySession(saved, true)).status, 'suspended');
+});
+
+test('an activation refresh from a previous login cannot update the current session', async () => {
+  await api.verifySession(auth.getAuth());
+  let finish;
+  global.fetch = () => new Promise(resolve => { finish = resolve; });
+  const pending = api.verifySession(auth.getAuth(), true);
+  auth.clearAuth();
+  finish(Response.json({ data: { id: 'buyer', role: 'buyer', status: 'active' } }));
+  await assert.rejects(pending, /sign-in changed/);
+  assert.equal(auth.getAuth(), null);
+});
