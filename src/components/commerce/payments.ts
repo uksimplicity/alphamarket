@@ -80,3 +80,53 @@ export type PendingCheckout = {
   // Persisted before submitting so an uncertain response never triggers an automatic retry.
   submitted: boolean;
 };
+
+type CheckoutStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+function checkoutIndexKey(buyerId: string, kind: "order" | "reference", value: string) {
+  return `alpha.checkout-history.v1:${encodeURIComponent(buyerId)}:${kind}:${encodeURIComponent(value)}`;
+}
+function savedCheckout(raw: string | null, buyerId: string): PendingCheckout | null {
+  if (raw === null) return null;
+  const value = JSON.parse(raw) as PendingCheckout;
+  if (!value || value.buyerId !== buyerId || value.submitted !== true || typeof value.cartKey !== "string" || !Array.isArray(value.orderIds) || value.orderIds.some(id => typeof id !== "string" || !id.trim())) {
+    throw new Error("Saved checkout could not be read. Check your orders before starting another payment.");
+  }
+  return value;
+}
+export function selectCheckout(storage: CheckoutStorage, buyerId: string, cartKey: string, orderId = "", resume = false): PendingCheckout | null {
+  const active = savedCheckout(readSavedCheckout(storage, buyerId), buyerId);
+  if (active && !active.orderIds.length) throw new Error("The previous order submission could not be confirmed. Check your orders before placing another order.");
+  if (orderId) {
+    if (active?.orderIds.includes(orderId)) return active;
+    return savedCheckout(storage.getItem(checkoutIndexKey(buyerId, "order", orderId)), buyerId)
+      ?? { buyerId, orderIds: [orderId], cartKey: "", submitted: true };
+  }
+  if (resume) return active;
+  // Cart checkout must never silently select a different saved basket/order.
+  return active?.cartKey === cartKey ? active : null;
+}
+export function rememberCheckout(storage: CheckoutStorage, value: PendingCheckout) {
+  const previous = savedCheckout(readSavedCheckout(storage, value.buyerId), value.buyerId);
+  function index(checkout: PendingCheckout) {
+    const raw = JSON.stringify(checkout);
+    for (const id of checkout.orderIds) storage.setItem(checkoutIndexKey(checkout.buyerId, "order", id), raw);
+    if (checkout.reference) storage.setItem(checkoutIndexKey(checkout.buyerId, "reference", checkout.reference), raw);
+  }
+  if (previous) {
+    if (!previous.orderIds.length && previous.cartKey !== value.cartKey) throw new Error("Check the previous order submission before starting another checkout.");
+    index(previous);
+  }
+  // Preserve old payment references before replacing the active checkout.
+  index(value);
+  storage.setItem(checkoutStorageKey(value.buyerId), JSON.stringify(value));
+}
+export function checkoutForReference(storage: CheckoutStorage, buyerId: string, reference: string): PendingCheckout | null {
+  const candidates = [readSavedCheckout(storage, buyerId), readSavedCheckout(storage, buyerId, true)];
+  for (const raw of candidates) {
+    const checkout = savedCheckout(raw, buyerId);
+    if (checkout && (!reference || checkout.reference === reference)) return checkout;
+  }
+  if (!reference) return null;
+  const archived = savedCheckout(storage.getItem(checkoutIndexKey(buyerId, "reference", reference)), buyerId);
+  return archived?.reference === reference ? archived : null;
+}

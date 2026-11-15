@@ -29,6 +29,9 @@ export function useCheckoutPricing(orderIds: string[], cartKey?: string, created
           const data = payload?.data ?? payload, order = data?.order ?? data;
           const buyerId = order?.buyer_id ?? order?.buyerId ?? order?.BuyerID;
           if (!order || (order.id ?? order.order_id ?? order.orderId ?? order.ID) !== id || buyerId && buyerId !== auth.user.id) throw new Error("The returned order does not match your checkout.");
+          const paymentStatus = String(order.payment_status ?? order.paymentStatus ?? order.PaymentStatus ?? "").toLowerCase();
+          if (paymentStatus !== "pending") throw new Error(paymentStatus === "paid" ? "This order is already paid. View your orders for updates." : "This order is not ready for another payment. Check its payment status in My Orders.");
+          if (["cancelled", "delivered", "completed", "confirmed", "returned", "failed"].includes(String(order.status ?? order.Status ?? "").toLowerCase())) throw new Error("This order cannot be paid in its current status. Check My Orders.");
           const savedOrders: unknown[] = JSON.parse(createdKey);
           const saved = savedOrders.find(value => {
             if (!value || typeof value !== "object" || Array.isArray(value)) return false;

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
 import { clearCart, getCart } from "@/components/commerce/store";
-import { checkoutStorageKey, readSavedCheckout, orderPaymentStatus, paymentError, type PendingCheckout } from "@/components/commerce/payments";
+import { checkoutStorageKey, readSavedCheckout, checkoutForReference, orderPaymentStatus, paymentError, type PendingCheckout } from "@/components/commerce/payments";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import { Button, Card } from "@/components/dashboard/ui";
 
@@ -26,8 +26,8 @@ export default function PaymentStatusPage() {
         if (!auth?.access_token || !auth.user?.id) throw new Error("Sign in with the buyer account that placed the order to check payment.");
         const stamp = accountStamp();
         const reference = new URL(window.location.href).searchParams.get("reference") || new URL(window.location.href).searchParams.get("trxref");
-        const saved = readSavedCheckout(sessionStorage, auth.user.id) ?? readSavedCheckout(sessionStorage, auth.user.id, true);
-        const pending = saved ? JSON.parse(saved) as PendingCheckout : null;
+        const pending = checkoutForReference(sessionStorage, auth.user.id, reference || "");
+        if (reference && !pending) throw new Error("This payment reference does not match a saved checkout. Check your orders for its payment status.");
         if (!pending || pending.buyerId !== auth.user.id || !Array.isArray(pending.orderIds) || !pending.orderIds.length) {
           throw new Error("No saved payment was found in this browser tab. Check your orders before starting another payment.");
         }
@@ -54,7 +54,9 @@ export default function PaymentStatusPage() {
           if (JSON.stringify(getCart().items) === pending.cartKey) clearCart();
           // Keep confirmation available on refresh without allowing the order to be paid again.
           sessionStorage.setItem(checkoutStorageKey(auth.user.id, true), JSON.stringify(pending));
-          sessionStorage.removeItem(checkoutStorageKey(auth.user.id));
+          const active = readSavedCheckout(sessionStorage, auth.user.id);
+          const current = active ? JSON.parse(active) as PendingCheckout : null;
+          if (JSON.stringify(current?.orderIds) === JSON.stringify(pending.orderIds)) sessionStorage.removeItem(checkoutStorageKey(auth.user.id));
           setChecking(false);
           return;
         }
@@ -86,7 +88,7 @@ export default function PaymentStatusPage() {
         <p className="break-all text-sm">Order {order.id}</p><p className="font-medium capitalize">{order.status}</p>
       </div>)}
       {!paid ? <Button disabled={checking} onClick={() => setAttempt((value) => value + 1)}>{checking ? "Checking payment..." : "Check again"}</Button> : null}
-      {!paid ? <Link href="/dashboard/checkout" className="text-brand underline">Return to checkout</Link> : null}
+      {!paid ? <Link href={orders[0] ? `/dashboard/checkout?order=${encodeURIComponent(orders[0].id)}` : "/dashboard/orders"} className="text-brand underline">Return to checkout</Link> : null}
       <Link href="/dashboard/orders" className="text-brand underline">View my orders</Link>
       <Link href="/dashboard/home" className="text-brand underline">Continue shopping</Link>
     </div>

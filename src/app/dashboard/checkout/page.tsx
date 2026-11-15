@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
+import { useAuthUser } from "@/components/auth/useAuthUser";
 import { cartSubtotal, formatCurrency, useCart } from "@/components/commerce/store";
-import { checkoutUrl, checkoutStorageKey, readSavedCheckout, createdOrderIds, createdOrderRows, paymentError, paymentReference, type PendingCheckout } from "@/components/commerce/payments";
+import { checkoutUrl, checkoutStorageKey, selectCheckout, rememberCheckout, createdOrderIds, createdOrderRows, paymentError, paymentReference, type PendingCheckout } from "@/components/commerce/payments";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import { Button, Card } from "@/components/dashboard/ui";
 import styles from "./page.module.css";
@@ -14,9 +15,13 @@ import { deliveryPoint } from "@/components/commerce/addresses";
 import { useCheckoutPricing } from "@/components/commerce/useCheckoutPricing";
 import OrderMoneyBreakdown from "@/components/commerce/OrderMoneyBreakdown";
 import AddressLocationLookup from "@/components/commerce/AddressLocationLookup";
+import { orderCheckoutError } from "@/components/commerce/checkoutErrors";
 
 export default function CheckoutPage() {
   const cart = useCart();
+  const user = useAuthUser();
+  const cartKey = JSON.stringify(cart.items);
+  const [recoveryReady, setRecoveryReady] = useState(false);
   const [address, setAddress] = useState("");
   const [contact, setContact] = useState("");
   const [latitude, setLatitude] = useState("");
@@ -24,27 +29,33 @@ export default function CheckoutPage() {
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [pickupProblem, setPickupProblem] = useState(false);
   const [pending, setPending] = useState<PendingCheckout | null>(null);
   const submitting = useRef(false);
   const review = useCheckoutPricing(pending?.orderIds ?? [], pending?.cartKey, pending?.createdOrders);
 
   useEffect(() => {
+    setPending(null);
+    setRecoveryReady(false);
+    setAgreed(false);
     const auth = getAuth();
     setContact(auth?.user?.phone ?? "");
     try {
-      const saved = auth?.user?.id ? readSavedCheckout(sessionStorage, auth.user.id) : null;
-      if (saved) {
-        const value = JSON.parse(saved) as PendingCheckout;
-        if (value.buyerId === auth?.user?.id && value.submitted && Array.isArray(value.orderIds)) setPending(value);
-      }
-    } catch {
-      setError("Checkout recovery is unavailable. Check your orders before starting another payment.");
+      const query = new URL(window.location.href).searchParams;
+      const value = auth?.user?.id ? selectCheckout(sessionStorage, auth.user.id, cartKey, query.get("order")?.trim() || "", query.get("resume") === "1") : null;
+      setPending(value);
+      setError("");
+      setRecoveryReady(true);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Checkout recovery is unavailable. Check your orders before starting another payment.");
     }
-  }, []);
+  }, [user?.id, cartKey]);
 
   async function pay() {
     if (submitting.current) return;
+    if (!recoveryReady) return;
     setError("");
+    setPickupProblem(false);
     const auth = getAuth();
     if (!auth?.access_token || !auth.user?.id) { setError("Please sign in with your buyer account to checkout."); return; }
     if (auth.user.role && auth.user.role !== "buyer") { setError("Please sign in with a buyer account to place an order."); return; }
@@ -72,13 +83,15 @@ export default function CheckoutPage() {
       const payload = await response.json();
       checkAccount(stamp);
       if (!response.ok || payload?.success === false) {
-        throw Object.assign(new Error(paymentError(payload, `Checkout request failed (${response.status}).`)), { status: response.status, path });
+        const fallback = `Checkout request failed (${response.status}).`;
+        const detail = path === "/api/buyer/orders" ? orderCheckoutError(payload, fallback) : { code: undefined, message: paymentError(payload, fallback) };
+        throw Object.assign(new Error(detail.message), { status: response.status, path, code: detail.code });
       }
       return payload;
     }
     function persist(value: PendingCheckout) {
       checkAccount(stamp);
-      sessionStorage.setItem(checkoutStorageKey(auth!.user.id!), JSON.stringify(value));
+      rememberCheckout(sessionStorage, value);
       setPending(value);
     }
     try {
@@ -110,7 +123,8 @@ export default function CheckoutPage() {
       window.location.assign(checkoutUrl({ checkout_url: checkout.checkoutUrl }));
     } catch (err) {
       // Validation/auth failures reject the order before creation; let the buyer correct them.
-      const failure = err as { status?: number; path?: string };
+      const failure = err as { status?: number; path?: string; code?: string };
+      setPickupProblem(failure.code === "SELLER_PICKUP_LOCATION_INVALID");
       if (failure.path === "/api/buyer/orders" && [400, 401, 403, 422].includes(failure.status ?? 0)) {
         if (getAuth()?.access_token === auth.access_token) sessionStorage.removeItem(checkoutStorageKey(auth.user.id));
         setPending(null);
@@ -122,7 +136,7 @@ export default function CheckoutPage() {
   return (
     <div className={styles.checkoutPage}>
       <div className={styles.breadcrumbs}><Link href="/dashboard/cart">Shopping cart</Link><span>/</span><span>Checkout</span></div>
-      {error ? <p className={styles.errorMessage} role="alert">{error}</p> : null}
+      {error ? <div className={styles.errorMessage} role="alert"><p>{error}</p>{pickupProblem ? <div className={styles.pickupHelp}><p>Your delivery address has been kept. Open an item to view its seller details.</p><ul>{cart.items.map(item => <li key={item.id}><Link href={`/products/${encodeURIComponent(item.id)}`}>View {item.name}</Link></li>)}</ul><Link href="/dashboard/cart">Edit cart</Link></div> : null}</div> : null}
       {pending ? <div className={styles.notice}>
         {pending.orderIds.length ? "Your order is saved. Review the total amount and any delivery fee before continuing to payment." : "Your previous order submission needs to be checked before another order is placed."}
         {" "}<Link href="/dashboard/checkout/payment">Check payment status</Link>
@@ -170,7 +184,7 @@ export default function CheckoutPage() {
             {!review.loading && !review.error && review.pricing?.buyerTotal == null ? <p role="alert">The backend has not returned a payable total yet.</p> : null}
             <Button variant="ghost" disabled={loading || review.loading} onClick={review.reload}>Refresh order pricing</Button>
           </> : <><div><span>Items subtotal</span><span>{formatCurrency(cartSubtotal(cart))}</span></div></>}</div>
-          <Button type="button" onClick={pay} disabled={loading || !agreed || (!pending && cart.items.length === 0) || Boolean(pending && (!pending.orderIds.length || !review.ready))}>
+          <Button type="button" onClick={pay} disabled={!recoveryReady || loading || !agreed || (!pending && cart.items.length === 0) || Boolean(pending && (!pending.orderIds.length || !review.ready))}>
             {loading ? pending ? "Connecting to Paystack..." : "Creating order..." : pending ? "Continue to Paystack" : "Review order"}
           </Button>
         </div></Card>

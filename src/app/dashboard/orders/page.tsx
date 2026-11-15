@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAuth } from "@/components/auth/authStorage";
 import { useBuyerOrders, type BuyerOrder } from "@/components/commerce/buyerOrders";
-import { checkoutStorageKey } from "@/components/commerce/payments";
 import {
   formatCurrency,
 } from "@/components/commerce/store";
@@ -18,8 +17,7 @@ export default function OrdersPage() {
   function payOrder(order: BuyerOrder) {
     const buyerId = getAuth()?.user?.id;
     if (!buyerId) return;
-    sessionStorage.setItem(checkoutStorageKey(buyerId), JSON.stringify({ buyerId, orderIds: [order.id], cartKey: "", submitted: true }));
-    router.push("/dashboard/checkout");
+    router.push(`/dashboard/checkout?order=${encodeURIComponent(order.id)}`);
   }
 
   return (
@@ -64,7 +62,7 @@ export default function OrdersPage() {
                   <p className="text-sm capitalize">Order: {order.status.replaceAll("_", " ")}</p>
                   <p className="text-sm capitalize">Payment: {order.paymentStatus.replaceAll("_", " ")}</p>
                   {["delivered", "confirmed"].includes(order.status) ? <ReviewDraftButton orderId={order.id} /> : null}
-                  {order.paymentStatus === "pending" && order.status !== "cancelled" ? <Button onClick={() => payOrder(order)}>Pay with Paystack</Button> : null}
+                  {order.paymentStatus === "pending" && order.status !== "cancelled" ? <Button onClick={() => payOrder(order)}>Resume payment</Button> : null}
                 </div>
               </div>
             ))

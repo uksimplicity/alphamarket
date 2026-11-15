@@ -8,7 +8,7 @@ import {
   updateCartQty,
   useCart,
 } from "@/components/commerce/store";
-import { Button, Card } from "@/components/dashboard/ui";
+import { Card } from "@/components/dashboard/ui";
 import { popularProducts } from "@/components/products/catalog";
 import styles from "./page.module.css";
 
@@ -40,14 +40,7 @@ export default function CartPage() {
             ) : (
               <div className={styles.cartList}>
                 <div className={styles.cartStoreHeader}>
-                  <div>
-                    <div className={styles.cartStoreName}>Esteem Media Pro</div>
-                    <div className={styles.cartStoreLocation}>Lagos</div>
-                  </div>
-                  <label className={styles.cartStoreCheckbox}>
-                    <input type="checkbox" />
-                    <span>Pay delivery fee for all</span>
-                  </label>
+                  <div><div className={styles.cartStoreName}>Your items</div><div className={styles.cartStoreLocation}>Review delivery and the final total at checkout</div></div>
                 </div>
                 {cart.items.map((item) => (
                   <div key={item.id} className={styles.cartItem}>
@@ -61,7 +54,7 @@ export default function CartPage() {
                           {formatCurrency(item.price)}
                         </span>
                         <span className={styles.cartItemDivider}>•</span>
-                        <span>Delivery: Pickup at office</span>
+                        <span>Delivery calculated at checkout</span>
                       </div>
                       <div className={styles.cartItemActions}>
                         <div className={styles.qtyControl}>
@@ -81,9 +74,7 @@ export default function CartPage() {
                             +
                           </button>
                         </div>
-                        <button className={styles.storeButton} type="button">
-                          Visit store
-                        </button>
+                        <Link className={styles.storeButton} href={`/products/${encodeURIComponent(item.id)}`}>View product</Link>
                       </div>
                     </div>
                     <div className={styles.cartItemTotal}>
@@ -120,15 +111,15 @@ export default function CartPage() {
             </div>
             <div className={styles.summaryRow}>
               <span>Delivery fee</span>
-              <span>₦0.00</span>
+              <span>Calculated at checkout</span>
             </div>
             <div className={styles.summaryDivider} />
             <div className={styles.summaryTotal}>
-              <span>Total</span>
+              <span>Items subtotal</span>
               <span>{subtotal}</span>
             </div>
             <Link
-              href={cart.items.length === 0 ? "/dashboard/home" : "/dashboard/checkout"}
+              href={cart.items.length === 0 ? "/dashboard/home" : "/dashboard/checkout?cart=1"}
               className={styles.checkoutButton}
             >
               Checkout
