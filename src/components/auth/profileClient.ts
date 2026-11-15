@@ -432,10 +432,12 @@ export async function updateCurrentUserProfile(input: UpdateProfileInput): Promi
     parsed = text;
   }
 
-  if (!response.ok) {
+  if (!response.ok || parsed && typeof parsed === "object" && "success" in parsed && parsed.success === false) {
     const message =
       parsed && typeof parsed === "object" && "error" in parsed
         ? String((parsed as { error: unknown }).error)
+        : parsed && typeof parsed === "object" && "message" in parsed
+        ? String(parsed.message)
         : `Failed to update profile (${response.status}).`;
     throw new Error(message);
   }

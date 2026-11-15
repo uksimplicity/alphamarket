@@ -26,6 +26,15 @@ test('missing, invalid and zero pickup coordinates are never submitted', async (
   for (const value of [{latitude:0,longitude:0},{latitude:6.5},{longitude:3.4},{latitude:NaN,longitude:3.4},{latitude:91,longitude:3.4}]) await assert.rejects(client.updateCurrentUserProfile(value), /valid pickup location/);
   assert.equal(calls.length,0);
 });
+
+test('profile update rejects HTTP and success=false failures without caching the address', async () => {
+  const client = load('src/components/auth/profileClient.ts');
+  for (const [status, body] of [[422, { error: 'Profile rejected.' }], [200, { success: false, message: 'Profile rejected.' }], [200, { success: false, error: 'Profile rejected.' }]]) {
+    global.fetch = async () => Response.json(body, { status });
+    await assert.rejects(client.updateCurrentUserProfile({ address: 'Rejected address', latitude: 6.6, longitude: 3.4 }), /Profile rejected/);
+    assert.equal(localStorage.getItem('alpha.profile.address'), null);
+  }
+});
 test('profile coordinates come only from the backend, never browser address cache', async () => {
   localStorage.setItem('alpha.profile.address',JSON.stringify({userKey:'seller-1',address:'Cached address',latitude:6.6,longitude:3.4}));
   global.fetch = async () => Response.json({data:{id:'seller-1'}});

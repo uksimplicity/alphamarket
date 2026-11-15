@@ -27,14 +27,18 @@ function formHarness(brandResponse, createResponse, sellerFields = {}, options =
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   vm.runInNewContext(code, {
-    module: loadedModule, exports: loadedModule.exports,
+    module: loadedModule, exports: loadedModule.exports, Error,
     require(name) {
       if (name === 'react') return react;
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
       if (name === 'next/navigation') return { useRouter: () => ({ push: path => notifications.push({ redirect: path }) }) };
       if (name.endsWith('ToastProvider')) return { useToast: () => message => notifications.push({ toast: message }) };
       if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'test-token', user: { id: 'seller-one', status: 'active', ...sellerFields } }) };
-      if (name.endsWith('localAccountData')) return { accountStamp: () => 'seller-one', checkAccount: () => {} };
+      if (name.endsWith('profileClient')) return { updateCurrentUserProfile: async input => {
+        calls.push({ url: '/api/user/profile', init: { method: 'PUT', body: JSON.stringify(input) } });
+        if (options.updateProfile) await options.updateProfile(input);
+      } };
+      if (name.endsWith('localAccountData')) return { accountStamp: () => 'seller-one', checkAccount: options.checkAccount || (() => {}) };
       if (name.endsWith('sellerProductForm')) return { uploadProductMedia: async file => { uploads.push(file); return options.upload ? options.upload(file) : 'https://images.example/chair.png'; } };
       if (name === '@/components/ads/hooks') return { usePostingCost: () => ({ cost: options.costUnavailable ? undefined : options.cost || { fee: 0, balance: 100000 }, error: options.costError, loading: false, refresh() {} }) };
       if (name === '@/components/ads/client') return { fetchPostingCost: async () => options.freshCost || options.cost || { fee: 0, balance: 100000 } };
@@ -502,6 +506,65 @@ test('invalid saved seller coordinates do not override the confirmed product poi
   const body = JSON.parse(harness.calls.find(call => call.init?.method === 'POST').init.body);
   assert.equal(body.latitude, 6.6);
   assert.equal(body.longitude, 3.4);
+  cleanup();
+});
+
+test('seller creation waits for the matching pickup profile update before creating a product', async () => {
+  let finish;
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ success: true }), {}, {
+    updateProfile: () => new Promise(resolve => { finish = resolve; }),
+  });
+  const cleanup = await prepareProduct(harness);
+  const submission = nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  await new Promise(resolve => setImmediate(resolve));
+  const update = harness.calls.find(call => call.init?.method === 'PUT');
+  assert.deepEqual(JSON.parse(update.init.body), {
+    address: '12B Allen Avenue, Ikeja, Lagos, Nigeria', city: 'Ikeja', state: 'Lagos', country: 'Nigeria', latitude: 6.6, longitude: 3.4,
+  });
+  assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
+  assert.deepEqual(harness.notifications, []);
+  finish();
+  await submission;
+  assert.equal(harness.calls.filter(call => call.init?.method === 'PUT').length, 1);
+  assert.equal(harness.calls.filter(call => call.init?.method === 'POST').length, 1);
+  cleanup();
+});
+
+test('failed or uncertain profile updates block product creation and success notifications', async () => {
+  for (const message of ['Profile update rejected.', 'Network error']) {
+    const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ success: true }), {}, {
+      updateProfile: async () => { throw new Error(message); },
+    });
+    const cleanup = await prepareProduct(harness);
+    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+    assert.equal(harness.calls.filter(call => call.init?.method === 'PUT').length, 1);
+    assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
+    assert.deepEqual(harness.notifications, []);
+    assert.equal(nodes(harness.render(), node => node.props?.className === 'form-error')[0].props.children, message);
+    cleanup();
+  }
+});
+
+test('account changes during a profile update prevent creation', async () => {
+  let changed = false;
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ success: true }), {}, {
+    updateProfile: async () => { changed = true; },
+    checkAccount: () => { if (changed) throw new Error('Your account changed.'); },
+  });
+  const cleanup = await prepareProduct(harness);
+  await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(harness.calls.filter(call => call.init?.method === 'PUT').length, 1);
+  assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
+  assert.deepEqual(harness.notifications, []);
+  cleanup();
+});
+
+test('ad creation does not change the user profile', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ success: true }), {}, { mode: 'ad' });
+  const cleanup = await prepareProduct(harness);
+  await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  assert.equal(harness.calls.some(call => call.init?.method === 'PUT'), false);
+  assert.equal(harness.calls.filter(call => call.init?.method === 'POST').length, 1);
   cleanup();
 });
 

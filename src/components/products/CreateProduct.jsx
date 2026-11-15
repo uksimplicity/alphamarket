@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import "@/components/products/CreateProduct.css";
 import { getAuth } from "@/components/auth/authStorage";
+import { updateCurrentUserProfile } from "@/components/auth/profileClient";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import { uploadProductMedia } from "@/components/vendor/sellerProductForm";
 import { useToast } from "@/components/ToastProvider";
@@ -915,6 +916,19 @@ export default function CreateProduct({ mode = "seller", onCreated = null, adsBa
         };
       }
       checkAccount(stamp);
+
+      if (mode === "seller") {
+        // Order pickup is resolved from the seller profile by the backend.
+        await updateCurrentUserProfile({
+          address: payload.address,
+          city: form.lga.trim(),
+          state: form.state.trim(),
+          country: "Nigeria",
+          latitude: pickup.point.latitude,
+          longitude: pickup.point.longitude,
+        });
+        checkAccount(stamp);
+      }
 
       const createEndpoint =
         mode === "admin" ? "/api/admin/products" : isAd ? "/api/my-ads" : "/api/seller/products";
