@@ -411,6 +411,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null, adsBa
   const [locationsLoading, setLocationsLoading] = useState(true);
   const [locationsAttempt, setLocationsAttempt] = useState(0);
   const [creationUncertain, setCreationUncertain] = useState(false);
+  const [createdWithoutMedia, setCreatedWithoutMedia] = useState(null);
   const posting = usePostingCost(marketplacePost ? form.category : "");
   const router = useRouter();
 
@@ -935,6 +936,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null, adsBa
       checkAccount(stamp);
 
       if (!response.ok || data?.success === false) {
+        if (data?.productCreated) setCreatedWithoutMedia(data);
         if (response.status >= 500) { uncertainCreation.current = true; setCreationUncertain(true); }
         const message =
           data && typeof data === "object"
@@ -1322,7 +1324,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null, adsBa
           {error ? <div className="form-error">{error}</div> : null}
           {success ? <div className="form-success">{success}</div> : null}
           {marketplacePost ? <PostingFee categoryId={form.category} {...posting} walletHref={mode === "seller" || adsBasePath.startsWith("/vendor/") ? "/vendor/wallet" : "/dashboard/wallet"} /> : null}
-          {creationUncertain ? <div role="alert" className="form-error">The creation result is uncertain. Refresh My Ads and your wallet before posting again. <a href={isAd ? adsBasePath : "/vendor/my-ads"}>Check My Ads</a></div> : null}
+          {createdWithoutMedia ? <div role="alert" className="form-error">Your product exists. Check its images before making any further changes. <a href={createdWithoutMedia.productId ? `/vendor/products/${encodeURIComponent(createdWithoutMedia.productId)}` : "/vendor/products"}>Check product</a></div> : creationUncertain ? <div role="alert" className="form-error">The creation result is uncertain. Refresh My Ads and your wallet before posting again. <a href={isAd ? adsBasePath : "/vendor/my-ads"}>Check My Ads</a></div> : null}
 
           <div className="form-actions">
             <button type="button" className="btn-cancel" onClick={() => router.back()}>

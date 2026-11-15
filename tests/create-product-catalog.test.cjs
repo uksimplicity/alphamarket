@@ -282,6 +282,20 @@ test('gallery selections append and individual photos can be removed', async () 
   cleanup();
 });
 
+test('created products with an unconfirmed image save link to the existing product and cannot be resubmitted', async () => {
+  const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({
+    productCreated: true, productId: 'existing-product', error: 'Product was created, but its image save was not confirmed.',
+  }, { status: 502 }));
+  const cleanup = await prepareProduct(harness);
+  const submit = () => nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+  await submit();
+  assert.ok(nodes(harness.render(), node => node.type === 'a' && node.props.href === '/vendor/products/existing-product').length);
+  assert.equal(harness.notifications.length, 0);
+  await submit();
+  assert.equal(harness.calls.filter(call => call.init?.method === 'POST').length, 1);
+  cleanup();
+});
+
 async function prepareProduct(harness, fields = {}) {
   harness.render();
   const cleanups = harness.effects.map(effect => effect());

@@ -4,7 +4,7 @@ const load = require('./support/load-ts.cjs');
 const originalFetch = global.fetch, originalBase = process.env.NEXT_PUBLIC_API_BASE_URL;
 beforeEach(() => { load.reset(); process.env.NEXT_PUBLIC_API_BASE_URL = 'https://marketplace.example/api/v1'; });
 afterEach(() => { global.fetch = originalFetch; if (originalBase === undefined) delete process.env.NEXT_PUBLIC_API_BASE_URL; else process.env.NEXT_PUBLIC_API_BASE_URL = originalBase; });
-const payload = { name: 'Chair', categoryId: 'category', productTypeId: 'type', brandId: 'chosen-brand', basePrice: 5000, stock: 3, location: 'Lagos', shortDescription: 'An actual chair', media: { cover: 'https://images.example/chair.png' } };
+const payload = { sellerId: 'seller-one', name: 'Chair', categoryId: 'category', productTypeId: 'type', brandId: 'chosen-brand', basePrice: 5000, stock: 3, location: 'Lagos', shortDescription: 'An actual chair', media: { cover: 'https://images.example/chair.png' } };
 const request = (method, body, auth = 'Bearer seller-token') => new Request('https://web.example/api/seller/products', { method, headers: { Authorization: auth, Cookie: 'browser=private', 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 const detail = () => load('src/app/api/seller/products/[productId]/route.ts');
 const context = { params: Promise.resolve({ productId: 'product-1' }) };
@@ -120,8 +120,66 @@ test('seller creation accepts description and a gallery image without other opti
   };
   const result = await load('src/app/api/seller/products/route.ts').POST(request('POST', minimal));
   assert.equal(result.status, 201);
-  assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].body, { ...minimal, locationId: 'saved-location' });
+  assert.equal(calls.length, 2);
+  const { media, ...details } = minimal;
+  assert.deepEqual(calls[0].body, { ...details, locationId: 'saved-location' });
+  assert.ok(calls[1].url.endsWith('/seller/product/created'));
+  assert.deepEqual(calls[1].body, { product_id: 'created', seller_id: 'seller-one', media });
+});
+
+test('media update uses the created product ID and original upload URLs after creation', async () => {
+  const calls = [];
+  const media = { cover: 'https://drive.google.com/uc?id=original-cover', images: ['https://drive.google.com/uc?id=gallery'], video: '' };
+  global.fetch = async (url, init) => {
+    if (init.method === 'GET') return Response.json({ data: [{ id: 'lagos', name: 'Lagos', type: 'city' }] });
+    calls.push({ url, init });
+    if (init.method === 'POST') return Response.json({ success: true, data: { product: { id: 'new-product', seller_id: 'seller-one' } } }, { status: 201 });
+    return new Response(null, { status: 204 });
+  };
+  const response = await load('src/app/api/seller/products/route.ts').POST(request('POST', { ...payload, media }));
+  assert.equal(response.status, 201);
+  assert.deepEqual(calls.map(call => call.init.method), ['POST', 'PUT']);
+  assert.equal(Object.hasOwn(JSON.parse(calls[0].init.body), 'media'), false);
+  assert.equal(calls[1].url, 'https://marketplace.example/api/v1/seller/product/new-product');
+  assert.deepEqual(JSON.parse(calls[1].init.body), { product_id: 'new-product', seller_id: 'seller-one', media });
+  assert.ok(calls.every(call => call.init.headers.Authorization === 'Bearer seller-token' && call.init.redirect === 'manual'));
+});
+
+test('failed image updates report the existing product without replaying either write', async () => {
+  for (const failure of [
+    () => Response.json({ success: false }, { status: 200 }),
+    () => Response.json({ error: 'Rejected' }, { status: 400 }),
+    () => { throw new Error('Connection lost'); },
+    () => new Response('', { status: 302, headers: { Location: 'https://other.test' } }),
+  ]) {
+    const methods = [];
+    global.fetch = async (url, init) => {
+      if (init.method === 'GET') return Response.json({ data: [{ id: 'lagos', name: 'Lagos', type: 'city' }] });
+      methods.push(init.method);
+      return init.method === 'POST' ? Response.json({ data: { id: 'existing' } }, { status: 201 }) : failure();
+    };
+    const response = await load('src/app/api/seller/products/route.ts').POST(request('POST', payload));
+    assert.equal(response.status, 502);
+    const result = await response.json();
+    assert.equal(result.productCreated, true);
+    assert.equal(result.productId, 'existing');
+    assert.match(result.error, /Product was created/);
+    assert.deepEqual(methods, ['POST', 'PUT']);
+  }
+});
+
+test('rejected creation or a missing created ID never triggers a guessed product update', async () => {
+  for (const result of [{ success: false, message: 'Rejected' }, { success: true, data: {} }, null]) {
+    const methods = [];
+    global.fetch = async (url, init) => {
+      if (init.method === 'GET') return Response.json({ data: [{ id: 'lagos', name: 'Lagos', type: 'city' }] });
+      methods.push(init.method);
+      return Response.json(result, { status: 201 });
+    };
+    const response = await load('src/app/api/seller/products/route.ts').POST(request('POST', payload));
+    assert.equal(response.status, result?.success === false ? 201 : 502);
+    assert.deepEqual(methods, ['POST']);
+  }
 });
 
 test('seller create proxy preserves a typed brand name without adding a brand ID', async () => {
@@ -135,8 +193,10 @@ test('seller create proxy preserves a typed brand name without adding a brand ID
   };
   const result = await load('src/app/api/seller/products/route.ts').POST(request('POST', typedBrand));
   assert.equal(result.status, 201);
-  assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0].body, { ...typedBrand, locationId: 'saved-location' });
+  assert.equal(calls.length, 2);
+  const { media, ...details } = typedBrand;
+  assert.deepEqual(calls[0].body, { ...details, locationId: 'saved-location' });
+  assert.deepEqual(calls[1].body.media, media);
   assert.equal(Object.hasOwn(calls[0].body, 'brandId'), false);
 });
 
@@ -149,7 +209,7 @@ test('create verifies the selected admin location and forwards the address and t
   };
   const response = await load('src/app/api/seller/products/route.ts').POST(request('POST', { ...payload, address: '12 Example Street', latitude: 6.5, longitude: 3.4, locationId: 'selected-area' }));
   assert.equal(response.status, 201);
-  assert.deepEqual(calls.map(call => call.init.method), ['GET', 'POST']);
+  assert.deepEqual(calls.map(call => call.init.method), ['GET', 'POST', 'PUT']);
   assert.equal(calls[0].url, 'https://marketplace.example/api/v1/ads/locations/selected-area');
   assert.equal(calls[0].init.headers.Authorization, 'Bearer seller-token');
   assert.equal(calls[0].init.cache, 'no-store');
