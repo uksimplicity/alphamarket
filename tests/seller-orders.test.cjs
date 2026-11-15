@@ -138,6 +138,8 @@ test('Orders page renders a nested backend order with working detail link and no
   const link = nodes(tree, node => node.type === 'link')[0];
   assert.equal(link.props.to, '/vendor/orders/order-uuid');
   assert.equal(link.props.children, 'order-uuid');
+  assert.ok(nodes(tree, node => node.type === 'th' && node.props.children === 'Payment').length);
+  assert.ok(nodes(tree, node => node.props?.children === 'paid').length);
   assert.equal(nodes(tree, node => node.props?.children === 'No orders yet.').length, 0);
 });
 

@@ -103,6 +103,7 @@ export default function VendorOrders() {
                   <th>Buyer total</th>
                   <th>Admin commission</th>
                   <th>Seller proceeds</th>
+                  <th>Payment</th>
                   <th>Status</th>
                   <th>Created</th>
                 </tr>
@@ -119,6 +120,7 @@ export default function VendorOrders() {
                     <td>{pricingMoney(order.pricing.buyerTotal ?? order.amount)}</td>
                     <td>{pricingMoney(order.pricing.adminCommission)}</td>
                     <td>{pricingMoney(order.pricing.sellerProceeds)}</td>
+                    <td><span className={styles.pill}>{order.paymentStatus.replaceAll("_", " ")}</span></td>
                     <td>
                       <span className={styles.pill}>{order.status}</span>
                     </td>

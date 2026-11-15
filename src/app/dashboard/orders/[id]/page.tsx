@@ -11,6 +11,7 @@ import ReviewDraftButton from "@/components/commerce/ReviewDraftButton";
 import OrderMoneyBreakdown from "@/components/commerce/OrderMoneyBreakdown";
 import { paymentError } from "@/components/commerce/payments";
 import { useBuyerOrders } from "@/components/commerce/buyerOrders";
+import BuyerDeliveryTracking from "@/components/commerce/BuyerDeliveryTracking";
 import {
   formatCurrency,
 } from "@/components/commerce/store";
@@ -18,7 +19,7 @@ import { Badge, Button, Card, ErrorState, SectionTitle } from "@/components/dash
 
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
-  const { orders, loading, error, reload } = useBuyerOrders(params.id);
+  const { orders, loading, error, reload, checkedAt, refreshing } = useBuyerOrders(params.id);
   const user = useAuthUser();
   const [submitting, setSubmitting] = useState(false);
   const [receiptSent, setReceiptSent] = useState(false);
@@ -82,6 +83,8 @@ export default function OrderDetailPage() {
           <Badge>Payment: {order.paymentStatus}</Badge>
         </div>
       </Card>
+
+      <BuyerDeliveryTracking order={order} checkedAt={checkedAt} refreshing={refreshing} reload={reload} />
 
       <Card>
         <SectionTitle title="Order pricing" />

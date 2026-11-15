@@ -1,0 +1,135 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const ts = require('typescript');
+const load = require('./support/load-ts.cjs');
+const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(resolve => setImmediate(resolve)); };
+const fixture = { ID: 'order-one', BuyerID: 'buyer', PaymentStatus: 'paid', Status: 'pending', RequiresDelivery: true, DeliveryID: null };
+
+function harness(file, response) {
+  const slots = [], dependencies = [], cleanups = [], pending = [], calls = [], timers = new Map(), listeners = new Map();
+  let cursor = 0, timerId = 0, user = { id: 'buyer' }, generation = 0;
+  const stamp = () => `${user.id}:${generation}`;
+  const document = { visibilityState: 'visible', addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) };
+  const window = { setInterval: (fn, ms) => { const id = ++timerId; timers.set(id, { fn, ms }); return id; }, clearInterval: id => timers.delete(id), addEventListener: document.addEventListener, removeEventListener: document.removeEventListener };
+  const loaded = { exports: {} }, jsx = (type, props) => ({ type, props });
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, {
+    module: loaded, exports: loaded.exports, Error, AbortController, AbortSignal, document, window,
+    fetch: async (url, init) => { calls.push({ url, init }); return response(url, init); },
+    require(name) {
+      if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
+      if (name === 'react') return {
+        useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; },
+        useEffect(fn, deps) { const i = cursor++; if (!dependencies[i] || deps.some((value, index) => value !== dependencies[i][index])) { dependencies[i] = deps; pending.push(() => { cleanups[i]?.(); cleanups[i] = fn(); }); } },
+      };
+      if (name.endsWith('authStorage')) return { getAuth: () => ({ user, access_token: 'buyer-token' }), authGeneration: () => generation };
+      if (name.endsWith('useAuthUser')) return { useAuthUser: () => user };
+      if (name.endsWith('localAccountData')) return { accountStamp: stamp, checkAccount: previous => { if (previous !== stamp()) throw new Error('Account changed'); } };
+      if (name.endsWith('/ui')) return { Card: 'card', SectionTitle: 'title', Button: 'button' };
+      if (name.startsWith('@/')) return load('src/' + name.slice(2) + '.ts');
+      if (name.startsWith('./')) return load('src/components/commerce/' + name.slice(2) + '.ts');
+      throw new Error('Unexpected import ' + name);
+    },
+  });
+  return {
+    exports: loaded.exports, calls, timers, listeners, document,
+    render(fn, ...args) { cursor = 0; return fn(...args); },
+    effects() { pending.splice(0).forEach(fn => fn()); },
+    switchUser() { user = { id: 'other-buyer' }; generation++; },
+    cleanup() { cleanups.forEach(fn => fn?.()); },
+  };
+}
+const hookFile = 'src/components/commerce/buyerOrders.ts';
+const componentFile = 'src/components/commerce/BuyerDeliveryTracking.tsx';
+function nodes(tree, predicate) {
+  if (!tree || typeof tree !== 'object') return [];
+  if (Array.isArray(tree)) return tree.flatMap(child => nodes(child, predicate));
+  return [...(predicate(tree) ? [tree] : []), ...nodes(tree.props?.children, predicate)];
+}
+const contains = (tree, value) => nodes(tree, node => node.props?.children === value).length > 0;
+
+test('buyer parsing preserves explicit delivery fields in both backend serializers', () => {
+  const h = harness(hookFile, () => {});
+  const parse = h.exports.parseBuyerOrder;
+  assert.equal(parse({ data: { order: fixture } }).delivery.required, true);
+  assert.equal(parse(fixture).delivery.riderId, '');
+  const result = parse({ ...fixture, delivery: { id: 'delivery', status: 'on_the_way', rider_id: 'rider' } });
+  assert.equal(result.delivery.status, 'on_the_way');
+  assert.equal(result.delivery.riderId, 'rider');
+  assert.equal(parse({ ...fixture, DeliveryStatus: 'assigned', RiderID: 'rider' }).delivery.status, 'assigned');
+});
+
+test('visible polling updates buyer delivery state, blocks overlap and removes listeners on cleanup', async () => {
+  let assigned = false, resolve;
+  const h = harness(hookFile, async () => { if (resolve === null) return new Promise(done => { resolve = done; }); return Response.json({ data: { ...fixture, RiderID: assigned ? 'new-rider' : null, DeliveryStatus: assigned ? 'assigned' : null } }); });
+  const render = () => h.render(h.exports.useBuyerOrders, 'order-one');
+  render(); h.effects(); await settle();
+  assert.equal(render().orders[0].delivery.riderId, '');
+  const timer = [...h.timers.values()][0]; assert.equal(timer.ms, 30000);
+  h.document.visibilityState = 'hidden'; timer.fn(); await settle(); assert.equal(h.calls.length, 1);
+  h.document.visibilityState = 'visible'; assigned = true; h.listeners.get('focus')(); await settle();
+  assert.equal(render().orders[0].delivery.riderId, 'new-rider');
+  resolve = null; timer.fn(); timer.fn(); await settle(); assert.equal(h.calls.length, 3);
+  h.cleanup(); assert.equal(h.timers.size, 0); assert.equal(h.listeners.size, 0);
+  assert.equal(h.calls.at(-1).init.signal.aborted, true);
+  resolve(Response.json({ data: fixture })); await settle();
+  assert.equal(render().orders[0].delivery.riderId, 'new-rider');
+  assert.ok(h.calls.every(call => call.init.headers.Authorization === 'Bearer buyer-token' && call.init.cache === 'no-store'));
+});
+
+test('failed refresh removes actionable old orders, then a subsequent refresh recovers', async () => {
+  let failed = false;
+  const h = harness(hookFile, () => Response.json(failed ? { success: false, error: 'Order service unavailable' } : { data: fixture }));
+  const render = () => h.render(h.exports.useBuyerOrders, 'order-one');
+  render(); h.effects(); await settle(); assert.equal(render().orders.length, 1);
+  failed = true; [...h.timers.values()][0].fn(); await settle();
+  assert.equal(render().orders.length, 0); assert.match(render().error, /unavailable/);
+  failed = false; [...h.timers.values()][0].fn(); await settle();
+  assert.equal(render().orders.length, 1); assert.equal(render().error, ''); h.cleanup();
+});
+
+test('wrong-order responses are rejected and late responses cannot cross account boundaries', async () => {
+  let resolve;
+  const h = harness(hookFile, () => new Promise(done => { resolve = done; }));
+  const render = () => h.render(h.exports.useBuyerOrders, 'order-one');
+  render(); h.effects(); resolve(Response.json({ data: { ...fixture, ID: 'different' } })); await settle();
+  assert.match(render().error, /does not match/);
+  [...h.timers.values()][0].fn(); const resolveOldAccount = resolve; h.switchUser();
+  assert.equal(render().orders.length, 0); h.effects();
+  resolveOldAccount(Response.json({ data: fixture })); await settle(); assert.equal(render().orders.length, 0);
+  resolve(Response.json({ data: { ...fixture, BuyerID: 'other-buyer' } })); await settle();
+  assert.equal(render().orders[0].buyerId, 'other-buyer'); h.cleanup();
+});
+
+test('buyer tracking shows missing delivery and no assignment explicitly without rider lookup', () => {
+  const hook = harness(hookFile, () => {});
+  const h = harness(componentFile, () => { throw new Error('Unexpected rider lookup'); });
+  const props = { order: hook.exports.parseBuyerOrder(fixture), checkedAt: '2026-11-15T16:27:00Z', refreshing: false, reload() {} };
+  const tree = h.render(h.exports.default, props); h.effects();
+  assert.ok(contains(tree, 'A delivery has not been linked to this order yet.'));
+  assert.ok(contains(tree, 'Rider assignment has not been reported.'));
+  assert.ok(contains(tree, 'Not reported')); assert.equal(h.calls.length, 0);
+  const noDelivery = h.render(h.exports.default, { ...props, order: hook.exports.parseBuyerOrder({ ...fixture, RequiresDelivery: false }) }); h.effects();
+  assert.ok(contains(noDelivery, 'No rider delivery is required for this order.')); assert.equal(h.calls.length, 0);
+});
+
+test('buyer tracking loads only the assigned rider, clears old contacts and preserves progress on a rider failure', async () => {
+  const hook = harness(hookFile, () => {});
+  let fail = false;
+  const h = harness(componentFile, () => fail ? Response.json({ error: 'Insufficient permissions' }, { status: 403 }) : Response.json({ data: { id: 'rider one', name: 'Example Rider', phone: '08000000000' } }));
+  const props = { order: hook.exports.parseBuyerOrder({ ...fixture, DeliveryID: 'delivery', DeliveryStatus: 'on_the_way', RiderID: 'rider one' }), checkedAt: 'first', refreshing: false, reload() {} };
+  h.render(h.exports.default, props); h.effects(); await settle();
+  let tree = h.render(h.exports.default, props);
+  assert.ok(contains(tree, 'Example Rider')); assert.ok(contains(tree, '08000000000'));
+  assert.equal(h.calls[0].url, '/api/marketplace/grpc/riders/rider%20one');
+  assert.equal(h.calls[0].init.headers.Authorization, 'Bearer buyer-token');
+  fail = true; props.checkedAt = 'second';
+  tree = h.render(h.exports.default, props); assert.equal(contains(tree, 'Example Rider'), false);
+  h.effects(); await settle(); tree = h.render(h.exports.default, props);
+  assert.ok(contains(tree, 'on the way')); assert.ok(nodes(tree, node => node.props?.role === 'alert').length);
+  assert.equal(contains(tree, '08000000000'), false);
+  props.order = hook.exports.parseBuyerOrder({ ...fixture, DeliveryID: 'delivery' });
+  tree = h.render(h.exports.default, props); h.effects();
+  assert.ok(contains(tree, 'Rider assignment has not been reported.')); assert.equal(h.calls.length, 2); h.cleanup();
+});
