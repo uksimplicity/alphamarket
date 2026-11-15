@@ -72,3 +72,64 @@ Backend follow-up:
 Expected GET data must retain existing fields and add at least numeric latitude
 and longitude plus address/city/state/country/postal_code. A successful PUT
 response alone is insufficient to validate the source used by order creation.
+
+## Buyer checkout follow-up - 15 November 2026
+
+The same pickup-zero error was reported for Football. A fresh public product
+read returned its ID/name/location but omitted address and latitude/longitude;
+that omission does not establish whether the backend stored coordinates.
+The current CreateOrderRequest still accepts buyer dropoff coordinates only.
+The product update DTO accepts address but has no latitude/longitude repair
+fields. No supported pickup-repair endpoint was found in the public schema.
+
+Buyer checkout now translates the explicit pickup-location validation error to
+a seller-facing-action message, preserves cart and current delivery-address
+inputs, and links to product details and Edit cart. Unrelated dropoff, payment,
+and validation errors retain their original messages. The backend response is
+not rewritten, so Network diagnostics remain available. Existing safeguards
+against replaying uncertain order/payment requests remain intact.
+
+The underlying pickup resolution has NOT been repaired. No real product,
+profile, order or payment was changed. The user was asked for the backend
+repository/path so product geocoding persistence and order pickup selection
+can be corrected there. Do not claim that the buyer guidance makes this item
+orderable. These frontend changes are local and not published.
+
+Verification: 28 checkout-error/payment/pricing checks passed; focused lint has
+no errors and one existing cart-thumbnail optimization warning.
+
+## Confirmed product pickup point - 15 November 2026
+
+The user approved frontend geocoding as an interim solution. Both seller product
+and buyer/seller ad creation now locate the composed full address using the
+existing Google browser geocoder. A single precise building result is proposed;
+the user must explicitly confirm it or choose and confirm a map/GPS point.
+Lookup failures provide a retry and map/GPS fallback without inventing a point.
+Google Maps/Geocoding must be enabled for the configured browser key; GPS is
+available only when the user is physically at the pickup address.
+
+The creation request includes numeric latitude/longitude alongside address and
+locationId. Existing account coordinates and region centres are not substituted.
+Address or supported-region edits discard confirmation. Lookup cleanup ignores
+late results after edits/unmount; submission blocks missing, zero, invalid and
+stale-address coordinates before uploads or writes. Existing media-save and
+uncertain-write safeguards are retained. Admin creation is unchanged.
+
+Read-only live checks found the affected Football ad address is "Ogba" and its
+selected Ikeja location record has latitude/longitude zero. Ad documentation
+specifies region-centre fallback when no exact point is supplied. The public and
+seller product responses omit product coordinates, so neither geocoding
+persistence nor the actual order pickup source has been established.
+
+These changes apply to new submissions, not existing products. Backend acceptance,
+persistence and checkout use of supplied coordinates still require live
+verification. No real listing/profile/order/payment was changed. Publication
+scope is the product/ad pickup form and its tests. The buyer checkout guidance
+described in the previous section remains local and is not part of this push.
+
+Validation: 70 focused creation/geocoder/proxy checks passed, including explicit
+confirmation, lookup failure with map fallback, stale-address callbacks, invalid
+points, account switches and supplied-coordinate forwarding. The four pickup
+component checks were rerun after safe account initialization. TypeScript,
+focused lint and the production build passed. Google results and account data
+in tests were synthetic; live backend coordinate persistence was not tested.

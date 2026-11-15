@@ -41,6 +41,7 @@ function formHarness(brandResponse, createResponse, sellerFields = {}, options =
       if (name === '@/data/nigeriaLocations') return load('src/data/nigeriaLocations.ts');
       if (name.endsWith('structuredAddress')) return load('src/components/commerce/structuredAddress.ts');
       if (name.endsWith('supportedLocations')) return load('src/components/products/supportedLocations.ts');
+      if (name.endsWith('ProductPickupLocation')) return { default: 'pickup-location', validPickupPoint: point => !!point && typeof point.latitude === 'number' && typeof point.longitude === 'number' && Number.isFinite(point.latitude) && Number.isFinite(point.longitude) && Math.abs(point.latitude) <= 90 && Math.abs(point.longitude) <= 180 && !(point.latitude === 0 && point.longitude === 0) };
       return {};
     },
     // Unexpected polling or focus subscriptions fail the test immediately.
@@ -122,7 +123,9 @@ test('My Ads creation uses the buyer-safe schema and the user ads endpoint', asy
   assert.equal(call.url, '/api/my-ads');
   const body = JSON.parse(call.init.body);
   for (const key of ['name', 'basePrice', 'categoryId', 'productTypeId', 'locationId', 'address']) assert.ok(body[key], key);
-  for (const key of ['sellerId', 'status', 'isPublished', 'location', 'latitude', 'longitude']) assert.equal(Object.hasOwn(body, key), false, key);
+  for (const key of ['sellerId', 'status', 'isPublished', 'location']) assert.equal(Object.hasOwn(body, key), false, key);
+  assert.equal(body.latitude, 6.6);
+  assert.equal(body.longitude, 3.4);
   assert.deepEqual(harness.notifications, [{ toast: 'Submitted for review. Your ad is pending approval.' }, { redirect: '/dashboard/my-ads' }]);
   cleanup();
 });
@@ -324,6 +327,7 @@ async function prepareProduct(harness, fields = {}) {
   nodes(tree, node => node.type === 'input' && node.props.type === 'file')[0].props.onChange({
     target: { files: [{ name: 'chair.png', size: 100 }] },
   });
+  nodes(harness.render(), node => node.type === 'pickup-location')[0]?.props.onConfirm({ latitude: 6.6, longitude: 3.4 });
   return () => cleanups.forEach(cleanup => cleanup?.());
 }
 
@@ -426,7 +430,9 @@ test('seller sends typed location, selected location ID and combined address wit
   assert.equal(body.location, 'Port Harcourt');
   assert.equal(body.locationId, 'selected-area');
   assert.equal(body.address, '12B Allen Avenue, Ikeja, Lagos, Nigeria');
-  for (const key of ['latitude', 'longitude', 'houseNumber', 'street', 'state', 'lga']) assert.equal(Object.hasOwn(body,key),false);
+  for (const key of ['houseNumber', 'street', 'state', 'lga']) assert.equal(Object.hasOwn(body,key),false);
+  assert.equal(body.latitude, 6.6);
+  assert.equal(body.longitude, 3.4);
   assert.ok(harness.calls.some(call => call.url.includes('validate-city?locationId=selected-area')));
   cleanup();
 });
@@ -440,7 +446,34 @@ test('blank city blocks product submission', async () => {
   cleanup();
 });
 
-test('a new product address leaves coordinates to the backend instead of reusing seller profile coordinates', async () => {
+test('address edits invalidate pickup confirmation, including late callbacks for the previous address', async () => {
+  for (const mode of ['seller', 'ad']) {
+    const harness = formHarness(() => Response.json({ data: [] }), null, {}, { mode });
+    const cleanup = await prepareProduct(harness);
+    const previous = nodes(harness.render(), node => node.type === 'pickup-location')[0];
+    nodes(harness.render(), node => node.props?.name === 'street')[0].props.onChange({ target: { name: 'street', value: 'Another Street' } });
+    previous.props.onConfirm({ latitude: 6.6, longitude: 3.4 });
+    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+    assert.equal(harness.uploads.length, 0);
+    assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
+    assert.match(nodes(harness.render(), node => node.props?.className === 'form-error')[0].props.children, /confirm.*pickup/);
+    cleanup();
+  }
+});
+
+test('missing, zero and invalid pickup coordinates block creation before uploads', async () => {
+  for (const point of [null, { latitude: 0, longitude: 0 }, { latitude: NaN, longitude: 3 }, { latitude: 100, longitude: 3 }, { latitude: '6.6', longitude: 3.4 }]) {
+    const harness = formHarness(() => Response.json({ data: [] }));
+    const cleanup = await prepareProduct(harness);
+    nodes(harness.render(), node => node.type === 'pickup-location')[0].props.onConfirm(point);
+    await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
+    assert.equal(harness.uploads.length, 0);
+    assert.equal(harness.calls.some(call => call.init?.method === 'POST'), false);
+    cleanup();
+  }
+});
+
+test('a new product address sends its confirmed coordinates instead of stale seller profile coordinates', async () => {
   for (const seller of [
     { latitude: 5.52, longitude: 5.75 },
     { lat: '5.52', lng: '5.75' },
@@ -454,21 +487,21 @@ test('a new product address leaves coordinates to the backend instead of reusing
     assert.equal(writes.length, 1);
     const body = JSON.parse(writes[0].init.body);
     assert.equal(body.location, 'Warri');
-    assert.equal(Object.hasOwn(body, 'latitude'), false);
-    assert.equal(Object.hasOwn(body, 'longitude'), false);
+    assert.equal(body.latitude, 6.6);
+    assert.equal(body.longitude, 3.4);
     assert.equal(body.locationId, 'selected-area');
     assert.equal(body.address, '12B Allen Avenue, Ikeja, Lagos, Nigeria');
     cleanup();
   }
 });
 
-test('missing or invalid saved seller coordinates are not replaced with invented values', async () => {
+test('invalid saved seller coordinates do not override the confirmed product point', async () => {
   const harness = formHarness(() => Response.json({ data: [] }), () => Response.json({ error: 'Synthetic rejection' }, { status: 400 }), { latitude: 'bad', longitude: '' });
   const cleanup = await prepareProduct(harness);
   await nodes(harness.render(), node => node.type === 'form')[0].props.onSubmit({ preventDefault() {} });
   const body = JSON.parse(harness.calls.find(call => call.init?.method === 'POST').init.body);
-  assert.equal(Object.hasOwn(body, 'latitude'), false);
-  assert.equal(Object.hasOwn(body, 'longitude'), false);
+  assert.equal(body.latitude, 6.6);
+  assert.equal(body.longitude, 3.4);
   cleanup();
 });
 

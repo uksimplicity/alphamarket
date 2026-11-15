@@ -13,6 +13,7 @@ import { locationRows } from "@/components/products/supportedLocations";
 import { usePostingCost } from "@/components/ads/hooks";
 import { fetchPostingCost } from "@/components/ads/client";
 import PostingFee from "@/components/ads/PostingFee";
+import ProductPickupLocation, { validPickupPoint } from "@/components/products/ProductPickupLocation";
 
 const initialForm = {
   name: "",
@@ -390,6 +391,9 @@ export default function CreateProduct({ mode = "seller", onCreated = null, adsBa
   const submitting = useRef(false);
   const uncertainCreation = useRef(false);
   const [form, setForm] = useState(initialForm);
+  const [pickup, setPickup] = useState(null);
+  const pickupAddress = fullAddress(form);
+  const pickupConfirmed = pickup?.address === pickupAddress && validPickupPoint(pickup?.point);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [typeOptions, setTypeOptions] = useState([]);
   const [brandOptions, setBrandOptions] = useState([]);
@@ -624,6 +628,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null, adsBa
 
   const handleChange = (event) => {
     const { name, value } = event.target;
+    if (["houseNumber", "street", "state", "lga", "locationId"].includes(name)) setPickup(null);
     setForm((prev) => {
       if (name === "category") {
         return { ...prev, category: value, type: "" };
@@ -736,6 +741,10 @@ export default function CreateProduct({ mode = "seller", onCreated = null, adsBa
         setError("Select a local government area in the selected state.");
         return;
       }
+      if (!pickupConfirmed) {
+        setError("Locate and confirm the product pickup address before submitting.");
+        return;
+      }
     }
     if (marketplacePost && !coverFile && imageFiles.length === 0) {
       setError("Add at least one product image.");
@@ -818,6 +827,8 @@ export default function CreateProduct({ mode = "seller", onCreated = null, adsBa
     if (marketplacePost) {
       payload.locationId = form.locationId;
       payload.address = fullAddress(form);
+      payload.latitude = pickup.point.latitude;
+      payload.longitude = pickup.point.longitude;
     }
     if (form.shortDescription.trim()) payload.shortDescription = form.shortDescription.trim();
     const selectedBrandId = form.brand.trim();
@@ -828,8 +839,8 @@ export default function CreateProduct({ mode = "seller", onCreated = null, adsBa
     }
     if (stockNumber !== null) payload.stock = stockNumber;
     if (tagList.length > 0) payload.tags = tagList;
-    // Preserve the submission behavior from before the address/map UI: use the
-    // seller coordinates already supplied by the authenticated account.
+    // Legacy admin creation can still use account coordinates. Marketplace
+    // submissions use only the confirmed point for this product's address.
     const latitude = readFirstFiniteNumber(
       auth?.user?.latitude, auth?.user?.lat,
       auth?.user?.profile?.latitude, auth?.user?.profile?.lat
@@ -838,8 +849,6 @@ export default function CreateProduct({ mode = "seller", onCreated = null, adsBa
       auth?.user?.longitude, auth?.user?.lng,
       auth?.user?.profile?.longitude, auth?.user?.profile?.lng
     );
-    // A new product address is geocoded by the backend; saved account
-    // coordinates may describe a different address.
     if (!payload.address && latitude !== null) payload.latitude = latitude;
     if (!payload.address && longitude !== null) payload.longitude = longitude;
 
@@ -1175,6 +1184,7 @@ export default function CreateProduct({ mode = "seller", onCreated = null, adsBa
                     {(nigeriaLGAs[form.state] || []).map((lga) => <option key={lga} value={lga}>{lga}</option>)}
                   </select>
                 </div>
+                <ProductPickupLocation key={`${form.locationId}:${pickupAddress}`} address={pickupAddress} complete={Boolean(form.houseNumber.trim() && form.street.trim() && nigeriaLGAs[form.state]?.includes(form.lga))} disabled={loading || creationUncertain || Boolean(createdWithoutMedia)} confirmed={Boolean(pickupConfirmed)} onConfirm={(point) => setPickup({ address: pickupAddress, point })} />
               </> : null}
               {!isAd ? <div className="field">
                 <label htmlFor="product-city">Location</label>
