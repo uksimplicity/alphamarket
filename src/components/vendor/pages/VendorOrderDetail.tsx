@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getAuth } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
@@ -13,6 +13,7 @@ import EscrowStatus from "@/components/commerce/EscrowStatus";
 import OrderMoneyBreakdown from "@/components/commerce/OrderMoneyBreakdown";
 import { orderPricing } from "@/components/commerce/orderPricing";
 import { sellerOrderDetail } from "@/components/vendor/sellerOrders";
+import { ChatClient } from "@/components/chat/chatClient";
 import styles from "@/components/vendor/vendor.module.css";
 
 export default function VendorOrderDetail() {
@@ -26,6 +27,9 @@ export default function VendorOrderDetail() {
   } | null>(null);
   const [refreshing, setRefreshing] = useState(true);
   const [revision, setRevision] = useState(0);
+  const [openingChat, setOpeningChat] = useState(false);
+  const [chatError, setChatError] = useState("");
+  const chatRequest = useRef<AbortController | null>(null);
   const current = snapshot?.key === key ? snapshot : null;
   const order = current?.order ?? null;
   const error = current?.error || "";
@@ -81,6 +85,11 @@ export default function VendorOrderDetail() {
     };
   }, [orderId, user?.id, key, revision]);
 
+  useEffect(() => {
+    setOpeningChat(false); setChatError("");
+    return () => { chatRequest.current?.abort(); chatRequest.current = null; };
+  }, [key]);
+
   const summary = useMemo(() => {
     if (!order) return null;
 
@@ -93,6 +102,7 @@ export default function VendorOrderDetail() {
       id: String(order.id ?? order.order_id ?? orderId ?? "-"),
       status: String(order.status ?? "pending"),
       customer: String(order.customer_name ?? customerRecord?.name ?? "Customer"),
+      buyerId: String(order.buyer_id ?? order.buyerId ?? order.BuyerID ?? ""),
       createdAt: String(order.created_at ?? order.createdAt ?? "-"),
       deliveryAddress: String(
         order.dropoff_address ?? order.delivery_address ?? order.address ?? "-"
@@ -104,6 +114,24 @@ export default function VendorOrderDetail() {
   }, [order, orderId]);
 
   const tracking = current?.tracking ?? (order ? orderDelivery(order) : null);
+  async function openChat(contact: "buyer" | "rider") {
+    if (!summary || !orderId || chatRequest.current) return;
+    if (contact === "rider" && !tracking?.id) return;
+    const controller = new AbortController();
+    chatRequest.current = controller;
+    setOpeningChat(true); setChatError("");
+    try {
+      const client = new ChatClient();
+      const thread = contact === "buyer"
+        ? await client.startOrder(orderId, summary.buyerId, controller.signal)
+        : await client.startDelivery(tracking!.id, tracking!.riderId, controller.signal);
+      if (!controller.signal.aborted) navigate(`/vendor/messages?conversationId=${encodeURIComponent(thread.id)}`);
+    } catch (failure) {
+      if (!controller.signal.aborted) setChatError(failure instanceof Error ? failure.message : `Could not open the ${contact} conversation. Please try again.`);
+    } finally {
+      if (!controller.signal.aborted) { chatRequest.current = null; setOpeningChat(false); }
+    }
+  }
 
   if (loading) {
     return (
@@ -146,6 +174,16 @@ export default function VendorOrderDetail() {
           Back to orders
         </button>
       </div>
+
+      <div className={styles.cardHeader}>
+        <div><h2 className={styles.cardTitle}>Order conversations</h2><p className={styles.cardSubtitle}>Contact the buyer or assigned rider about this order, including after payment.</p></div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={styles.actionBtn} disabled={openingChat} onClick={() => void openChat("buyer")}>Chat with buyer</button>
+          <button type="button" className={styles.actionBtn} disabled={openingChat || !tracking?.id} onClick={() => void openChat("rider")}>Chat with rider</button>
+        </div>
+      </div>
+      {openingChat ? <p role="status">Opening conversation...</p> : null}
+      {chatError ? <p role="alert">{chatError}</p> : null}
 
       <section aria-label="Delivery and rider tracking" className={styles.progressList}>
         <div className={styles.cardHeader}>

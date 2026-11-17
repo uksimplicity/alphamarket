@@ -100,6 +100,8 @@ test('only a readable empty list becomes zero; failures and malformed responses 
 
 function pageHarness(response, component = 'VendorOrders') {
   const slots = [], effects = [], calls = [], timers = new Map(), focusListeners = new Map(), visibilityListeners = new Map();
+  const chatCalls = [], navigations = [];
+  let startChat = async () => { throw new Error('Chat unavailable'); };
   let cursor = 0;
   let timerId = 0, user = { id: 'seller' };
   const document = { visibilityState: 'visible', addEventListener: (name, fn) => visibilityListeners.set(name, fn), removeEventListener: name => visibilityListeners.delete(name) };
@@ -119,9 +121,14 @@ function pageHarness(response, component = 'VendorOrders') {
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
       if (name === 'react') return {
         useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; },
+        useRef(initial) { const i = cursor++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; },
         useMemo(fn) { return fn(); }, useEffect(effect) { effects.push(effect); },
       };
-      if (name === 'react-router-dom') return { Link: 'link', useParams: () => ({ orderId: 'order-uuid' }), useNavigate: () => () => {} };
+      if (name === 'react-router-dom') return { Link: 'link', useParams: () => ({ orderId: 'order-uuid' }), useNavigate: () => path => navigations.push(path) };
+      if (name.endsWith('chatClient')) return { ChatClient: class {
+        startOrder(...args) { chatCalls.push({ type: 'order', args }); return startChat(...args); }
+        startDelivery(...args) { chatCalls.push({ type: 'delivery', args }); return startChat(...args); }
+      } };
       if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'seller-token', user }) };
       if (name.endsWith('useAuthUser')) return { useAuthUser: () => user };
       if (name.endsWith('localAccountData')) return { accountStamp: () => user.id, checkAccount(stamp) { if (stamp !== user.id) throw new Error('Account changed'); } };
@@ -131,7 +138,7 @@ function pageHarness(response, component = 'VendorOrders') {
       throw new Error(name);
     },
   });
-  return { effects, calls, timers, document, focusListeners, visibilityListeners, changeUser: id => { user = { id }; }, render() { cursor = 0; return loaded.exports.default(); } };
+  return { effects, calls, timers, document, focusListeners, visibilityListeners, chatCalls, navigations, chat: fn => { startChat = fn; }, changeUser: id => { user = { id }; }, render() { cursor = 0; return loaded.exports.default(); } };
 }
 function nodes(tree, match) {
   if (Array.isArray(tree)) return tree.flatMap(child => nodes(child, match));
@@ -239,6 +246,29 @@ test('notification destination renders nested order details including payment st
   assert.ok(nodes(tree, node => node.props?.children === 'paid').length);
   assert.ok(nodes(tree, node => node.props?.children === 'Example address').length);
   assert.equal(nodes(tree, node => node.props?.children === 'Unable to load order').length, 0);
+});
+
+test('paid seller orders open the buyer and rider conversations without payment gating or duplicate starts', async () => {
+  const h = pageHarness(() => Response.json({ data: { ...fixture, BuyerID: 'buyer', DeliveryID: 'delivery', RiderID: 'rider', PaymentStatus: 'paid', Status: 'processing' } }), 'VendorOrderDetail');
+  h.render(); const cleanup = h.effects[0](); await settle();
+  let finish;
+  h.chat(() => new Promise(resolve => { finish = resolve; }));
+  const buyer = nodes(h.render(), node => node.type === 'button' && node.props.children === 'Chat with buyer')[0];
+  assert.equal(buyer.props.disabled, false); buyer.props.onClick(); buyer.props.onClick();
+  assert.equal(h.chatCalls.length, 1); assert.equal(h.chatCalls[0].type, 'order');
+  assert.deepEqual(h.chatCalls[0].args.slice(0, 2), ['order-uuid', 'buyer']);
+  finish({ id: 'buyer-thread' }); await settle();
+  assert.equal(h.navigations.at(-1), '/vendor/messages?conversationId=buyer-thread');
+  h.chat(async () => ({ id: 'rider-thread' }));
+  nodes(h.render(), node => node.type === 'button' && node.props.children === 'Chat with rider')[0].props.onClick(); await settle();
+  assert.equal(h.chatCalls.at(-1).type, 'delivery');
+  assert.deepEqual(h.chatCalls.at(-1).args.slice(0, 2), ['delivery', 'rider']);
+  assert.equal(h.navigations.at(-1), '/vendor/messages?conversationId=rider-thread');
+  h.chat(async () => { throw new Error('Insufficient permissions'); });
+  nodes(h.render(), node => node.type === 'button' && node.props.children === 'Chat with buyer')[0].props.onClick(); await settle();
+  assert.ok(nodes(h.render(), node => node.props?.role === 'alert' && node.props.children === 'Insufficient permissions').length);
+  assert.equal(h.navigations.length, 2);
+  cleanup();
 });
 
 test('seller escrow displays the PascalCase status even when delivery lookup is denied', async () => {

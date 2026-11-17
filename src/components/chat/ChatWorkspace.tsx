@@ -105,12 +105,28 @@ function Conversation({ client, thread, back, onRead }: { client: ChatClient; th
   </section>;
 }
 
-function AccountChat({ productId, productTitle }: { productId?: string; productTitle?: string }) {
+function AccountChat({ productId, productTitle, conversationId }: { productId?: string; productTitle?: string; conversationId?: string }) {
   const [client] = useState(() => new ChatClient());
   const [threads, setThreads] = useState<ChatThread[]>([]), [selected, setSelected] = useState<ChatThread | null>(null);
   const [error, setError] = useState(""), [loading, setLoading] = useState(true), [starting, setStarting] = useState(false), [revision, setRevision] = useState(0);
   const [pages, setPages] = useState(1), [total, setTotal] = useState(0);
   const lock = useRef(false), lifetime = useRef<AbortController | null>(null);
+  const [openingError, setOpeningError] = useState(""), [openRevision, setOpenRevision] = useState(0);
+  useEffect(() => {
+    if (!conversationId) return;
+    const controller = new AbortController();
+    setOpeningError("");
+    setSelected(null);
+    async function open() {
+      try {
+        const thread = await client.thread(conversationId!, controller.signal);
+        if (thread.id !== conversationId) throw new Error("The returned conversation does not match this request.");
+        if (!controller.signal.aborted) { setSelected(thread); setThreads(previous => mergeThreads(previous, [thread])); }
+      } catch (failure) { if (!controller.signal.aborted) setOpeningError(failureText(failure)); }
+    }
+    void open();
+    return () => controller.abort();
+  }, [client, conversationId, openRevision]);
   useEffect(() => {
     const controller = new AbortController(); lifetime.current = controller;
     let busy = false;
@@ -148,6 +164,7 @@ function AccountChat({ productId, productTitle }: { productId?: string; productT
       {productId ? <section className={styles.directory}><h2>{productTitle || "Product enquiry"}</h2><button type="button" disabled={starting} onClick={() => void start()}><ShopperIcon name="chat" size={18} />{starting ? "Opening..." : "Message seller"}</button></section> : null}
       {loading ? <p role="status" className={styles.notice}>Loading conversations...</p> : null}
       {error ? <p role="alert" className={styles.error}>{error}</p> : null}
+      {openingError ? <p role="alert" className={styles.error}>{openingError} <button type="button" onClick={() => setOpenRevision(value => value + 1)}>Retry opening conversation</button></p> : null}
       {!loading && !error && !threads.length ? <p className={styles.empty}>No conversations yet. Open a product and choose “Ask the seller a question” to start one.</p> : null}
       <nav aria-label="Conversation list">{threads.map(thread => <button type="button" key={thread.id} className={styles.thread} aria-pressed={selected?.id === thread.id} onClick={() => setSelected(thread)}><span className={styles.avatar}><ShopperIcon name="user" size={19} /></span><span><strong>{thread.peer.name}</strong><small>{thread.last_message || thread.type + " conversation"}</small><small>{thread.status}{thread.unread > 0 ? " · " + thread.unread + " unread" : ""}</small></span><ShopperIcon name="arrow" size={16} /></button>)}</nav>
       {threads.length < total ? <button type="button" className={styles.notice} disabled={loading || starting} onClick={() => { setLoading(true); setPages(p => p + 1); }}>Load more conversations</button> : null}
@@ -155,7 +172,7 @@ function AccountChat({ productId, productTitle }: { productId?: string; productT
     {selected ? <Conversation key={selected.id} client={client} thread={selected} back={() => setSelected(null)} onRead={id => setThreads(previous => previous.map(t => t.id === id ? { ...t, unread: 0 } : t))} /> : <section className={styles.placeholder}><ShopperIcon name="chat" size={48} /><h2>A conversation starts here.</h2><p>Choose a conversation, or open a product to contact its seller.</p></section>}
   </div>;
 }
-export default function ChatWorkspace(props: { productId?: string; productTitle?: string }) {
+export default function ChatWorkspace(props: { productId?: string; productTitle?: string; conversationId?: string }) {
   const user = useAuthUser();
   if (!user?.id) return <p>Please sign in to use Messages.</p>;
   return <AccountChat key={user.id + ":" + getAuth()?.access_token} {...props} />;

@@ -61,6 +61,30 @@ test('client uses envelopes, context IDs, before cursors, plain body sends and r
   await client.read('thread-1'); assert.equal(calls[4].init.body, undefined);
   for (const call of calls) assert.equal(call.init.headers.Authorization, 'Bearer buyer-token');
 });
+test('seller starts contextual buyer and rider chats with matching participants and without sending messages', async () => {
+  const auth = browser(); auth.setAuth({ access_token: 'seller-token', user: { id: 'seller' } });
+  const { ChatClient } = load('src/components/chat/chatClient.ts'); const client = new ChatClient(); const calls = [];
+  global.fetch = async (url, init) => {
+    calls.push({ url, init }); const body = JSON.parse(init.body);
+    const data = { ...conversation(), type: body.type, context_id: body.context_id };
+    if (body.type === 'delivery') data.participants = [{ user_id: 'seller', name: 'Seller', role: 'seller' }, { user_id: 'rider', name: 'Rider', role: 'rider' }];
+    return Response.json({ success: true, data });
+  };
+  assert.equal((await client.startOrder('paid-order', 'buyer')).peer.id, 'buyer');
+  assert.equal((await client.startDelivery('delivery', 'rider')).peer.id, 'rider');
+  assert.deepEqual(calls.map(call => JSON.parse(call.init.body)), [{ type: 'order', context_id: 'paid-order' }, { type: 'delivery', context_id: 'delivery' }]);
+  assert.ok(calls.every(call => call.url === '/api/chat/conversations' && call.init.headers.Authorization === 'Bearer seller-token'));
+  for (const data of [
+    { ...conversation(), type: 'order', context_id: 'other-order' },
+    { ...conversation(), type: 'order', context_id: 'paid-order', participants: [{ user_id: 'seller', name: 'Seller', role: 'seller' }, { user_id: 'other', name: 'Other', role: 'buyer' }] },
+  ]) {
+    global.fetch = async () => Response.json({ success: true, data });
+    await assert.rejects(client.startOrder('paid-order', 'buyer'), /invalid response/);
+  }
+  global.fetch = async () => Response.json({ success: true, data: { ...conversation(), type: 'delivery', context_id: 'delivery' } });
+  await assert.rejects(client.startDelivery('delivery'), /invalid response/);
+});
+
 test('malformed success envelopes and cross-conversation messages are rejected', async () => {
   browser(); const { ChatClient } = load('src/components/chat/chatClient.ts'); const client = new ChatClient();
   for (const data of [[], { data: 'string' }, { data: [message()], success: true }, { data: [conversation()], meta: { total: -1 } }]) {

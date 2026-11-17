@@ -58,6 +58,20 @@ export class ChatClient {
   }, undefined, signal); }
   thread(threadId: string, signal?: AbortSignal) { return this.request("GET", "conversations/" + encodeURIComponent(threadId), v => decodeThread(v.data, this.myId), undefined, signal); }
   start(productId: string, signal?: AbortSignal) { return this.request("POST", "conversations", v => decodeThread(v.data, this.myId), { type: "product", context_id: productId }, signal); }
+  startOrder(orderId: string, buyerId = "", signal?: AbortSignal) {
+    return this.request("POST", "conversations", v => {
+      const thread = decodeThread(v.data, this.myId);
+      if (thread.type !== "order" || thread.contextId !== orderId || buyerId && thread.peer.id !== buyerId) throw new Error();
+      return thread;
+    }, { type: "order", context_id: orderId }, signal);
+  }
+  startDelivery(deliveryId: string, riderId = "", signal?: AbortSignal) {
+    return this.request("POST", "conversations", v => {
+      const thread = decodeThread(v.data, this.myId);
+      if (thread.type !== "delivery" || thread.contextId !== deliveryId || (riderId ? thread.peer.id !== riderId : thread.peer.role.trim().toLowerCase() !== "rider")) throw new Error();
+      return thread;
+    }, { type: "delivery", context_id: deliveryId }, signal);
+  }
   messages(threadId: string, before = "", signal?: AbortSignal) { return this.request("GET", "conversations/" + encodeURIComponent(threadId) + "/messages?limit=30" + (before ? "&before=" + encodeURIComponent(before) : ""), v => {
     const rows = list(v.data, decodeMessage);
     if (rows.some(row => row.conversation_id !== threadId)) throw new Error();

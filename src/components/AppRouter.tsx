@@ -33,7 +33,7 @@ const VendorWallet = lazy(() => import("./ads/VendorAdsRoutes").then(module => (
 const ProductDetailRoute = lazy(() => import("./products/ProductDetailRoute"));
 const SellerStoreRoute = lazy(() => import("./store/SellerStoreRoute"));
 import SessionBoundary from "./auth/SessionBoundary";
-const ChatWorkspace = lazy(() => import("./chat/ChatWorkspace"));
+const VendorMessages = lazy(() => import("./vendor/pages/VendorMessages"));
 const SavedAddresses = lazy(() => import("./commerce/SavedAddresses"));
 const NotificationsPanel = lazy(() => import("./notifications/NotificationsPanel"));
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
@@ -76,7 +76,7 @@ export default function AppRouter() {
           <Route path="my-ads/create" element={page(<VendorPostAd />)} />
           <Route path="my-ads/:adId" element={page(<VendorAdDetail />)} />
           <Route path="wallet" element={page(<VendorWallet />)} />
-          <Route path="messages" element={page(<ChatWorkspace />)} />
+          <Route path="messages" element={page(<VendorMessages />)} />
           <Route path="addresses" element={page(<SavedAddresses />)} />
           <Route path="notifications" element={page(<NotificationsPanel />)} />
         </Route>
