@@ -7,11 +7,11 @@ import { rememberSession, verifySession } from "@/components/auth/sessionClient"
 import { sellerOnboarding } from "./sellerOnboarding";
 import styles from "./sellerShell.module.css";
 
-export default function SellerOnboardingBanner({ status, hasStore }: { status?: string; hasStore: boolean }) {
+export default function SellerOnboardingBanner({ status, hasStore, hideStorePrompt = false }: { status?: string; hasStore: boolean; hideStorePrompt?: boolean }) {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
   const notice = sellerOnboarding(status, hasStore);
-  if (!notice) return null;
+  if (!notice || hideStorePrompt && notice.href === "/vendor/store") return null;
 
   async function refresh() {
     const saved = getAuth(), epoch = authGeneration();

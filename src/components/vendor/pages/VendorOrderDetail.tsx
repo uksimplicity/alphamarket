@@ -11,10 +11,13 @@ import { escrowStatusFromOrder } from "@/components/commerce/escrow";
 import { orderPaymentStatus } from "@/components/commerce/payments";
 import EscrowStatus from "@/components/commerce/EscrowStatus";
 import OrderMoneyBreakdown from "@/components/commerce/OrderMoneyBreakdown";
-import { orderPricing } from "@/components/commerce/orderPricing";
+import { orderPricing, pricingMoney } from "@/components/commerce/orderPricing";
 import { sellerOrderDetail } from "@/components/vendor/sellerOrders";
+import { customerName } from "@/components/vendor/sellerData";
 import { ChatClient } from "@/components/chat/chatClient";
+import Icon from "@/components/admin/AdminIcon";
 import styles from "@/components/vendor/vendor.module.css";
+import detail from "@/components/vendor/sellerOrderDetail.module.css";
 
 export default function VendorOrderDetail() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -94,15 +97,11 @@ export default function VendorOrderDetail() {
     if (!order) return null;
     const pricing = orderPricing(order);
 
-    const customerRecord =
-      order.customer && typeof order.customer === "object"
-        ? (order.customer as Record<string, unknown>)
-        : null;
-
     return {
       id: String(order.id ?? order.order_id ?? orderId ?? "-"),
+      reference: String(order.order_number ?? order.orderNumber ?? order.OrderNumber ?? ""),
       status: String(order.status ?? "pending"),
-      customer: String(order.customer_name ?? customerRecord?.name ?? "Customer"),
+      customer: customerName(order) || "Name not provided",
       buyerId: String(order.buyer_id ?? order.buyerId ?? order.BuyerID ?? ""),
       createdAt: String(order.created_at ?? order.createdAt ?? "-"),
       deliveryAddress: String(
@@ -162,73 +161,61 @@ export default function VendorOrderDetail() {
   }
 
   return (
-    <section className={styles.card}>
-      <div className={styles.cardHeader}>
-        <div>
-          <div className={styles.cardTitle}>Order Details</div>
-          <div className={styles.cardSubtitle}>Order ID: {summary.id}</div>
+    <div className={detail.page}>
+      <button type="button" className={detail.back} onClick={() => navigate("/vendor/orders")}><Icon name="chevron" size={14} />Back to orders</button>
+      <header className={detail.hero}>
+        <div><p className={detail.eyebrow}>Order Details</p><h1>{summary.reference || `Order #${summary.id.slice(-8).toUpperCase()}`}</h1>
+          <p className={detail.date}>{Number.isFinite(Date.parse(summary.createdAt)) ? <>Placed <time dateTime={summary.createdAt}>{new Date(summary.createdAt).toLocaleString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}</time></> : "Order date not reported"}</p>
         </div>
-        <button
-          type="button"
-          className={styles.actionBtn}
-          onClick={() => navigate("/vendor/orders")}
-        >
-          Back to orders
-        </button>
-      </div>
+        <div className={detail.badges}>
+          <span className={detail.badge}><span className={detail.dot} /><span>{summary.status.replaceAll("_", " ")}</span></span>
+          <span className={`${detail.badge} ${summary.paymentStatus === "paid" ? detail.paid : ""}`}>Payment: <span>{summary.paymentStatus.replaceAll("_", " ")}</span></span>
+        </div>
+      </header>
 
-      <div className={styles.cardHeader}>
-        <div><h2 className={styles.cardTitle}>Order conversations</h2><p className={styles.cardSubtitle}>Contact the buyer or assigned rider about this order, including after payment.</p></div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className={styles.actionBtn} disabled={openingChat} onClick={() => void openChat("buyer")}>Chat with buyer</button>
-          <button type="button" className={styles.actionBtn} disabled={openingChat || !tracking?.id} onClick={() => void openChat("rider")}>Chat with rider</button>
-        </div>
-      </div>
-      {openingChat ? <p role="status">Opening conversation...</p> : null}
-      {chatError ? <p role="alert">{chatError}</p> : null}
+      <div className={detail.columns}>
+        <div className={detail.main}>
+          <section aria-label="Delivery and rider tracking" className={detail.panel}>
+            <div className={detail.heading}><div className={detail.headingLabel}><span className={detail.icon}><Icon name="delivery" size={19} /></span><h2>Delivery &amp; rider</h2></div>
+              <button type="button" className={detail.refresh} disabled={refreshing} onClick={() => setRevision(value => value + 1)}>{refreshing ? "Refreshing..." : "Refresh tracking"}</button>
+            </div>
+            {tracking?.required === false ? <p className={detail.muted}>No rider delivery is required for this order.</p> : <>
+              <div className={detail.status}><span className={detail.icon}><Icon name="delivery" size={24} /></span><div><span className={detail.statusLabel}>Delivery status</span><strong>{tracking ? orderDeliveryLabel(tracking) : "Awaiting delivery update"}</strong></div></div>
+              {current?.riderError ? <details className={detail.notice}><summary>Delivery tracking is unavailable to this account</summary><p role="alert">{current.riderError} Use Refresh tracking to check again.</p></details> : null}
+              {tracking?.updatedAt && Number.isFinite(Date.parse(tracking.updatedAt)) ? <p className={detail.sync}>Delivery updated <time dateTime={tracking.updatedAt}>{new Date(tracking.updatedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time></p> : null}
+            </>}
+            {current?.checkedAt ? <p className={detail.sync}>Last checked <time dateTime={current.checkedAt}>{new Date(current.checkedAt).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}</time> · Updates every 30 seconds while visible</p> : null}
+          </section>
 
-      <section aria-label="Delivery and rider tracking" className={styles.progressList}>
-        <div className={styles.cardHeader}>
-          <h2 className={styles.cardTitle}>Delivery &amp; rider</h2>
-          <button type="button" className={styles.actionBtn} disabled={refreshing} onClick={() => setRevision(value => value + 1)}>
-            {refreshing ? "Refreshing..." : "Refresh tracking"}
-          </button>
+          <section className={detail.panel} aria-label="Buyer and rider contacts">
+            <div className={detail.heading}><div className={detail.headingLabel}><span className={detail.icon}><Icon name="accounts" size={18} /></span><h2>People &amp; delivery</h2></div></div>
+            <div className={detail.contacts}>
+              <div className={detail.contact}><p className={detail.contactLabel}>Buyer</p><p className={detail.contactName}>{summary.customer}</p><p className={detail.muted}>Questions about this order</p>
+                <button type="button" aria-label="Chat with buyer" className={detail.chat} disabled={openingChat} onClick={() => void openChat("buyer")}><Icon name="chat" size={14} /><span>Chat with buyer</span></button>
+              </div>
+              {tracking?.required !== false ? <div className={detail.contact}><p className={detail.contactLabel}>Assigned rider</p><p className={detail.contactName}>{tracking?.riderId ? current?.rider?.name || "Assigned; name not reported" : "Rider assignment has not been reported."}</p>
+                {tracking?.riderId ? <span className={detail.phone}>{current?.rider?.phone || "Not reported"}</span> : null}
+                <button type="button" aria-label="Chat with rider" className={detail.chat} disabled={openingChat || !tracking?.id} onClick={() => void openChat("rider")}><Icon name="chat" size={14} /><span>Chat with rider</span></button>
+              </div> : null}
+            </div>
+            {openingChat ? <p role="status" className={detail.muted}>Opening conversation...</p> : null}
+            {chatError ? <p role="alert" className={detail.error}>{chatError}</p> : null}
+            <div className={detail.address}><span className={detail.icon}><Icon name="delivery" size={17} /></span><div><p className={detail.contactLabel}>Delivery address</p><address>{summary.deliveryAddress}</address></div></div>
+            {summary.notes && summary.notes !== "-" ? <div className={detail.notes}><p className={detail.contactLabel}>Order notes</p><p className={detail.muted}>{summary.notes}</p></div> : null}
+          </section>
         </div>
-        {tracking?.required === false ? <p>No rider delivery is required for this order.</p> : <>
-          <div className={styles.progressRow}><span>Delivery status</span><span className={styles.pill}>{tracking ? orderDeliveryLabel(tracking) : "Awaiting delivery update"}</span></div>
-          <div className={styles.progressRow}><span>Assigned rider</span><span>{tracking?.riderId ? current?.rider?.name || "Assigned; name not reported" : "Rider assignment has not been reported."}</span></div>
-          {tracking?.riderId ? <div className={styles.progressRow}><span>Rider contact</span><span>{current?.rider?.phone || "Not reported"}</span></div> : null}
-          {current?.riderError ? <p role="alert">{current.riderError} Use Refresh tracking to check again.</p> : null}
-          {tracking?.updatedAt && Number.isFinite(Date.parse(tracking.updatedAt)) ? <div className={styles.progressRow}><span>Delivery updated</span><time dateTime={tracking.updatedAt}>{new Date(tracking.updatedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time></div> : null}
-        </>}
-        {current?.checkedAt ? <p className={styles.cardSubtitle}>Last checked: <time dateTime={current.checkedAt}>{new Date(current.checkedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time>. Updates every 30 seconds while this page is visible.</p> : null}
-      </section>
 
-      <div className={styles.progressList}>
-        <OrderMoneyBreakdown pricing={orderPricing(order)} seller />
-        <EscrowStatus status={summary.escrowStatus} sellerAmount={summary.sellerProceeds} />
-        <div className={styles.progressRow}><span>Payment status</span><span className={styles.pill}>{summary.paymentStatus}</span></div>
-        <div className={styles.progressRow}>
-          <span>Status</span>
-          <span className={styles.pill}>{summary.status}</span>
-        </div>
-        <div className={styles.progressRow}>
-          <span>Customer</span>
-          <span>{summary.customer}</span>
-        </div>
-        <div className={styles.progressRow}>
-          <span>Created</span>
-          <span>{summary.createdAt}</span>
-        </div>
-        <div className={styles.progressRow}>
-          <span>Delivery Address</span>
-          <span>{summary.deliveryAddress}</span>
-        </div>
-        <div className={styles.progressRow}>
-          <span>Notes</span>
-          <span>{summary.notes}</span>
-        </div>
+        <aside className={detail.aside} aria-label="Seller earnings and escrow">
+          <section className={`${detail.panel} ${detail.earnings}`}>
+            <div className={detail.heading}><div className={detail.headingLabel}><span className={detail.icon}><Icon name="wallet" size={18} /></span><h2>Your earnings</h2></div></div>
+            <p className={detail.eyebrow}>Seller proceeds</p><p className={detail.amount}>{pricingMoney(summary.sellerProceeds)}</p><p className={detail.muted}>Your share of this order</p>
+            <div className={detail.escrow}><EscrowStatus status={summary.escrowStatus} sellerAmount={summary.sellerProceeds} /></div>
+            <details className={detail.breakdown}><summary>Price breakdown</summary><OrderMoneyBreakdown pricing={orderPricing(order)} seller /></details>
+            <button type="button" className={detail.wallet} onClick={() => navigate("/vendor/payments")}><Icon name="wallet" size={15} />Wallet &amp; payouts<Icon name="chevron" size={13} /></button>
+          </section>
+        </aside>
       </div>
-    </section>
+      <details className={detail.reference}><summary>Order reference</summary><p>Order ID: {summary.id}</p></details>
+    </div>
   );
 }
