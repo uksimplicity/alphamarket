@@ -111,11 +111,7 @@ export default function OrderDetailPage() {
           <p className={styles.caption}>{order.paymentStatus === "paid" ? "Payment received" : `Payment: ${order.paymentStatus.replaceAll("_", " ")}`}</p>
           {order.pricing.issues.length ? <p role="alert" className={styles.alert}>Order pricing could not be confirmed. Please refresh the order pricing.</p> : null}
           <details className={styles.breakdown}><summary>Price breakdown</summary><OrderMoneyBreakdown pricing={order.pricing} /></details>
-          <div className={styles.receipt} aria-label="Payment protection">
-          <h3>Payment &amp; receipt</h3>
-          {canConfirmReceipt(order, user?.id) ? <div className="mt-4"><p className="mb-3 text-sm text-slate-600">Confirm only after you have received your order. Confirming receipt can release the funds held for this order.</p><Button disabled={submitting || receiptSent || uncertain} onClick={() => confirmation.current?.showModal()}>{receiptSent ? "Receipt confirmed" : "Confirm receipt"}</Button></div> : null}
-          <div className="mt-4"><button type="button" className={styles.refresh} disabled={submitting || refreshing} onClick={reload}><ShopperIcon name="refresh" size={13} />Refresh order status</button></div>
-          </div>
+          {canConfirmReceipt(order, user?.id) ? <div className={styles.receipt} aria-label="Confirm order receipt"><p className="mb-3 text-sm text-slate-600">Confirm only after you have received your order. Confirming receipt can release the funds held for this order.</p><Button disabled={submitting || receiptSent || uncertain} onClick={() => confirmation.current?.showModal()}>{receiptSent ? "Receipt confirmed" : "Confirm receipt"}</Button></div> : null}
           <p className={styles.security}><ShopperIcon name="shield" size={16} />Payment and delivery updates are shown as confirmed by Alpha Marketplace.</p>
         </section>
       </aside>
