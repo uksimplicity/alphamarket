@@ -9,6 +9,7 @@ import styles from "@/components/vendor/vendor.module.css";
 import { pricingMoney } from "@/components/commerce/orderPricing";
 import { loadOrderCustomerNames, loadSellerOrders } from "@/components/vendor/sellerOrders";
 import { needsFulfillment, type SellerOrder } from "@/components/vendor/sellerData";
+import { orderDeliveryLabel } from "@/components/vendor/orderDelivery";
 
 function createdDate(value: string) {
   const date = new Date(value);
@@ -23,14 +24,19 @@ export default function VendorOrders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const orders = snapshot.owner === user?.id ? snapshot.orders : null;
 
   useEffect(() => {
     const controller = new AbortController();
+    let inFlight = false;
+    setLoading(true);
+    setError("");
+    setSnapshot({ owner: "", orders: null });
     async function loadOrders() {
-      setLoading(true);
-      setError("");
-      setSnapshot({ owner: "", orders: null });
+      if (inFlight || controller.signal.aborted) return;
+      inFlight = true;
+      setRefreshing(true);
       try {
         const stamp = accountStamp();
         const auth = getAuth();
@@ -56,15 +62,22 @@ export default function VendorOrders() {
         if (controller.signal.aborted) return;
         checkAccount(stamp);
         setSnapshot({ owner, orders: namedRows });
+        setError("");
       } catch (err) {
         if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : "Failed to load orders.");
+        setSnapshot({ owner: "", orders: null });
       } finally {
-        if (!controller.signal.aborted) setLoading(false);
+        inFlight = false;
+        if (!controller.signal.aborted) { setLoading(false); setRefreshing(false); }
       }
     }
     void loadOrders();
-    return () => controller.abort();
+    const visibleRefresh = () => { if (document.visibilityState === "visible") void loadOrders(); };
+    const timer = window.setInterval(visibleRefresh, 30000);
+    window.addEventListener("focus", visibleRefresh);
+    document.addEventListener("visibilitychange", visibleRefresh);
+    return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", visibleRefresh); document.removeEventListener("visibilitychange", visibleRefresh); };
   }, [user?.id, revision]);
 
   const summary = useMemo(() => ({
@@ -98,10 +111,11 @@ export default function VendorOrders() {
       <section className={styles.card}>
         <div className={styles.cardHeader}>
           <div className={styles.cardTitle}>Orders</div>
-          <button type="button" className={styles.actionBtn} disabled={loading} onClick={() => setRevision(value => value + 1)}>Refresh</button>
+          <button type="button" className={styles.actionBtn} disabled={loading || refreshing} onClick={() => setRevision(value => value + 1)}>{refreshing ? "Refreshing..." : "Refresh"}</button>
         </div>
         {loading ? <div className={styles.cardSubtitle}>Loading orders...</div> : null}
         {error ? <div role="alert" className={styles.cardSubtitle}>{error}</div> : null}
+        <p className={styles.cardSubtitle}>Delivery updates refresh every 30 seconds while this page is visible.</p>
         {!loading && !error && orders?.length === 0 ? (
           <div className={styles.cardSubtitle}>No orders yet.</div>
         ) : null}
@@ -117,6 +131,7 @@ export default function VendorOrders() {
                   <th>Seller proceeds</th>
                   <th>Payment</th>
                   <th>Status</th>
+                  <th>Delivery</th>
                   <th>Created</th>
                 </tr>
               </thead>
@@ -136,6 +151,7 @@ export default function VendorOrders() {
                     <td>
                       <span className={styles.pill}>{order.status}</span>
                     </td>
+                    <td><span className={styles.pill}>{orderDeliveryLabel(order.delivery)}</span></td>
                     <td>{createdDate(order.createdAt)}</td>
                   </tr>
                 ))}

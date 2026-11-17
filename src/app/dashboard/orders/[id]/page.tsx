@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 import { getAuth } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
 import { canConfirmReceipt } from "@/components/commerce/escrow";
-import EscrowStatus from "@/components/commerce/EscrowStatus";
 import ReviewDraftButton from "@/components/commerce/ReviewDraftButton";
 import OrderMoneyBreakdown from "@/components/commerce/OrderMoneyBreakdown";
 import { paymentError } from "@/components/commerce/payments";
@@ -45,7 +44,7 @@ export default function OrderDetailPage() {
       const payload = text ? JSON.parse(text) : null;
       if (!response.ok || payload?.success === false) throw new Error(paymentError(payload, "Delivery confirmation was not accepted."));
       setReceiptSent(true);
-      setFeedback("Receipt confirmation accepted. The latest order and escrow statuses appear below.");
+      setFeedback("Receipt confirmation accepted. The latest order status appears below.");
       confirmation.current?.close();
       reload();
     } catch (err) {
@@ -119,7 +118,6 @@ export default function OrderDetailPage() {
         </section>
         <section className={styles.panel} aria-label="Payment protection">
           <div className={styles.panelHeading}><div className={styles.headingLabel}><span className={styles.icon}><ShopperIcon name="shield" size={18} /></span><h2>Payment & receipt</h2></div></div>
-          <EscrowStatus status={order.escrowStatus} />
           {canConfirmReceipt(order, user?.id) ? <div className="mt-4"><p className="mb-3 text-sm text-slate-600">Confirm only after you have received your order. Confirming receipt can release the funds held for this order.</p><Button disabled={submitting || receiptSent || uncertain} onClick={() => confirmation.current?.showModal()}>{receiptSent ? "Receipt confirmed" : "Confirm receipt"}</Button></div> : null}
           <div className="mt-4"><button type="button" className={styles.refresh} disabled={submitting || refreshing} onClick={reload}><ShopperIcon name="refresh" size={13} />Refresh order status</button></div>
         </section>

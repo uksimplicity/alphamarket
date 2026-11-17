@@ -5,7 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { getAuth } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
-import { assignedRider, deliveryStatusLabel, orderDelivery, type AssignedRider } from "@/components/vendor/orderDelivery";
+import { assignedRider, orderDeliveryLabel, orderDelivery, type AssignedRider } from "@/components/vendor/orderDelivery";
 import { escrowStatusFromOrder } from "@/components/commerce/escrow";
 import { orderPaymentStatus } from "@/components/commerce/payments";
 import EscrowStatus from "@/components/commerce/EscrowStatus";
@@ -178,7 +178,7 @@ export default function VendorOrderDetail() {
           </button>
         </div>
         {tracking?.required === false ? <p>No rider delivery is required for this order.</p> : <>
-          <div className={styles.progressRow}><span>Delivery status</span><span className={styles.pill}>{deliveryStatusLabel(tracking?.status || "")}</span></div>
+          <div className={styles.progressRow}><span>Delivery status</span><span className={styles.pill}>{tracking ? orderDeliveryLabel(tracking) : "Awaiting delivery update"}</span></div>
           <div className={styles.progressRow}><span>Assigned rider</span><span>{tracking?.riderId ? current?.rider?.name || "Assigned; name not reported" : "Rider assignment has not been reported."}</span></div>
           {tracking?.riderId ? <div className={styles.progressRow}><span>Rider contact</span><span>{current?.rider?.phone || "Not reported"}</span></div> : null}
           {current?.riderError ? <p role="alert">{current.riderError} Use Refresh tracking to check again.</p> : null}

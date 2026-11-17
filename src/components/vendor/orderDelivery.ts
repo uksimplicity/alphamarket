@@ -1,4 +1,4 @@
-import { asRow } from "./sellerData";
+const asRow = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 function read(sources: Record<string, unknown>[], keys: string[]) {
   for (const source of sources) for (const key of keys) {
@@ -12,10 +12,15 @@ export function orderDelivery(order: Record<string, unknown>) {
   const delivery = asRow(order.delivery ?? order.Delivery);
   const rider = asRow(order.rider ?? order.Rider ?? delivery.rider ?? delivery.Rider);
   const required = order.requires_delivery ?? order.requiresDelivery ?? order.RequiresDelivery;
+  const status = read([order], ["delivery_status", "deliveryStatus", "DeliveryStatus"]) || read([delivery], ["status", "Status"]);
+  const acceptedAt = read([order], ["delivery_accepted_at", "deliveryAcceptedAt", "DeliveryAcceptedAt", "rider_accepted_at", "riderAcceptedAt", "RiderAcceptedAt"]) || read([delivery], ["accepted_at", "acceptedAt", "AcceptedAt"]);
+  const acceptanceStatus = read([order], ["delivery_acceptance_status", "deliveryAcceptanceStatus", "rider_acceptance_status"]) || read([delivery], ["acceptance_status", "acceptanceStatus", "AcceptanceStatus"]);
   return {
     required: typeof required === "boolean" ? required : null,
     id: read([order], ["delivery_id", "deliveryId", "DeliveryID"]) || read([delivery], ["id", "ID"]),
-    status: read([order], ["delivery_status", "deliveryStatus", "DeliveryStatus"]) || read([delivery], ["status", "Status"]),
+    status,
+    acceptedAt,
+    accepted: status.trim().toLowerCase() === "accepted" || Number.isFinite(Date.parse(acceptedAt)) || acceptanceStatus.toLowerCase() === "accepted",
     riderId: read([order, delivery], ["rider_id", "riderId", "RiderID"]) || read([rider], ["id", "ID", "rider_id", "riderId"]),
     updatedAt: read([order], ["delivery_updated_at", "deliveryUpdatedAt", "DeliveryUpdatedAt"]) || read([delivery], ["updated_at", "updatedAt", "UpdatedAt"]),
   };
@@ -43,11 +48,23 @@ export function assignedRider(payload: unknown, expectedId: string): AssignedRid
   return { name, phone };
 }
 
-export function deliveryStatusLabel(status: string) {
+export function deliveryStatusLabel(status: string, accepted = false) {
+  const normalized = status.trim().toLowerCase();
+  if (normalized === "assigned" && accepted) return "Rider accepted";
   const labels: Record<string, string> = {
+    requested: "Awaiting rider assignment", pending: "Awaiting rider assignment",
     assigned: "Rider assigned", accepted: "Rider accepted", heading_to_pickup: "Heading to pickup",
+    picking_up: "Heading to pickup", on_the_way: "On the way to buyer", completed: "Delivery completed", expired: "Delivery request expired",
     at_pickup: "At pickup", picked_up: "Collected", in_transit: "On the way to buyer",
     delivered: "Delivered", cancelled: "Cancelled", failed: "Delivery failed",
   };
-  return labels[status.toLowerCase()] || status.replaceAll("_", " ") || "Not reported";
+  return labels[normalized] || normalized.replaceAll("_", " ") || "Not reported";
+}
+
+export function orderDeliveryLabel(tracking: ReturnType<typeof orderDelivery>) {
+  if (tracking.required === false) return "No rider delivery required";
+  if (tracking.status) return deliveryStatusLabel(tracking.status, tracking.accepted);
+  if (tracking.accepted) return "Rider accepted";
+  if (tracking.riderId) return "Rider assigned";
+  return "Awaiting delivery update";
 }

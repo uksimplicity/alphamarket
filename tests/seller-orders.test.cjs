@@ -10,6 +10,16 @@ afterEach(() => { global.fetch = originalFetch; if (originalBase === undefined) 
 const request = (query = '') => new Request('https://shop.example/api/seller/orders' + query, { headers: { Authorization: 'Bearer seller-token' } });
 const fixture = { ID: 'order-uuid', SellerID: 'seller', TotalAmount: '265000', Status: 'pending', PaymentStatus: 'paid', CreatedAt: '2026-11-15T16:27:15Z', DeliveryAddress: 'Example address' };
 
+test('seller list preserves delivery acceptance separately from order and payment state', async () => {
+  const { loadSellerOrders } = load('src/components/vendor/sellerOrders.ts');
+  const [order] = await loadSellerOrders(async () => ({ data: [{ ...fixture, DeliveryStatus: 'assigned', RiderID: 'r1', DeliveryAcceptedAt: '2026-11-17T10:00:00Z' }] }), 'seller');
+  assert.equal(order.status, 'pending');
+  assert.equal(order.paymentStatus, 'paid');
+  assert.equal(order.delivery.riderId, 'r1');
+  assert.equal(order.delivery.status, 'assigned');
+  assert.equal(order.delivery.accepted, true);
+});
+
 test('seller list and detail use the authenticated user endpoints with no guessed fallback', async () => {
   const calls = [];
   global.fetch = async (url, init) => { calls.push({ url, init }); return Response.json({ data: { orders: [fixture] } }); };

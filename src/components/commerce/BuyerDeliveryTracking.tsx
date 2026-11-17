@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { authGeneration, getAuth } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
-import { assignedRider, deliveryStatusLabel, type AssignedRider } from "@/components/vendor/orderDelivery";
+import { assignedRider, orderDeliveryLabel, type AssignedRider } from "@/components/vendor/orderDelivery";
 import { accountStamp, checkAccount } from "./localAccountData";
 import type { BuyerOrder } from "./buyerOrders";
 import { paymentError } from "./payments";
@@ -47,7 +47,7 @@ export default function BuyerDeliveryTracking({ order, checkedAt, refreshing, re
     {tracking.required === false ? <p className={styles.caption}>No rider delivery is required for this order.</p> : <>
       <div className={styles.trackingHero}>
         <span className={styles.trackingIcon}><ShopperIcon name="truck" size={26} /></span>
-        <div><dl><dt>Delivery status</dt><dd>{tracking.status ? deliveryStatusLabel(tracking.status) : "Awaiting delivery update"}</dd></dl>{!tracking.id ? <p>Your delivery is being arranged.</p> : null}</div>
+        <div><dl><dt>Delivery status</dt><dd>{orderDeliveryLabel(tracking)}</dd></dl>{!tracking.id ? <p>Your delivery is being arranged.</p> : null}</div>
       </div>
       <div className={styles.rider}>
         <span className={styles.icon}><ShopperIcon name="user" size={18} /></span>

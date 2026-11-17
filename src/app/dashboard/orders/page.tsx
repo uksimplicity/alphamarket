@@ -10,6 +10,7 @@ import {
 import { Button, Card, SectionTitle } from "@/components/dashboard/ui";
 import ReviewDraftButton from "@/components/commerce/ReviewDraftButton";
 import BuyerOrderSeller from "@/components/commerce/BuyerOrderSeller";
+import { orderDeliveryLabel } from "@/components/vendor/orderDelivery";
 
 export default function OrdersPage() {
   const { orders, loading, error, reload } = useBuyerOrders();
@@ -61,6 +62,7 @@ export default function OrdersPage() {
                 <div className="mt-4 space-y-3">
                   <p className="text-sm capitalize">Order: {order.status.replaceAll("_", " ")}</p>
                   <p className="text-sm capitalize">Payment: {order.paymentStatus.replaceAll("_", " ")}</p>
+                  <p className="text-sm">Delivery: <span className="font-medium text-slate-800">{orderDeliveryLabel(order.delivery)}</span></p>
                   {["delivered", "confirmed"].includes(order.status) ? <ReviewDraftButton orderId={order.id} /> : null}
                   {order.paymentStatus === "pending" && order.status !== "cancelled" ? <Button onClick={() => payOrder(order)}>Resume payment</Button> : null}
                 </div>
