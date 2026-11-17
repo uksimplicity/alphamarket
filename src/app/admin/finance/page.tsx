@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAuthUser } from "@/components/auth/useAuthUser";
 import { useQuery } from "@tanstack/react-query";
 import { adminFetcher } from "@/components/admin/api";
 import { revenuePeriod, revenueReport } from "@/components/admin/financeReport";
@@ -14,11 +15,15 @@ type FinanceData = {
 };
 
 export default function AdminFinancePage() {
+  const user = useAuthUser();
+  const [pages, setPages] = useState({ owner: "", pending: 0, timedOut: 0 });
+  const pendingOffset = pages.owner === user?.id ? pages.pending : 0;
+  const timedOutOffset = pages.owner === user?.id ? pages.timedOut : 0;
   const [processingPayouts, setProcessingPayouts] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["admin-finance"],
+    queryKey: ["admin-finance", user?.id, pendingOffset, timedOutOffset], enabled: Boolean(user?.id),
     queryFn: async () => {
       const period = revenuePeriod();
 
@@ -31,8 +36,8 @@ export default function AdminFinancePage() {
             end_date: period.endDate,
           }),
         }),
-        adminFetcher<unknown>("/escrows/pending?limit=20"),
-        adminFetcher<unknown>("/escrows/timed-out?limit=20"),
+        adminFetcher<unknown>(`/escrows/pending?limit=20&offset=${pendingOffset}`),
+        adminFetcher<unknown>(`/escrows/timed-out?limit=20&offset=${timedOutOffset}`),
       ]);
 
       const pending = parseEscrows(pendingPayload, "pending");
@@ -126,7 +131,7 @@ export default function AdminFinancePage() {
       </Card>
 
       <Card>
-        <SectionTitle title="Pending escrows" subtitle="Held-fund records across all categories, up to 20 loaded. These are not completed payouts." />
+        <SectionTitle title="Pending escrows" subtitle="Held-fund records across all categories, 20 per page. These are not completed payouts." />
         <div className="mt-4 space-y-3 text-sm">
           {data.pendingEscrows.map((payout) => (
             <div
@@ -144,10 +149,11 @@ export default function AdminFinancePage() {
             </div>
           ))}
         </div>
+        {!data.pendingEscrows.length ? <p className="mt-3 text-sm text-slate-500">No pending escrows on this page.</p> : null}
+        <nav aria-label="Pending escrow pages" className="mt-4 flex items-center justify-between gap-3 text-sm text-slate-500"><Button variant="ghost" disabled={!pendingOffset} onClick={() => setPages({ owner: user?.id || "", pending: Math.max(0, pendingOffset - 20), timedOut: timedOutOffset })}>Previous</Button><span>Page {pendingOffset / 20 + 1}</span><Button variant="ghost" disabled={data.pendingEscrows.length < 20} onClick={() => setPages({ owner: user?.id || "", pending: pendingOffset + 20, timedOut: timedOutOffset })}>Next</Button></nav>
       </Card>
-
       <Card>
-        <SectionTitle title="Timed-out escrows" subtitle="Records requiring resolution, up to 20 loaded. A timeout does not confirm a refund or release." />
+        <SectionTitle title="Timed-out escrows" subtitle="Records requiring resolution, 20 per page. A timeout does not confirm a refund or release." />
         <div className="mt-4 space-y-3 text-sm">
           {data.timedOutEscrows.map((tx) => (
             <div
@@ -164,6 +170,8 @@ export default function AdminFinancePage() {
             </div>
           ))}
         </div>
+        {!data.timedOutEscrows.length ? <p className="mt-3 text-sm text-slate-500">No timed-out escrows on this page.</p> : null}
+        <nav aria-label="Timed-out escrow pages" className="mt-4 flex items-center justify-between gap-3 text-sm text-slate-500"><Button variant="ghost" disabled={!timedOutOffset} onClick={() => setPages({ owner: user?.id || "", pending: pendingOffset, timedOut: Math.max(0, timedOutOffset - 20) })}>Previous</Button><span>Page {timedOutOffset / 20 + 1}</span><Button variant="ghost" disabled={data.timedOutEscrows.length < 20} onClick={() => setPages({ owner: user?.id || "", pending: pendingOffset, timedOut: timedOutOffset + 20 })}>Next</Button></nav>
       </Card>
     </div>
   );

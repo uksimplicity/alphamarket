@@ -41,21 +41,21 @@ export function parseBuyerOrder(payload: unknown): BuyerOrder | null {
     address: text(row.dropoff_address ?? row.dropoffAddress ?? row.address ?? row.DeliveryAddress),
     createdAt: text(row.created_at ?? row.createdAt ?? row.CreatedAt),
     items: (Array.isArray(items) ? items : []).map((value) => {
-      const item = record(value), product = record(item.product);
+      const item = record(value), product = record(item.product ?? item.Product);
       return {
-        id: text(item.product_id ?? item.productId ?? product.id ?? item.id),
-        name: text(item.product_name ?? item.name ?? product.name) || "Product",
-        qty: Number(item.quantity ?? item.qty ?? 1),
-        price: amount(item.unit_price ?? item.unitPrice ?? item.price),
+        id: text(item.product_id ?? item.productId ?? item.ProductID ?? product.id ?? product.ID ?? item.id ?? item.ID),
+        name: text(item.product_name ?? item.ProductName ?? item.name ?? item.Name ?? product.name ?? product.Name) || "Product",
+        qty: Number(item.quantity ?? item.Quantity ?? item.qty ?? 1),
+        price: amount(item.unit_price ?? item.unitPrice ?? item.UnitPrice ?? item.price ?? item.Price),
       };
     }),
   };
 }
 
-export function useBuyerOrders(id?: string) {
+export function useBuyerOrders(id?: string, offset = 0, pageSize = 100) {
   const user = useAuthUser();
   const generation = authGeneration();
-  const key = `${user?.id || ""}:${generation}:${id || ""}`;
+  const key = `${user?.id || ""}:${generation}:${id || ""}:${offset}:${pageSize}`;
   const [orders, setOrders] = useState<BuyerOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -79,7 +79,7 @@ export function useBuyerOrders(id?: string) {
         const stamp = accountStamp();
         const auth = getAuth();
         if (!auth?.access_token) throw new Error("Please sign in to view your orders.");
-        const response = await fetch(id ? `/api/user/orders/${encodeURIComponent(id)}` : "/api/user/orders?limit=100&offset=0", {
+        const response = await fetch(id ? `/api/user/orders/${encodeURIComponent(id)}` : `/api/user/orders?limit=${pageSize}&offset=${offset}`, {
           headers: { Authorization: `Bearer ${auth.access_token.replace(/^Bearer\s+/i, "").trim()}` },
           cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]),
         });
@@ -102,6 +102,6 @@ export function useBuyerOrders(id?: string) {
     window.addEventListener("focus", visibleRefresh);
     document.addEventListener("visibilitychange", visibleRefresh);
     return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", visibleRefresh); document.removeEventListener("visibilitychange", visibleRefresh); };
-  }, [id, revision, key]);
+  }, [id, revision, key, offset, pageSize]);
   return { orders: owner === key ? orders : [], loading: owner !== key || loading, error: owner === key ? error : "", checkedAt: owner === key ? checkedAt : "", refreshing, reload: () => setRevision((value) => value + 1) };
 }

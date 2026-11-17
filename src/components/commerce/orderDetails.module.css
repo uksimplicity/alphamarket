@@ -59,6 +59,9 @@
 .breakdown[open] > summary::after { content: '−'; }
 .breakdown dl { font-size: 12px; }
 .receipt { margin-top: 22px; padding-top: 20px; border-top: 1px solid #edf0f6; }
+.contactButton { display: inline-flex; align-items: center; gap: 7px; border: 1px solid #dce4fc; border-radius: 8px; background: #fafbff; color: #4367dc; padding: 9px 12px; margin-top: 16px; font-size: 11px; cursor: pointer; }
+.contactButton:disabled { opacity: .5; cursor: wait; }
+.callRider { display: inline-flex; align-items: center; gap: 7px; color: #4367dc; }
 .security { display: flex; align-items: flex-start; gap: 9px; border-top: 1px solid #edf0f6; padding-top: 16px; margin-top: 20px; color: #8c99af; font-size: 10px; line-height: 1.7; }
 .security svg { flex-shrink: 0; color: #7c91b7; margin-top: 1px; }
 .alert { background: #fffaf2; border: 1px solid #f3e2c7; color: #9a7136; padding: 10px 13px; border-radius: 9px; font-size: 11px; line-height: 1.7; margin-top: 18px; }

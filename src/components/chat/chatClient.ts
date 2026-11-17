@@ -50,12 +50,22 @@ export class ChatClient {
   }
   // Read-only presentation directory remains solely for existing catalog name lookups.
   sellers(signal?: AbortSignal) { return this.request("GET", "sellers", v => list(v.sellers, user), undefined, signal); }
-  threads(offset = 0, signal?: AbortSignal) { return this.request("GET", "conversations?limit=20&offset=" + offset, v => {
+  threads(offset = 0, signal?: AbortSignal, type?: "support") { return this.request("GET", "conversations?limit=20&offset=" + offset + (type ? "&type=" + type : ""), v => {
     const rows = list(v.data, row => decodeThread(row, this.myId));
     const meta = record(v.meta);
     if (!Number.isSafeInteger(meta.total) || Number(meta.total) < 0) throw new Error();
     return { threads: rows, total: Number(meta.total) };
   }, undefined, signal); }
+  categories(signal?: AbortSignal) { return this.request("GET", "categories", v => {
+    const data = v.data ?? v.categories;
+    const rows = Array.isArray(data) ? data : record(data).categories;
+    return list(rows, value => { const row = record(value); return { id: id(row.id), name: string(row.name) }; });
+  }, undefined, signal); }
+  startSupport(categoryId: string, signal?: AbortSignal) { return this.request("POST", "conversations", v => {
+    const thread = decodeThread(v.data, this.myId);
+    if (thread.type !== "support") throw new Error();
+    return thread;
+  }, { type: "support", category_id: categoryId }, signal); }
   thread(threadId: string, signal?: AbortSignal) { return this.request("GET", "conversations/" + encodeURIComponent(threadId), v => decodeThread(v.data, this.myId), undefined, signal); }
   start(productId: string, signal?: AbortSignal) { return this.request("POST", "conversations", v => decodeThread(v.data, this.myId), { type: "product", context_id: productId }, signal); }
   startOrder(orderId: string, buyerId = "", signal?: AbortSignal) {

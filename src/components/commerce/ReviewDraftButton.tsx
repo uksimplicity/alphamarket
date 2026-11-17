@@ -10,7 +10,7 @@ function Editor({ orderId, close }: { orderId: string; close: (saved?: boolean) 
   const load = useCallback(() => { try { checkAccount(stamp); const draft = readReviewDraft(orderId); setText(draft?.text || ""); setRating(draft?.rating || 0); setLoaded(true); setError(""); } catch (failure) { setError((failure as Error).message); } }, [stamp, orderId]);
   useEffect(() => { dialog.current?.showModal(); void Promise.resolve().then(load); }, [load]);
   return <dialog ref={dialog} className={styles.dialog} onCancel={event => { event.preventDefault(); close(); }}>
-    <div className={styles.dialogHeader}><h2>Leave a review</h2><button type="button" aria-label="Close review" onClick={() => close()}>✕</button></div><p className={`${styles.muted} mt-2`}>Draft · Saved on this browser, not published.</p>
+    <div className={styles.dialogHeader}><h2>Review draft</h2><button type="button" aria-label="Close review" onClick={() => close()}>✕</button></div><p className={`${styles.muted} mt-2`}>Saved on this browser only. Review publishing is not available yet.</p>
     <form className={styles.form} onSubmit={event => { event.preventDefault(); try { checkAccount(stamp); saveReviewDraft(orderId, { rating, text }); close(true); } catch (failure) { setError((failure as Error).message); } }}>
       <div className={styles.stars} aria-label="Review rating">{[1,2,3,4,5].map(value => <button type="button" key={value} aria-label={`${value} stars`} aria-pressed={value <= rating} disabled={!loaded} onClick={() => setRating(value)}>★</button>)}</div>
       <label>Your review<textarea maxLength={2000} rows={4} value={text} disabled={!loaded} onChange={e => setText(e.target.value)} /></label>{error ? <p role="alert" className={styles.error}>{error}</p> : null}
@@ -20,5 +20,5 @@ function Editor({ orderId, close }: { orderId: string; close: (saved?: boolean) 
 }
 export default function ReviewDraftButton({ orderId }: { orderId: string }) {
   const [open, setOpen] = useState(false), [saved, setSaved] = useState(false);
-  return <><button type="button" className={styles.button} onClick={() => setOpen(true)}>Leave review</button>{saved ? <span role="status" className={styles.success}>Review draft saved on this browser.</span> : null}{open ? <Editor orderId={orderId} close={didSave => { setOpen(false); if (didSave) setSaved(true); }} /> : null}</>;
+  return <><button type="button" className={styles.button} onClick={() => setOpen(true)}>Write review draft</button>{saved ? <span role="status" className={styles.success}>Review draft saved on this browser.</span> : null}{open ? <Editor orderId={orderId} close={didSave => { setOpen(false); if (didSave) setSaved(true); }} /> : null}</>;
 }

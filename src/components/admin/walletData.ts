@@ -1,5 +1,12 @@
 export type AdminWallet = { id: string; owner: string; type: string; balance: string | null; currency: string; status: string };
 
+export function walletCreditAmount(input: string): number {
+  if (!/^\d+(?:\.\d{1,2})?$/.test(input.trim())) throw new Error("Enter a positive amount with up to two decimal places.");
+  const value = Number(input);
+  if (!Number.isFinite(value) || value <= 0 || !Number.isSafeInteger(Math.round(value * 100))) throw new Error("Enter a valid positive amount.");
+  return value;
+}
+
 export function parseAdminWallets(payload: unknown): AdminWallet[] {
   const record = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   let value = payload;

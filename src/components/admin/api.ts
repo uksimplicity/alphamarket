@@ -74,6 +74,9 @@ export async function adminFetcher<T>(
     const firstMessage = extractErrorMessage(data, response.status);
     if (isExpiredTokenMessage(firstMessage)) {
       clearAuth();
+      // A financial write may already have reached the service. Never replay
+      // a mutation after losing authentication; require a fresh session/readback.
+      if (init?.method && init.method.toUpperCase() !== "GET") throw new Error("Session expired. Please log in again and check the result before retrying.");
       const retry = await callApi("/api/admin", path, init, undefined);
       response = retry.response;
       data = retry.data;

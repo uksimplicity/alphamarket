@@ -12,6 +12,7 @@ import { paymentError } from "@/components/commerce/payments";
 import { useBuyerOrders } from "@/components/commerce/buyerOrders";
 import BuyerDeliveryTracking from "@/components/commerce/BuyerDeliveryTracking";
 import BuyerOrderSeller from "@/components/commerce/BuyerOrderSeller";
+import BuyerOrderContact from "@/components/commerce/BuyerOrderContact";
 import {
   formatCurrency,
 } from "@/components/commerce/store";
@@ -79,6 +80,7 @@ export default function OrderDetailPage() {
           <div><p className={styles.eyebrow}>Order details</p><h1 className={styles.title}>Order #{order.id.slice(-8).toUpperCase()}</h1><p className={styles.seller}><BuyerOrderSeller order={order} /></p></div>
           <div className={styles.badges}><span className={styles.badge}>Order: {order.status.replaceAll("_", " ")}</span><span className={`${styles.badge} ${order.paymentStatus === "paid" ? styles.paid : ""}`}><ShopperIcon name="shield" size={13} />Payment: {order.paymentStatus.replaceAll("_", " ")}</span></div>
         </div>
+        <BuyerOrderContact orderId={order.id} sellerId={order.sellerId} />
         {["delivered", "confirmed"].includes(order.status) ? <div className="mt-4"><ReviewDraftButton orderId={order.id} /></div> : null}
         <div className={styles.heroBottom}>
           <span className={styles.placed}>{Number.isFinite(Date.parse(order.createdAt)) ? <>Placed <time dateTime={order.createdAt}>{new Date(order.createdAt).toLocaleString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}</time></> : "Order date unavailable"}</span>

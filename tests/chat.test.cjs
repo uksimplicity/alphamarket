@@ -108,3 +108,29 @@ test('message merging deduplicates IDs and retains microsecond timestamp order',
   const a = message('a', '2026-11-04T10:39:30.231039Z'), b = message('b', '2026-11-04T10:39:30.231038Z');
   assert.deepEqual(mergeMessages([a], [b, a]).map(m => m.id), ['b', 'a']);
 });
+
+test('support uses authenticated category and filtered conversation endpoints and creates no initial message', async () => {
+  browser(); const { ChatClient } = load('src/components/chat/chatClient.ts'); const client = new ChatClient(), calls = [];
+  const support = { ...conversation(), type: 'support', context_id: '', participants: [{ user_id: 'buyer', name: 'Buyer', role: 'buyer' }, { user_id: 'admin', name: 'Support', role: 'admin' }] };
+  global.fetch = async (url, init) => {
+    calls.push({ url, init });
+    if (url.endsWith('/categories')) return Response.json({ data: [{ id: 'category', name: 'Orders' }] });
+    return Response.json({ data: init.method === 'POST' ? support : [support], meta: { total: 22 } });
+  };
+  assert.deepEqual(await client.categories(), [{ id: 'category', name: 'Orders' }]);
+  assert.equal((await client.threads(20, undefined, 'support')).threads[0].type, 'support');
+  assert.equal(calls[1].url, '/api/chat/conversations?limit=20&offset=20&type=support');
+  assert.equal((await client.startSupport('category')).id, 'thread-1');
+  assert.deepEqual(JSON.parse(calls[2].init.body), { type: 'support', category_id: 'category' });
+  assert.ok(calls.every(call => call.init.headers.Authorization === 'Bearer buyer-token'));
+  global.fetch = async () => Response.json({ data: conversation() });
+  await assert.rejects(client.startSupport('category'), /invalid response/);
+});
+
+test('buyer starts the matching seller order conversation after payment without a recipient override', async () => {
+  browser(); const { ChatClient } = load('src/components/chat/chatClient.ts'); const client = new ChatClient(); let body;
+  global.fetch = async (_, init) => { body = JSON.parse(init.body); return Response.json({ data: { ...conversation(), type: 'order', context_id: 'order' } }); };
+  assert.equal((await client.startOrder('order', 'seller')).peer.id, 'seller');
+  assert.deepEqual(body, { type: 'order', context_id: 'order' });
+  await assert.rejects(client.startOrder('order', 'other-seller'), /invalid response/);
+});

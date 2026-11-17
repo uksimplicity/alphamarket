@@ -126,8 +126,6 @@ export default function VendorOrders() {
                 <tr>
                   <th>Order reference</th>
                   <th>Customer</th>
-                  <th>Buyer total</th>
-                  <th>Admin commission</th>
                   <th>Seller proceeds</th>
                   <th>Payment</th>
                   <th>Status</th>
@@ -144,8 +142,6 @@ export default function VendorOrders() {
                       </Link>
                     </td>
                     <td>{order.customer === "Customer" ? <Link to={`/vendor/orders/${encodeURIComponent(order.id)}`}>View customer details</Link> : order.customer}</td>
-                    <td>{pricingMoney(order.pricing.buyerTotal ?? order.amount)}</td>
-                    <td>{pricingMoney(order.pricing.adminCommission)}</td>
                     <td>{order.pricing.issues.length ? <span title={order.pricing.issues.join(" ")}>Pricing needs review</span> : pricingMoney(order.pricing.sellerProceeds)}</td>
                     <td><span className={styles.pill}>{order.paymentStatus.replaceAll("_", " ")}</span></td>
                     <td>

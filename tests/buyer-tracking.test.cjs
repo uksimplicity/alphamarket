@@ -167,3 +167,23 @@ test('buyer order with only DeliveryID resolves the delivery then shows its assi
   assert.ok(h.calls.every(call => call.init.headers.Authorization === 'Bearer buyer-token'));
   h.cleanup();
 });
+
+test('buyer order history requests the chosen page and clears the previous page while loading', async () => {
+  const h = harness(hookFile, () => Response.json({ data: [fixture] }));
+  h.render(h.exports.useBuyerOrders, undefined, 0, 20); h.effects(); await settle();
+  assert.equal(h.calls[0].url, '/api/user/orders?limit=20&offset=0');
+  assert.equal(h.render(h.exports.useBuyerOrders, undefined, 0, 20).orders.length, 1);
+  assert.equal(h.render(h.exports.useBuyerOrders, undefined, 120, 20).orders.length, 0);
+  h.effects(); await settle();
+  assert.equal(h.calls.at(-1).url, '/api/user/orders?limit=20&offset=120');
+  assert.equal(h.render(h.exports.useBuyerOrders, undefined, 120, 20).orders.length, 1);
+  h.cleanup();
+});
+
+test('buyer order item parsing accepts nested PascalCase fields without inventing missing items', () => {
+  const h = harness(hookFile, () => {});
+  const order = h.exports.parseBuyerOrder({ ...fixture, Items: [{ ProductID: 'product', Product: { Name: 'Actual product' }, Quantity: 2, UnitPrice: '1250.50' }] });
+  assert.equal(order.items[0].id, 'product'); assert.equal(order.items[0].name, 'Actual product');
+  assert.equal(order.items[0].qty, 2); assert.equal(order.items[0].price, 1250.5);
+  assert.equal(h.exports.parseBuyerOrder({ ...fixture, Items: null }).items.length, 0);
+});

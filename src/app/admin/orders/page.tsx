@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAuthUser } from "@/components/auth/useAuthUser";
 import { useQuery } from "@tanstack/react-query";
 import { adminFetcher, asArray, asRecord, pickString } from "@/components/admin/api";
 import { Button, Card, SectionTitle } from "@/components/dashboard/ui";
@@ -10,6 +11,9 @@ import OrderMoneyBreakdown from "@/components/commerce/OrderMoneyBreakdown";
 import { orderPricing, pricingMoney } from "@/components/commerce/orderPricing";
 
 export default function AdminOrdersPage() {
+  const user = useAuthUser();
+  const [page, setPage] = useState({ owner: "", offset: 0 });
+  const offset = page.owner === user?.id ? page.offset : 0;
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const [orderFilters, setOrderFilters] = useState({
@@ -31,9 +35,10 @@ export default function AdminOrdersPage() {
     error: ordersError,
     refetch: refetchOrders,
   } = useQuery({
-    queryKey: ["admin-orders-general", orderFilters],
+    queryKey: ["admin-orders-general", user?.id, orderFilters, offset],
+    enabled: Boolean(user?.id),
     queryFn: async () => {
-      const params = new URLSearchParams({ limit: "50", offset: "0" });
+      const params = new URLSearchParams({ limit: "50", offset: String(offset) });
       if (orderFilters.buyerId.trim()) params.set("buyer_id", orderFilters.buyerId.trim());
       if (orderFilters.sellerId.trim()) params.set("seller_id", orderFilters.sellerId.trim());
       if (orderFilters.status.trim()) params.set("status", orderFilters.status.trim());
@@ -42,10 +47,10 @@ export default function AdminOrdersPage() {
       return asArray(payload).map((row, index) => {
         const record = asRecord(row);
         return {
-          id: pickString(record, ["id", "order_id", "uuid"], `order-${index}`),
-          buyer: pickString(record, ["buyer_id", "buyer_email", "customer", "customer_name"], "-"),
-          seller: pickString(record, ["seller_id", "seller_email", "seller_name"], "-"),
-          status: pickString(record, ["status", "state"], "unknown"),
+          id: pickString(record, ["id", "order_id", "uuid", "ID"], `order-${index}`),
+          buyer: pickString(record, ["buyer_id", "BuyerID", "buyer_email", "customer", "customer_name"], "-"),
+          seller: pickString(record, ["seller_id", "SellerID", "seller_email", "seller_name"], "-"),
+          status: pickString(record, ["status", "Status", "state"], "unknown"),
           pricing: orderPricing(record),
         };
       });
@@ -115,25 +120,19 @@ export default function AdminOrdersPage() {
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
             placeholder="buyer_id"
             value={orderFilters.buyerId}
-            onChange={(event) =>
-              setOrderFilters((prev) => ({ ...prev, buyerId: event.target.value }))
-            }
+            onChange={(event) => { setPage({ owner: user?.id || "", offset: 0 }); setOrderFilters((prev) => ({ ...prev, buyerId: event.target.value })); }}
           />
           <input
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
             placeholder="seller_id"
             value={orderFilters.sellerId}
-            onChange={(event) =>
-              setOrderFilters((prev) => ({ ...prev, sellerId: event.target.value }))
-            }
+            onChange={(event) => { setPage({ owner: user?.id || "", offset: 0 }); setOrderFilters((prev) => ({ ...prev, sellerId: event.target.value })); }}
           />
           <input
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
             placeholder="status"
             value={orderFilters.status}
-            onChange={(event) =>
-              setOrderFilters((prev) => ({ ...prev, status: event.target.value }))
-            }
+            onChange={(event) => { setPage({ owner: user?.id || "", offset: 0 }); setOrderFilters((prev) => ({ ...prev, status: event.target.value })); }}
           />
         </div>
         <div className="mt-3 flex gap-2">
@@ -142,13 +141,11 @@ export default function AdminOrdersPage() {
           </Button>
           <Button
             variant="ghost"
-            onClick={() =>
-              setOrderFilters({
+            onClick={() => { setPage({ owner: user?.id || "", offset: 0 }); setOrderFilters({
                 buyerId: "",
                 sellerId: "",
                 status: "",
-              })
-            }
+              }); }}
           >
             Reset Filters
           </Button>
@@ -170,6 +167,10 @@ export default function AdminOrdersPage() {
           ))}
         </div>
 
+        <nav aria-label="Platform order pages" className="mt-4 flex items-center justify-between gap-3 text-sm text-slate-500">
+          <Button variant="ghost" disabled={!offset || ordersLoading} onClick={() => setPage({ owner: user?.id || "", offset: Math.max(0, offset - 50) })}>Previous</Button><span>Page {Math.floor(offset / 50) + 1}</span><Button variant="ghost" disabled={ordersLoading || Boolean(ordersError) || (ordersData?.length ?? 0) < 50} onClick={() => setPage({ owner: user?.id || "", offset: offset + 50 })}>Next</Button>
+        </nav>
+        {!ordersLoading && !ordersError && !ordersData?.length ? <p className="mt-3 text-sm text-slate-500">No orders on this page.</p> : null}
         <div className="mt-6 grid gap-3 md:grid-cols-[1fr_auto]">
           <input
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
