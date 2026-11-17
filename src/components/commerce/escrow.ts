@@ -58,7 +58,12 @@ export function escrowStatusFromOrder(payload: unknown): string {
   const root = record(payload);
   const row = record(root.data ?? root.order ?? payload);
   const order = record(row.order ?? row);
-  return text(order.escrow_status ?? order.escrowStatus ?? record(order.escrow).status).toLowerCase() || "unknown";
+  const escrow = record(order.escrow), legacyEscrow = record(order.Escrow);
+  // Orders also use the PascalCase serializer (ID, PaymentStatus, EscrowID).
+  // An empty alias must not hide a status supplied by another serializer.
+  const statuses = [order.escrow_status, order.escrowStatus, order.EscrowStatus,
+    escrow.status, escrow.Status, legacyEscrow.status, legacyEscrow.Status];
+  return statuses.map(value => typeof value === "string" ? value.trim().toLowerCase() : "").find(Boolean) || "unknown";
 }
 export function escrowDescription(status: string): string {
   if (["released", "paid_out", "completed"].includes(status)) return "Escrow funds are marked as released.";

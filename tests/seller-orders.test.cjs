@@ -241,6 +241,23 @@ test('notification destination renders nested order details including payment st
   assert.equal(nodes(tree, node => node.props?.children === 'Unable to load order').length, 0);
 });
 
+test('seller escrow displays the PascalCase status even when delivery lookup is denied', async () => {
+  const h = pageHarness(url => url.includes('/marketplace/deliveries/')
+    ? Response.json({ error: 'Delivery tracking is unavailable to this account' }, { status: 403 })
+    : Response.json({ success: true, data: {
+      ID: 'order-uuid', OrderNumber: 'ORD-example', BuyerID: 'buyer', SellerID: 'seller',
+      Commission: '600', TotalAmount: '10600', Status: 'processing', PaymentStatus: 'paid',
+      DeliveryFee: '522.98', DeliveryAddress: 'Example address', DeliveryID: 'delivery',
+      RequiresDelivery: true, EscrowID: 'escrow', EscrowStatus: 'held', Items: null,
+    } }), 'VendorOrderDetail');
+  h.render(); const cleanup = h.effects[0](); await settle();
+  const tree = h.render();
+  assert.ok(nodes(tree, node => node.type === 'status-component' && node.props.status === 'held').length);
+  assert.ok(nodes(tree, node => node.props?.children === 'paid').length);
+  assert.ok(nodes(tree, node => node.props?.role === 'alert').length);
+  cleanup();
+});
+
 test('seller tracking queries only the assigned rider and displays backend progress and contact', async () => {
   const h = pageHarness(url => url.includes('/grpc/riders/')
     ? Response.json({ data: { rider: { id: 'rider one', user: { first_name: 'Example', last_name: 'Rider', phone: '08000000000' } } } })

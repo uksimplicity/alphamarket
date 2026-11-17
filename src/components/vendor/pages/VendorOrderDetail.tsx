@@ -15,19 +15,6 @@ import { orderPricing } from "@/components/commerce/orderPricing";
 import { sellerOrderDetail } from "@/components/vendor/sellerOrders";
 import styles from "@/components/vendor/vendor.module.css";
 
-function formatNaira(value: unknown) {
-  if (value === null || value === undefined || typeof value === "boolean" || typeof value === "string" && !value.trim()) return "Not reported";
-  const numeric = Number(value);
-  if (!Number.isNaN(numeric) && Number.isFinite(numeric)) {
-    return new Intl.NumberFormat("en-NG", {
-      style: "currency",
-      currency: "NGN",
-      maximumFractionDigits: 0,
-    }).format(numeric);
-  }
-  return "-";
-}
-
 export default function VendorOrderDetail() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
@@ -106,7 +93,6 @@ export default function VendorOrderDetail() {
       id: String(order.id ?? order.order_id ?? orderId ?? "-"),
       status: String(order.status ?? "pending"),
       customer: String(order.customer_name ?? customerRecord?.name ?? "Customer"),
-      amount: orderPricing(order).buyerTotal,
       createdAt: String(order.created_at ?? order.createdAt ?? "-"),
       deliveryAddress: String(
         order.dropoff_address ?? order.delivery_address ?? order.address ?? "-"
@@ -189,10 +175,6 @@ export default function VendorOrderDetail() {
         <div className={styles.progressRow}>
           <span>Customer</span>
           <span>{summary.customer}</span>
-        </div>
-        <div className={styles.progressRow}>
-          <span>Buyer total</span>
-          <span>{formatNaira(summary.amount)}</span>
         </div>
         <div className={styles.progressRow}>
           <span>Created</span>

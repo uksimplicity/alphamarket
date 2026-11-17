@@ -6,7 +6,7 @@ export default function OrderMoneyBreakdown({ pricing, seller = false }: { prici
     : pricing.productSubtotal !== null && pricing.adminCommission !== null
       ? (Math.round(pricing.productSubtotal * 100) + Math.round(pricing.adminCommission * 100)) / 100 : null;
   const entries: Array<[string, number | null]> = seller
-    ? [["Product subtotal", pricing.productSubtotal], ["Admin commission" + (pricing.commissionPercentage === null ? "" : " (" + pricing.commissionPercentage + "%)"), pricing.adminCommission], ["Delivery fee", pricing.deliveryFee], ["Buyer total", pricing.buyerTotal], ["Seller proceeds", pricing.sellerProceeds]]
+    ? [["Product subtotal", pricing.productSubtotal], ["Admin commission" + (pricing.commissionPercentage === null ? "" : " (" + pricing.commissionPercentage + "%)"), pricing.adminCommission], ["Delivery fee", pricing.deliveryFee], ["Seller proceeds", pricing.sellerProceeds]]
     : pricing.requiresDelivery === false
       ? [["Total amount", pricing.buyerTotal]]
       : [["Total amount", productAmount], ["Delivery fee", pricing.deliveryFee], ["Total", pricing.buyerTotal]];

@@ -28,6 +28,32 @@ test('all categories are preserved and escrow IDs remain distinct from order IDs
   assert.equal(rows[2].amount, null);
   assert.equal(escrow.canResolveEscrow(rows[2]), false);
 });
+test('order escrow status supports both order serializers and response wrappers', () => {
+  for (const order of [
+    { escrow_status: ' HELD ' }, { escrowStatus: 'Held' }, { EscrowStatus: 'HELD' },
+    { escrow: { status: 'held' } }, { escrow: { Status: 'held' } },
+    { Escrow: { status: 'held' } }, { Escrow: { Status: 'held' } },
+  ]) {
+    for (const payload of [order, { data: order }, { order }, { data: { order } }]) {
+      assert.equal(escrow.escrowStatusFromOrder(payload), 'held');
+    }
+  }
+});
+
+test('empty escrow aliases do not hide a reported state and explicit status takes precedence', () => {
+  assert.equal(escrow.escrowStatusFromOrder({ escrow_status: ' ', EscrowStatus: 'Released' }), 'released');
+  assert.equal(escrow.escrowStatusFromOrder({ escrowStatus: '', escrow: { status: 'reversed' } }), 'reversed');
+  assert.equal(escrow.escrowStatusFromOrder({ escrow_status: 'released', Escrow: { Status: 'held' } }), 'released');
+});
+
+test('missing escrow state stays unknown regardless of payment, delivery or escrow ID', () => {
+  for (const payload of [null, {}, { payment_status: 'paid', status: 'delivered', escrow_id: 'escrow-one' },
+    { PaymentStatus: 'paid', Status: 'confirmed', EscrowID: 'escrow-one' },
+    { EscrowStatus: 1 }, { escrow: { status: {} } }]) {
+    assert.equal(escrow.escrowStatusFromOrder(payload), 'unknown');
+  }
+});
+
 test('reversal requires an intentional reason and release notes are optional', () => {
   assert.throws(() => escrow.escrowActionBody('reverse', '  '), /Explain why/);
   assert.deepEqual(escrow.escrowActionBody('reverse', ' Customer requested refund '), { notes: 'Customer requested refund' });
