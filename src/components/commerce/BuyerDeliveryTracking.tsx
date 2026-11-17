@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { authGeneration, getAuth } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
-import { assignedRider, orderDeliveryLabel, type AssignedRider } from "@/components/vendor/orderDelivery";
+import { orderDeliveryLabel, type AssignedRider } from "@/components/vendor/orderDelivery";
+import { loadOrderRiderTracking, type DeliveryTracking } from "./orderRiderTracking";
 import { accountStamp, checkAccount } from "./localAccountData";
 import type { BuyerOrder } from "./buyerOrders";
 import { paymentError } from "./payments";
@@ -14,33 +15,41 @@ export default function BuyerDeliveryTracking({ order, checkedAt, refreshing, re
   order: BuyerOrder; checkedAt: string; refreshing: boolean; reload: () => void;
 }) {
   const user = useAuthUser();
-  const tracking = order.delivery;
-  const key = `${user?.id || ""}:${authGeneration()}:${order.id}:${tracking.id}:${tracking.riderId}:${checkedAt}`;
-  const [snapshot, setSnapshot] = useState<{ key: string; rider: AssignedRider | null; error: string } | null>(null);
+  const initial = order.delivery;
+  const key = `${user?.id || ""}:${authGeneration()}:${order.id}:${initial.id}:${initial.riderId}:${initial.status}:${checkedAt}`;
+  const [snapshot, setSnapshot] = useState<{ key: string; tracking: DeliveryTracking; rider: AssignedRider | null; error: string } | null>(null);
   const current = snapshot?.key === key ? snapshot : null;
+  const tracking = current?.tracking ?? initial;
   useEffect(() => {
-    if (tracking.required === false || !tracking.riderId || !user?.id) return;
+    if (initial.required === false || (!initial.riderId && !initial.id) || !user?.id) return;
     const controller = new AbortController();
     async function load() {
       try {
         const stamp = accountStamp();
         const token = getAuth()?.access_token || "";
-        const response = await fetch(`/api/marketplace/grpc/riders/${encodeURIComponent(tracking.riderId)}`, {
-          headers: { Authorization: `Bearer ${token.replace(/^Bearer\s+/i, "").trim()}`, Accept: "application/json" },
-          cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]),
-        });
-        const payload: unknown = await response.json();
+        const request = async (path: string) => {
+          controller.signal.throwIfAborted();
+          checkAccount(stamp);
+          const response = await fetch(path, {
+            headers: { Authorization: `Bearer ${token.replace(/^Bearer\s+/i, "").trim()}`, Accept: "application/json" },
+            cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]),
+          });
+          const payload: unknown = await response.json();
+          checkAccount(stamp);
+          const root = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+          if (!response.ok || root.success === false) throw new Error(paymentError(payload, "Delivery and rider details could not be loaded."));
+          return payload;
+        };
+        const result = await loadOrderRiderTracking(request, initial, order.id);
         checkAccount(stamp);
-        if (!response.ok) throw new Error(paymentError(payload, "Rider details could not be loaded."));
-        const rider = assignedRider(payload, tracking.riderId);
-        if (!controller.signal.aborted) setSnapshot({ key, rider, error: "" });
+        if (!controller.signal.aborted) setSnapshot({ key, tracking: result.tracking, rider: result.rider, error: result.riderError });
       } catch (error) {
-        if (!controller.signal.aborted) setSnapshot({ key, rider: null, error: error instanceof Error ? error.message : "Rider details could not be loaded." });
+        if (!controller.signal.aborted) setSnapshot({ key, tracking: initial, rider: null, error: error instanceof Error ? error.message : "Rider details could not be loaded." });
       }
     }
     void load();
     return () => controller.abort();
-  }, [key, tracking.riderId, tracking.required, user?.id]);
+  }, [key, initial, order.id, user?.id]);
 
   return <section className={styles.panel} aria-label="Delivery and rider tracking">
     <div className={styles.panelHeading}><h2>Delivery &amp; rider</h2><span className={styles.caption}>Your order’s journey</span></div>

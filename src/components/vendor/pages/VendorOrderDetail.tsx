@@ -5,7 +5,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { getAuth } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
-import { assignedRider, orderDeliveryLabel, orderDelivery, type AssignedRider } from "@/components/vendor/orderDelivery";
+import { orderDeliveryLabel, orderDelivery, type AssignedRider } from "@/components/vendor/orderDelivery";
+import { loadOrderRiderTracking, type DeliveryTracking } from "@/components/commerce/orderRiderTracking";
 import { escrowStatusFromOrder } from "@/components/commerce/escrow";
 import { orderPaymentStatus } from "@/components/commerce/payments";
 import EscrowStatus from "@/components/commerce/EscrowStatus";
@@ -34,7 +35,7 @@ export default function VendorOrderDetail() {
   const key = `${user?.id || ""}:${orderId || ""}`;
   const [snapshot, setSnapshot] = useState<{
     key: string; order: Record<string, unknown> | null; rider: AssignedRider | null;
-    riderError: string; error: string; checkedAt: string;
+    riderError: string; error: string; checkedAt: string; tracking: DeliveryTracking | null;
   } | null>(null);
   const [refreshing, setRefreshing] = useState(true);
   const [revision, setRevision] = useState(0);
@@ -68,23 +69,13 @@ export default function VendorOrderDetail() {
         }
         const next = sellerOrderDetail(await request(`/api/seller/orders/${encodeURIComponent(orderId)}`));
         if (controller.signal.aborted) return;
-        const tracking = orderDelivery(next);
-        let rider: AssignedRider | null = null, riderError = "";
-        if (tracking.required !== false && tracking.riderId) {
-          try {
-            rider = assignedRider(await request(`/api/marketplace/grpc/riders/${encodeURIComponent(tracking.riderId)}`), tracking.riderId);
-          } catch (failure) {
-            if (controller.signal.aborted) return;
-            checkAccount(stamp);
-            riderError = failure instanceof Error ? failure.message : "Rider details could not be loaded. Refresh to try again.";
-          }
-        }
+        const { tracking, rider, riderError } = await loadOrderRiderTracking(request, orderDelivery(next), orderId);
         if (controller.signal.aborted) return;
         checkAccount(stamp);
-        setSnapshot({ key, order: next, rider, riderError, error: "", checkedAt: new Date().toISOString() });
+        setSnapshot({ key, order: next, tracking, rider, riderError, error: "", checkedAt: new Date().toISOString() });
       } catch (failure) {
         if (controller.signal.aborted) return;
-        setSnapshot({ key, order: null, rider: null, riderError: "", error: failure instanceof Error ? failure.message : "Failed to load order details.", checkedAt: "" });
+        setSnapshot({ key, order: null, tracking: null, rider: null, riderError: "", error: failure instanceof Error ? failure.message : "Failed to load order details.", checkedAt: "" });
       } finally {
         inFlight = false;
         if (!controller.signal.aborted) setRefreshing(false);
@@ -126,7 +117,7 @@ export default function VendorOrderDetail() {
     };
   }, [order, orderId]);
 
-  const tracking = order ? orderDelivery(order) : null;
+  const tracking = current?.tracking ?? (order ? orderDelivery(order) : null);
 
   if (loading) {
     return (

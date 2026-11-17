@@ -257,20 +257,34 @@ test('seller tracking queries only the assigned rider and displays backend progr
   assert.equal(h.visibilityListeners.size, 0);
 });
 
+test('seller order with only DeliveryID resolves delivery assignment before fetching rider details', async () => {
+  const h = pageHarness(url => Response.json(url.includes('/grpc/riders/')
+    ? { data: { id: 'rider', name: 'Delivery Rider', phone: '08000000000' } }
+    : url.includes('/marketplace/deliveries/') ? { data: { id: 'delivery', order_id: 'order-uuid', rider_id: 'rider', status: 'on_the_way' } }
+    : { data: { ...fixture, DeliveryID: 'delivery', Status: 'processing' } }), 'VendorOrderDetail');
+  h.render(); const cleanup = h.effects[0](); await settle();
+  const tree = h.render();
+  for (const value of ['Delivery Rider', '08000000000', 'On the way to buyer']) assert.ok(nodes(tree, node => node.props?.children === value).length, value);
+  assert.deepEqual(h.calls.map(call => call.url), ['/api/seller/orders/order-uuid', '/api/marketplace/deliveries/delivery', '/api/marketplace/grpc/riders/rider']);
+  assert.ok(h.calls.every(call => call.init.headers.Authorization === 'Bearer seller-token'));
+  cleanup();
+});
+
 test('missing assignment is explicit; hidden pages do not poll and refreshed assignment is loaded', async () => {
   let assigned = false;
   const h = pageHarness(url => url.includes('/grpc/riders/')
     ? Response.json({ data: { id: 'rider-2', name: 'New Rider' } })
+    : url.includes('/marketplace/deliveries/') ? Response.json({ data: { id: 'delivery-1', order_id: 'order-uuid', status: 'requested' } })
     : Response.json({ data: { ...fixture, delivery_id: 'delivery-1', ...(assigned ? { rider_id: 'rider-2' } : {}) } }), 'VendorOrderDetail');
   h.render(); h.effects[0](); await settle();
-  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls.length, 2);
   assert.ok(nodes(h.render(), node => node.props?.children === 'Rider assignment has not been reported.').length);
-  assert.ok(nodes(h.render(), node => node.props?.children === 'Not reported').length);
+  assert.ok(nodes(h.render(), node => node.props?.children === 'Awaiting rider assignment').length);
   const poll = [...h.timers.values()][0].fn;
   h.document.visibilityState = 'hidden'; poll(); await settle();
-  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls.length, 2);
   assigned = true; h.document.visibilityState = 'visible'; poll(); await settle();
-  assert.equal(h.calls.length, 3);
+  assert.equal(h.calls.length, 4);
   assert.ok(nodes(h.render(), node => node.props?.children === 'New Rider').length);
 });
 

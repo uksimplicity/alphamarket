@@ -147,9 +147,23 @@ test('buyer tracking loads only the assigned rider, clears old contacts and pres
   fail = true; props.checkedAt = 'second';
   tree = h.render(h.exports.default, props); assert.equal(contains(tree, 'Example Rider'), false);
   h.effects(); await settle(); tree = h.render(h.exports.default, props);
-  assert.ok(contains(tree, 'on the way')); assert.ok(nodes(tree, node => node.props?.role === 'alert').length);
+  assert.ok(contains(tree, 'On the way to buyer')); assert.ok(nodes(tree, node => node.props?.role === 'alert').length);
   assert.equal(contains(tree, '08000000000'), false);
   props.order = hook.exports.parseBuyerOrder({ ...fixture, DeliveryID: 'delivery' });
-  tree = h.render(h.exports.default, props); h.effects();
-  assert.ok(contains(tree, 'Awaiting rider assignment')); assert.equal(h.calls.length, 2); h.cleanup();
+  tree = h.render(h.exports.default, props); h.effects(); await settle();
+  assert.ok(contains(tree, 'Awaiting rider assignment')); assert.equal(h.calls.length, 3); h.cleanup();
+});
+
+test('buyer order with only DeliveryID resolves the delivery then shows its assigned rider', async () => {
+  const hook = harness(hookFile, () => {});
+  const h = harness(componentFile, url => Response.json(url.includes('/grpc/riders/')
+    ? { data: { id: 'rider', name: 'Delivery Rider', phone: '08000000000' } }
+    : { data: { id: 'delivery', order_id: 'order-one', rider_id: 'rider', status: 'assigned' } }));
+  const props = { order: hook.exports.parseBuyerOrder({ ...fixture, DeliveryID: 'delivery' }), checkedAt: 'first', refreshing: false, reload() {} };
+  h.render(h.exports.default, props); h.effects(); await settle();
+  const tree = h.render(h.exports.default, props);
+  for (const value of ['Rider assigned', 'Delivery Rider', '08000000000']) assert.ok(contains(tree, value), value);
+  assert.deepEqual(h.calls.map(call => call.url), ['/api/marketplace/deliveries/delivery', '/api/marketplace/grpc/riders/rider']);
+  assert.ok(h.calls.every(call => call.init.headers.Authorization === 'Bearer buyer-token'));
+  h.cleanup();
 });
