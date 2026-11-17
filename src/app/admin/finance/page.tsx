@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { adminFetcher, asRecord, pickNumber, pickString } from "@/components/admin/api";
+import { adminFetcher } from "@/components/admin/api";
+import { revenuePeriod, revenueReport } from "@/components/admin/financeReport";
 import { parseEscrows } from "@/components/commerce/escrow";
 import { Button, Card, ErrorState, SectionTitle, Skeleton } from "@/components/dashboard/ui";
 
@@ -19,52 +20,26 @@ export default function AdminFinancePage() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["admin-finance"],
     queryFn: async () => {
-      const now = new Date();
-      const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-        .toISOString()
-        .slice(0, 10);
-      const endDate = now.toISOString().slice(0, 10);
+      const period = revenuePeriod();
 
       const [revenuePayload, pendingPayload, timedOutPayload] = await Promise.all([
         adminFetcher<unknown>("/reports/revenue", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            start_date: startDate,
-            end_date: endDate,
+            start_date: period.startDate,
+            end_date: period.endDate,
           }),
         }),
         adminFetcher<unknown>("/escrows/pending?limit=20"),
         adminFetcher<unknown>("/escrows/timed-out?limit=20"),
       ]);
 
-      const revenue = asRecord(revenuePayload);
       const pending = parseEscrows(pendingPayload, "pending");
       const timedOut = parseEscrows(timedOutPayload, "timed-out");
 
       return {
-        revenueReport: [
-          {
-            label: "Period",
-            value: `${pickString(revenue, ["start_date"], startDate)} to ${pickString(
-              revenue,
-              ["end_date"],
-              endDate
-            )}`,
-          },
-          {
-            label: "Total Revenue",
-            value: String(pickNumber(revenue, ["total_revenue"])),
-          },
-          {
-            label: "Total Commission",
-            value: String(pickNumber(revenue, ["total_commission"])),
-          },
-          {
-            label: "Total Orders",
-            value: String(pickNumber(revenue, ["total_orders"])),
-          },
-        ],
+        revenueReport: revenueReport(revenuePayload, period),
         pendingEscrows: pending.map((row, index) => {
           return {
             id: row.id || `pending-${index}`,
