@@ -283,6 +283,7 @@ test('seller escrow displays the PascalCase status even when delivery lookup is 
   h.render(); const cleanup = h.effects[0](); await settle();
   const tree = h.render();
   assert.ok(nodes(tree, node => node.type === 'status-component' && node.props.status === 'held').length);
+  assert.equal(nodes(tree, node => node.type === 'status-component' && node.props.status === 'held')[0].props.sellerAmount, 10000);
   assert.ok(nodes(tree, node => node.props?.children === 'paid').length);
   assert.ok(nodes(tree, node => node.props?.role === 'alert').length);
   cleanup();

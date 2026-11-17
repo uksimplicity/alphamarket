@@ -92,6 +92,7 @@ export default function VendorOrderDetail() {
 
   const summary = useMemo(() => {
     if (!order) return null;
+    const pricing = orderPricing(order);
 
     const customerRecord =
       order.customer && typeof order.customer === "object"
@@ -109,6 +110,7 @@ export default function VendorOrderDetail() {
       ),
       notes: String(order.notes ?? order.note ?? "-"),
       escrowStatus: escrowStatusFromOrder(order),
+      sellerProceeds: pricing.issues.length ? null : pricing.sellerProceeds,
       paymentStatus: orderPaymentStatus(order),
     };
   }, [order, orderId]);
@@ -204,7 +206,7 @@ export default function VendorOrderDetail() {
 
       <div className={styles.progressList}>
         <OrderMoneyBreakdown pricing={orderPricing(order)} seller />
-        <EscrowStatus status={summary.escrowStatus} />
+        <EscrowStatus status={summary.escrowStatus} sellerAmount={summary.sellerProceeds} />
         <div className={styles.progressRow}><span>Payment status</span><span className={styles.pill}>{summary.paymentStatus}</span></div>
         <div className={styles.progressRow}>
           <span>Status</span>
