@@ -68,7 +68,7 @@ export function escrowStatusFromOrder(payload: unknown): string {
 export function escrowDescription(status: string): string {
   if (["released", "paid_out", "completed"].includes(status)) return "Escrow funds are marked as released.";
   if (["reversed", "refunded"].includes(status)) return "This escrow is marked as reversed or refunded.";
-  if (["held", "funded", "locked", "in_escrow"].includes(status)) return "Funds are reported as held. Payment confirmation does not mean funds have been released.";
+  if (["held", "funded", "locked", "in_escrow"].includes(status)) return "Funds are held in escrow and will be released when the buyer confirms receipt of the product.";
   if (status === "pending") return "This escrow is pending resolution. Payment confirmation and funds release are separate steps.";
   if (["timed_out", "timed-out", "expired"].includes(status)) return "This escrow requires review. A timeout does not automatically confirm a release or refund.";
   if (status === "unknown") return "Escrow status is not yet available for this order. Payment and escrow release are separate.";
