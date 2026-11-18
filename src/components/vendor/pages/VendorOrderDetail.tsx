@@ -21,7 +21,8 @@ import detail from "@/components/vendor/sellerOrderDetail.module.css";
 import DeliveryProgress from "@/components/commerce/DeliveryProgress";
 import { firstName } from "@/components/commerce/firstName";
 import { findOrderBuyerName } from "@/components/commerce/orderConversationName";
-import OrderDeliveryNotice from "@/components/notifications/OrderDeliveryNotice";
+import { useOrderDeliveryNotice } from "@/components/notifications/OrderDeliveryNotice";
+import { noticeRiderName, riderNameFromData } from "@/components/notifications/deliveryNoticeSelection";
 
 export default function VendorOrderDetail() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -136,6 +137,7 @@ export default function VendorOrderDetail() {
   }, [order, orderId, conversationBuyer, key, buyerId]);
 
   const tracking = current?.tracking ?? (order ? orderDelivery(order) : null);
+  const notice = useOrderDeliveryNotice(orderId || "", current?.checkedAt || "", Boolean(current?.riderError && !tracking?.status && tracking?.required !== false));
   async function openChat(contact: "buyer" | "rider") {
     if (!summary || !orderId || chatRequest.current) return;
     if (contact === "rider" && !tracking?.id) return;
@@ -201,10 +203,9 @@ export default function VendorOrderDetail() {
               <button type="button" className={detail.refresh} disabled={refreshing} onClick={() => setRevision(value => value + 1)}>{refreshing ? "Refreshing..." : "Refresh tracking"}</button>
             </div>
             {tracking?.required === false ? <p className={detail.muted}>No rider delivery is required for this order.</p> : <>
-              {current?.riderError && !tracking?.status && orderId ? <OrderDeliveryNotice orderId={orderId} refreshKey={current.checkedAt} /> : null}
-              <div className={detail.status}><span className={detail.icon}><Icon name="delivery" size={24} /></span><div><span className={detail.statusLabel}>Delivery status</span><strong>{current?.riderError && !tracking?.status ? "Tracking unavailable" : tracking ? orderDeliveryLabel(tracking) : "Awaiting delivery update"}</strong></div></div>
+              <div className={detail.status}><span className={detail.icon}><Icon name="delivery" size={24} /></span><div><span className={detail.statusLabel}>Delivery status</span><strong>{notice?.title || (current?.riderError && !tracking?.status ? "Tracking unavailable" : tracking ? orderDeliveryLabel(tracking) : "Awaiting delivery update")}</strong>{notice ? <p className={detail.sync}>Updated <time dateTime={notice.date}>{new Date(notice.date).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time></p> : null}</div></div>
               {tracking ? <DeliveryProgress tracking={tracking} /> : null}
-              {current?.riderError ? <details className={detail.notice}><summary>Delivery tracking is unavailable to this account</summary><p role="alert">{current.riderError} Use Refresh tracking to check again.</p></details> : null}
+              {current?.riderError && !notice ? <details className={detail.notice}><summary>Delivery tracking is unavailable to this account</summary><p role="alert">{current.riderError} Use Refresh tracking to check again.</p></details> : null}
               {tracking?.updatedAt && Number.isFinite(Date.parse(tracking.updatedAt)) ? <p className={detail.sync}>Delivery updated <time dateTime={tracking.updatedAt}>{new Date(tracking.updatedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time></p> : null}
             </>}
             {current?.checkedAt ? <p className={detail.sync}>Last checked <time dateTime={current.checkedAt}>{new Date(current.checkedAt).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}</time> · Checks every 15 seconds while visible</p> : null}
@@ -216,7 +217,7 @@ export default function VendorOrderDetail() {
               <div className={detail.contact}><p className={detail.contactLabel}>Buyer</p><p className={detail.contactName}>{summary.customer}</p><p className={detail.muted}>Questions about this order</p>
                 <button type="button" aria-label="Chat with buyer" className={detail.chat} disabled={openingChat} onClick={() => void openChat("buyer")}><Icon name="chat" size={14} /><span>Chat with buyer</span></button>
               </div>
-              {tracking?.required !== false ? <div className={detail.contact}><p className={detail.contactLabel}>Assigned rider</p><p className={detail.contactName}>{tracking?.riderId ? firstName(current?.rider?.name) || "Assigned; name not reported" : current?.riderError ? "Rider assignment unavailable." : "Rider assignment has not been reported."}</p>
+              {tracking?.required !== false ? <div className={detail.contact}><p className={detail.contactLabel}>Assigned rider</p><p className={detail.contactName}>{firstName(current?.rider?.name || noticeRiderName(notice) || riderNameFromData(order || undefined)) || (tracking?.riderId ? "Assigned; name not reported" : current?.riderError ? "Rider assignment unavailable." : "Rider assignment has not been reported.")}</p>
                 {tracking?.riderId ? <span className={detail.phone}>{current?.rider?.phone || "Not reported"}</span> : null}
                 <button type="button" aria-label="Chat with rider" className={detail.chat} disabled={openingChat || !tracking?.id} onClick={() => void openChat("rider")}><Icon name="chat" size={14} /><span>Chat with rider</span></button>
               </div> : null}

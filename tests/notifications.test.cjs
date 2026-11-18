@@ -92,7 +92,7 @@ test('notification links use known internal destinations and never backend-provi
 });
 
 test('delivery fallback selects the latest dated notification for the exact order', () => {
-  const { latestDeliveryNotice } = load('src/components/notifications/deliveryNoticeSelection.ts');
+  const { latestDeliveryNotice, noticeRiderName } = load('src/components/notifications/deliveryNoticeSelection.ts');
   const notice = (title, order, date, type = 'delivery_update') => ({ title, type, date, data: { order_id: order } });
   const items = [notice('Rider on the way for pickup', 'order-1', '2026-11-17T12:23:09Z'),
     notice('Delivery completed', 'order-2', '2026-11-18T12:23:09Z'),
@@ -101,6 +101,8 @@ test('delivery fallback selects the latest dated notification for the exact orde
     notice('Rider on the way', 'order-1', '2026-11-19T12:23:09Z', 'chat_message')];
   assert.equal(latestDeliveryNotice(items, 'order-1').title, 'Rider on the way for pickup');
   assert.equal(latestDeliveryNotice(items, 'unknown'), null);
+  assert.equal(noticeRiderName({ data: { rider: { user: { first_name: 'Ada' } } } }), 'Ada');
+  assert.equal(noticeRiderName({ data: {} }), '');
 });
 
 test('client refuses HTTP 200 failures and uses the current authenticated account', async () => {

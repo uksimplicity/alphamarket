@@ -22,7 +22,7 @@ function harness(file, response) {
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
       if (name.endsWith('.css')) return { default: new Proxy({}, { get: (_, key) => key }) };
       if (name.endsWith('ShopperIcon')) return { default: 'icon' };
-      if (name.endsWith('OrderDeliveryNotice')) return { default: 'delivery-notice' };
+      if (name.endsWith('OrderDeliveryNotice')) return { useOrderDeliveryNotice: () => null };
       if (name.endsWith('DeliveryProgress')) return { default: 'delivery-progress' };
       if (name === 'react') return {
         useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = initial; return [slots[i], value => { slots[i] = typeof value === 'function' ? value(slots[i]) : value; }]; },

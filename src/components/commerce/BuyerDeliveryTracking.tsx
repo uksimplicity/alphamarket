@@ -13,7 +13,8 @@ import { sellerPhone, sellerPhoneHref } from "@/components/products/sellerPhone"
 import styles from "./orderDetails.module.css";
 import DeliveryProgress from "./DeliveryProgress";
 import { firstName } from "./firstName";
-import OrderDeliveryNotice from "@/components/notifications/OrderDeliveryNotice";
+import { useOrderDeliveryNotice } from "@/components/notifications/OrderDeliveryNotice";
+import { noticeRiderName } from "@/components/notifications/deliveryNoticeSelection";
 
 export default function BuyerDeliveryTracking({ order, checkedAt, refreshing, reload }: {
   order: BuyerOrder; checkedAt: string; refreshing: boolean; reload: () => void;
@@ -24,6 +25,7 @@ export default function BuyerDeliveryTracking({ order, checkedAt, refreshing, re
   const [snapshot, setSnapshot] = useState<{ key: string; tracking: DeliveryTracking; rider: AssignedRider | null; error: string } | null>(null);
   const current = snapshot?.key === key ? snapshot : null;
   const tracking = current?.tracking ?? initial;
+  const notice = useOrderDeliveryNotice(order.id, checkedAt, Boolean(current?.error && !tracking.status && tracking.required !== false));
   useEffect(() => {
     if (initial.required === false || (!initial.riderId && !initial.id) || !user?.id) return;
     const controller = new AbortController();
@@ -58,20 +60,19 @@ export default function BuyerDeliveryTracking({ order, checkedAt, refreshing, re
   return <section className={styles.panel} aria-label="Delivery and rider tracking">
     <div className={styles.panelHeading}><h2>Delivery &amp; rider</h2><button type="button" className={styles.refresh} disabled={refreshing} onClick={reload}><ShopperIcon name="refresh" size={13} />{refreshing ? "Refreshing..." : "Refresh tracking"}</button></div>
     {tracking.required === false ? <p className={styles.caption}>No rider delivery is required for this order.</p> : <>
-      {current?.error && !tracking.status ? <OrderDeliveryNotice orderId={order.id} refreshKey={checkedAt} /> : null}
       <div className={styles.trackingHero}>
         <span className={styles.trackingIcon}><ShopperIcon name="truck" size={26} /></span>
-        <div><dl><dt>Delivery status</dt><dd>{current?.error && !tracking.status ? "Tracking unavailable" : orderDeliveryLabel(tracking)}</dd></dl>{!tracking.id && !current?.error ? <p>Your delivery is being arranged.</p> : null}</div>
+        <div><dl><dt>Delivery status</dt><dd>{notice?.title || (current?.error && !tracking.status ? "Tracking unavailable" : orderDeliveryLabel(tracking))}</dd></dl>{notice ? <p>Updated <time dateTime={notice.date}>{new Date(notice.date).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time></p> : !tracking.id && !current?.error ? <p>Your delivery is being arranged.</p> : null}</div>
       </div>
       <DeliveryProgress tracking={tracking} />
       <div className={styles.rider}>
         <span className={styles.icon}><ShopperIcon name="user" size={18} /></span>
-        <dl><div><dt>Assigned rider</dt><dd>{tracking.riderId ? firstName(current?.rider?.name) || (current ? "Rider assigned; awaiting details" : "Loading rider details...") : current?.error ? "Rider assignment unavailable" : "Awaiting rider assignment"}</dd></div>
+        <dl><div><dt>Assigned rider</dt><dd>{firstName(current?.rider?.name || noticeRiderName(notice)) || (tracking.riderId ? (current ? "Rider assigned; awaiting details" : "Loading rider details...") : current?.error ? "Rider assignment unavailable" : "Awaiting rider assignment")}</dd></div>
           {tracking.riderId ? <div><dt>Rider contact</dt><dd>{sellerPhone(current?.rider?.phone) ? <a className={styles.callRider} href={sellerPhoneHref(sellerPhone(current?.rider?.phone))} aria-label={`Call rider at ${current?.rider?.phone}`}><ShopperIcon name="phone" size={15} /><span>{current?.rider?.phone}</span></a> : "Contact details pending"}</dd></div> : null}
           {tracking.updatedAt && Number.isFinite(Date.parse(tracking.updatedAt)) ? <div><dt>Delivery updated</dt><dd><time dateTime={tracking.updatedAt}>{new Date(tracking.updatedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time></dd></div> : null}
         </dl>
       </div>
-      {current?.error ? <details className={styles.alert}><summary>Delivery tracking is unavailable</summary><p role="alert">{current.error} Use Refresh tracking to check again.</p></details> : null}
+      {current?.error && !notice ? <details className={styles.alert}><summary>Delivery tracking is unavailable</summary><p role="alert">{current.error} Use Refresh tracking to check again.</p></details> : null}
     </>}
     <div className={styles.destination}><span className={styles.icon}><ShopperIcon name="pin" size={18} /></span><div><h3>Delivery address</h3><address className={styles.address}>{order.address || "Delivery address unavailable"}</address></div></div>
     <div className={styles.trackingFooter}>

@@ -102,6 +102,7 @@ function pageHarness(response, component = 'VendorOrders') {
   const slots = [], effects = [], calls = [], timers = new Map(), focusListeners = new Map(), visibilityListeners = new Map();
   const chatCalls = [], navigations = [];
   let startChat = async () => { throw new Error('Chat unavailable'); };
+  let deliveryNotice = null;
   let cursor = 0;
   let timerId = 0, user = { id: 'seller' };
   const document = { visibilityState: 'visible', addEventListener: (name, fn) => visibilityListeners.set(name, fn), removeEventListener: name => visibilityListeners.delete(name) };
@@ -136,12 +137,12 @@ function pageHarness(response, component = 'VendorOrders') {
       if (name.endsWith('.css')) return { default: new Proxy({}, { get: (_, key) => key }) };
       if (name.endsWith('EscrowStatus') || name.endsWith('OrderMoneyBreakdown')) return { default: 'status-component' };
       if (name.endsWith('DeliveryProgress')) return { default: 'delivery-progress' };
-      if (name.endsWith('OrderDeliveryNotice')) return { default: 'delivery-notice' };
+      if (name.endsWith('OrderDeliveryNotice')) return { useOrderDeliveryNotice: (_id, _refresh, enabled) => enabled ? deliveryNotice : null };
       if (name.startsWith('@/')) return load('src/' + name.slice(2) + '.ts');
       throw new Error(name);
     },
   });
-  return { effects, calls, timers, document, focusListeners, visibilityListeners, chatCalls, navigations, chat: fn => { startChat = fn; }, changeUser: id => { user = { id }; }, render() { cursor = 0; return loaded.exports.default(); } };
+  return { effects, calls, timers, document, focusListeners, visibilityListeners, chatCalls, navigations, chat: fn => { startChat = fn; }, notice: value => { deliveryNotice = value; }, changeUser: id => { user = { id }; }, render() { cursor = 0; return loaded.exports.default(); } };
 }
 function nodes(tree, match) {
   if (Array.isArray(tree)) return tree.flatMap(child => nodes(child, match));
@@ -289,6 +290,20 @@ test('seller escrow displays the PascalCase status even when delivery lookup is 
   assert.equal(nodes(tree, node => node.type === 'status-component' && node.props.status === 'held')[0].props.sellerAmount, 10000);
   assert.ok(nodes(tree, node => node.props?.children === 'paid').length);
   assert.ok(nodes(tree, node => node.props?.role === 'alert').length);
+  cleanup();
+});
+
+test('a matching rider update replaces the unavailable status and shows the rider first name', async () => {
+  const h = pageHarness(url => url.includes('/marketplace/deliveries/')
+    ? Response.json({ error: 'Denied' }, { status: 403 })
+    : Response.json({ data: { ...fixture, DeliveryID: 'delivery', RequiresDelivery: true } }), 'VendorOrderDetail');
+  h.notice({ title: 'Rider on the way for pickup', date: '2026-11-17T12:23:09Z', data: { rider_name: 'Ada Okafor' } });
+  h.render(); const cleanup = h.effects[0](); await settle();
+  const tree = h.render();
+  assert.ok(nodes(tree, node => node.props?.children === 'Rider on the way for pickup').length);
+  assert.ok(nodes(tree, node => node.props?.children === 'Ada').length);
+  assert.equal(nodes(tree, node => node.props?.children === 'Tracking unavailable').length, 0);
+  assert.equal(nodes(tree, node => node.props?.children === 'Delivery tracking is unavailable to this account').length, 0);
   cleanup();
 });
 
