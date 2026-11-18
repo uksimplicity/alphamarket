@@ -136,6 +136,7 @@ function pageHarness(response, component = 'VendorOrders') {
       if (name.endsWith('.css')) return { default: new Proxy({}, { get: (_, key) => key }) };
       if (name.endsWith('EscrowStatus') || name.endsWith('OrderMoneyBreakdown')) return { default: 'status-component' };
       if (name.endsWith('DeliveryProgress')) return { default: 'delivery-progress' };
+      if (name.endsWith('OrderDeliveryNotice')) return { default: 'delivery-notice' };
       if (name.startsWith('@/')) return load('src/' + name.slice(2) + '.ts');
       throw new Error(name);
     },

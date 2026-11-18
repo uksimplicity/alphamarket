@@ -13,6 +13,7 @@ import { sellerPhone, sellerPhoneHref } from "@/components/products/sellerPhone"
 import styles from "./orderDetails.module.css";
 import DeliveryProgress from "./DeliveryProgress";
 import { firstName } from "./firstName";
+import OrderDeliveryNotice from "@/components/notifications/OrderDeliveryNotice";
 
 export default function BuyerDeliveryTracking({ order, checkedAt, refreshing, reload }: {
   order: BuyerOrder; checkedAt: string; refreshing: boolean; reload: () => void;
@@ -57,6 +58,7 @@ export default function BuyerDeliveryTracking({ order, checkedAt, refreshing, re
   return <section className={styles.panel} aria-label="Delivery and rider tracking">
     <div className={styles.panelHeading}><h2>Delivery &amp; rider</h2><button type="button" className={styles.refresh} disabled={refreshing} onClick={reload}><ShopperIcon name="refresh" size={13} />{refreshing ? "Refreshing..." : "Refresh tracking"}</button></div>
     {tracking.required === false ? <p className={styles.caption}>No rider delivery is required for this order.</p> : <>
+      {current?.error && !tracking.status ? <OrderDeliveryNotice orderId={order.id} refreshKey={checkedAt} /> : null}
       <div className={styles.trackingHero}>
         <span className={styles.trackingIcon}><ShopperIcon name="truck" size={26} /></span>
         <div><dl><dt>Delivery status</dt><dd>{current?.error && !tracking.status ? "Tracking unavailable" : orderDeliveryLabel(tracking)}</dd></dl>{!tracking.id && !current?.error ? <p>Your delivery is being arranged.</p> : null}</div>

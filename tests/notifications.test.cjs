@@ -91,6 +91,18 @@ test('notification links use known internal destinations and never backend-provi
   assert.equal(client.notificationLink({ type: 'chat_message', data: {} }, true), '/vendor/messages');
 });
 
+test('delivery fallback selects the latest dated notification for the exact order', () => {
+  const { latestDeliveryNotice } = load('src/components/notifications/deliveryNoticeSelection.ts');
+  const notice = (title, order, date, type = 'delivery_update') => ({ title, type, date, data: { order_id: order } });
+  const items = [notice('Rider on the way for pickup', 'order-1', '2026-11-17T12:23:09Z'),
+    notice('Delivery completed', 'order-2', '2026-11-18T12:23:09Z'),
+    notice('Rider assigned', 'order-1', '2026-11-16T12:23:09Z'),
+    notice('Rider delivered', 'order-1', 'bad-date'),
+    notice('Rider on the way', 'order-1', '2026-11-19T12:23:09Z', 'chat_message')];
+  assert.equal(latestDeliveryNotice(items, 'order-1').title, 'Rider on the way for pickup');
+  assert.equal(latestDeliveryNotice(items, 'unknown'), null);
+});
+
 test('client refuses HTTP 200 failures and uses the current authenticated account', async () => {
   const calls = [];
   global.fetch = async (url, init) => { calls.push({ url, init }); return Response.json({ success: false, message: 'Access denied' }); };

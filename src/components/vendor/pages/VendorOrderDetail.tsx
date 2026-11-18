@@ -21,6 +21,7 @@ import detail from "@/components/vendor/sellerOrderDetail.module.css";
 import DeliveryProgress from "@/components/commerce/DeliveryProgress";
 import { firstName } from "@/components/commerce/firstName";
 import { findOrderBuyerName } from "@/components/commerce/orderConversationName";
+import OrderDeliveryNotice from "@/components/notifications/OrderDeliveryNotice";
 
 export default function VendorOrderDetail() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -200,6 +201,7 @@ export default function VendorOrderDetail() {
               <button type="button" className={detail.refresh} disabled={refreshing} onClick={() => setRevision(value => value + 1)}>{refreshing ? "Refreshing..." : "Refresh tracking"}</button>
             </div>
             {tracking?.required === false ? <p className={detail.muted}>No rider delivery is required for this order.</p> : <>
+              {current?.riderError && !tracking?.status && orderId ? <OrderDeliveryNotice orderId={orderId} refreshKey={current.checkedAt} /> : null}
               <div className={detail.status}><span className={detail.icon}><Icon name="delivery" size={24} /></span><div><span className={detail.statusLabel}>Delivery status</span><strong>{current?.riderError && !tracking?.status ? "Tracking unavailable" : tracking ? orderDeliveryLabel(tracking) : "Awaiting delivery update"}</strong></div></div>
               {tracking ? <DeliveryProgress tracking={tracking} /> : null}
               {current?.riderError ? <details className={detail.notice}><summary>Delivery tracking is unavailable to this account</summary><p role="alert">{current.riderError} Use Refresh tracking to check again.</p></details> : null}
