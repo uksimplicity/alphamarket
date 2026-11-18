@@ -20,6 +20,7 @@ import styles from "@/components/vendor/vendor.module.css";
 import detail from "@/components/vendor/sellerOrderDetail.module.css";
 import DeliveryProgress from "@/components/commerce/DeliveryProgress";
 import { firstName } from "@/components/commerce/firstName";
+import { findOrderBuyerName } from "@/components/commerce/orderConversationName";
 
 export default function VendorOrderDetail() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -34,11 +35,15 @@ export default function VendorOrderDetail() {
   const [revision, setRevision] = useState(0);
   const [openingChat, setOpeningChat] = useState(false);
   const [chatError, setChatError] = useState("");
+  const [conversationBuyer, setConversationBuyer] = useState<{ key: string; name: string } | null>(null);
   const chatRequest = useRef<AbortController | null>(null);
   const current = snapshot?.key === key ? snapshot : null;
   const order = current?.order ?? null;
   const error = current?.error || "";
   const loading = !current;
+  const hasOrder = Boolean(order);
+  const buyerId = order ? String(order.buyer_id ?? order.buyerId ?? order.BuyerID ?? "") : "";
+  const knownBuyerName = order ? customerName(order) : "";
 
   useEffect(() => {
     const controller = new AbortController();
@@ -91,6 +96,19 @@ export default function VendorOrderDetail() {
   }, [orderId, user?.id, key, revision]);
 
   useEffect(() => {
+    if (!hasOrder || !orderId || !user?.id || knownBuyerName) return;
+    const controller = new AbortController();
+    void (async () => {
+      const stamp = accountStamp();
+      const client = new ChatClient();
+      const name = await findOrderBuyerName(offset => client.threads(offset, controller.signal), orderId, buyerId);
+      checkAccount(stamp);
+      if (!controller.signal.aborted && name) setConversationBuyer({ key: `${key}:${buyerId}`, name });
+    })().catch(() => { /* Order details remain available when the messaging service is unavailable. */ });
+    return () => controller.abort();
+  }, [key, orderId, user?.id, buyerId, knownBuyerName, hasOrder]);
+
+  useEffect(() => {
     setOpeningChat(false); setChatError("");
     return () => { chatRequest.current?.abort(); chatRequest.current = null; };
   }, [key]);
@@ -103,7 +121,7 @@ export default function VendorOrderDetail() {
       id: String(order.id ?? order.order_id ?? orderId ?? "-"),
       reference: String(order.order_number ?? order.orderNumber ?? order.OrderNumber ?? ""),
       status: String(order.status ?? "pending"),
-      customer: firstName(customerName(order)) || "Name not provided",
+      customer: firstName(customerName(order) || (conversationBuyer?.key === `${key}:${buyerId}` ? conversationBuyer.name : "")) || "Name not provided",
       buyerId: String(order.buyer_id ?? order.buyerId ?? order.BuyerID ?? ""),
       createdAt: String(order.created_at ?? order.createdAt ?? "-"),
       deliveryAddress: String(
@@ -114,7 +132,7 @@ export default function VendorOrderDetail() {
       sellerProceeds: pricing.issues.length ? null : pricing.sellerProceeds,
       paymentStatus: orderPaymentStatus(order),
     };
-  }, [order, orderId]);
+  }, [order, orderId, conversationBuyer, key, buyerId]);
 
   const tracking = current?.tracking ?? (order ? orderDelivery(order) : null);
   async function openChat(contact: "buyer" | "rider") {
@@ -212,7 +230,7 @@ export default function VendorOrderDetail() {
           <section className={`${detail.panel} ${detail.earnings}`}>
             <div className={detail.heading}><div className={detail.headingLabel}><span className={detail.icon}><Icon name="wallet" size={18} /></span><h2>Your earnings</h2></div></div>
             <p className={detail.eyebrow}>Seller proceeds</p><p className={detail.amount}>{pricingMoney(summary.sellerProceeds)}</p><p className={detail.muted}>Your share of this order</p>
-            <div className={detail.escrow}><EscrowStatus status={summary.escrowStatus} sellerAmount={summary.sellerProceeds} /></div>
+            <div className={detail.escrow}><EscrowStatus status={summary.escrowStatus} sellerAmount={summary.sellerProceeds} /><button type="button" className={detail.refresh} disabled={refreshing} onClick={() => setRevision(value => value + 1)}>{refreshing ? "Refreshing..." : "Refresh escrow status"}</button>{current?.checkedAt ? <p className={detail.sync}>Order and escrow checked <time dateTime={current.checkedAt}>{new Date(current.checkedAt).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}</time></p> : null}</div>
             <details className={detail.breakdown}><summary>Price breakdown</summary><OrderMoneyBreakdown pricing={orderPricing(order)} seller /></details>
             <button type="button" className={detail.wallet} onClick={() => navigate("/vendor/payments")}><Icon name="wallet" size={15} />Wallet &amp; payouts<Icon name="chevron" size={13} /></button>
           </section>
