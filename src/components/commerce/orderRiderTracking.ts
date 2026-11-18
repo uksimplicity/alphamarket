@@ -19,7 +19,7 @@ function deliveryRecord(payload: unknown, deliveryId: string, orderId: string) {
 }
 
 export async function loadOrderRiderTracking(
-  request: (path: string) => Promise<unknown>, initial: DeliveryTracking, orderId: string,
+  request: (path: string) => Promise<unknown>, initial: DeliveryTracking, orderId: string, includeRider = true,
 ) {
   let tracking = initial;
   let rider: AssignedRider | null = null;
@@ -33,7 +33,7 @@ export async function loadOrderRiderTracking(
         accepted: resolved.accepted || tracking.accepted, acceptedAt: resolved.acceptedAt || tracking.acceptedAt,
         updatedAt: resolved.updatedAt || tracking.updatedAt };
     }
-    if (tracking.riderId) rider = assignedRider(await request(`/api/marketplace/grpc/riders/${encodeURIComponent(tracking.riderId)}`), tracking.riderId);
+    if (includeRider && tracking.riderId) rider = assignedRider(await request(`/api/marketplace/grpc/riders/${encodeURIComponent(tracking.riderId)}`), tracking.riderId);
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") throw error;
     riderError = error instanceof Error ? error.message : "Delivery and rider details could not be loaded.";

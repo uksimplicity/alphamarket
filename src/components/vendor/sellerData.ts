@@ -11,6 +11,7 @@ export type SellerOrder = {
   customer: string; createdAt: string; orderNumber: string; buyerId: string;
   pricing: OrderPricing;
   delivery: ReturnType<typeof orderDelivery>;
+  deliveryError?: string;
 };
 type Row = Record<string, unknown>;
 export function asRow(value: unknown): Row {

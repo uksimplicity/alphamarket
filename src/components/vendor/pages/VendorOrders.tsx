@@ -10,6 +10,7 @@ import { pricingMoney } from "@/components/commerce/orderPricing";
 import { loadOrderCustomerNames, loadSellerOrders } from "@/components/vendor/sellerOrders";
 import { needsFulfillment, type SellerOrder } from "@/components/vendor/sellerData";
 import { orderDeliveryLabel } from "@/components/vendor/orderDelivery";
+import { loadOrderRiderTracking } from "@/components/commerce/orderRiderTracking";
 
 function createdDate(value: string) {
   const date = new Date(value);
@@ -61,7 +62,13 @@ export default function VendorOrders() {
         const namedRows = await loadOrderCustomerNames(request, rows);
         if (controller.signal.aborted) return;
         checkAccount(stamp);
-        setSnapshot({ owner, orders: namedRows });
+        const enriched = await Promise.all(namedRows.map(async order => {
+          const result = await loadOrderRiderTracking(request, order.delivery, order.id, false);
+          return { ...order, delivery: result.tracking, deliveryError: result.riderError };
+        }));
+        if (controller.signal.aborted) return;
+        checkAccount(stamp);
+        setSnapshot({ owner, orders: enriched });
         setError("");
       } catch (err) {
         if (controller.signal.aborted) return;
@@ -74,7 +81,7 @@ export default function VendorOrders() {
     }
     void loadOrders();
     const visibleRefresh = () => { if (document.visibilityState === "visible") void loadOrders(); };
-    const timer = window.setInterval(visibleRefresh, 30000);
+    const timer = window.setInterval(visibleRefresh, 15000);
     window.addEventListener("focus", visibleRefresh);
     document.addEventListener("visibilitychange", visibleRefresh);
     return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", visibleRefresh); document.removeEventListener("visibilitychange", visibleRefresh); };
@@ -115,7 +122,7 @@ export default function VendorOrders() {
         </div>
         {loading ? <div className={styles.cardSubtitle}>Loading orders...</div> : null}
         {error ? <div role="alert" className={styles.cardSubtitle}>{error}</div> : null}
-        <p className={styles.cardSubtitle}>Delivery updates refresh every 30 seconds while this page is visible.</p>
+        <p className={styles.cardSubtitle}>Delivery updates are checked every 15 seconds while this page is visible.</p>
         {!loading && !error && orders?.length === 0 ? (
           <div className={styles.cardSubtitle}>No orders yet.</div>
         ) : null}
@@ -147,7 +154,7 @@ export default function VendorOrders() {
                     <td>
                       <span className={styles.pill}>{order.status}</span>
                     </td>
-                    <td><span className={styles.pill}>{orderDeliveryLabel(order.delivery)}</span></td>
+                    <td><span className={styles.pill}>{order.deliveryError && !order.delivery.status ? "Tracking unavailable" : orderDeliveryLabel(order.delivery)}</span>{order.deliveryError && order.delivery.status ? <small> Latest update unavailable</small> : null}</td>
                     <td>{createdDate(order.createdAt)}</td>
                   </tr>
                 ))}

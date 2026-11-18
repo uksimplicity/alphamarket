@@ -11,6 +11,7 @@ import { paymentError } from "./payments";
 import ShopperIcon from "@/components/marketplace/ShopperIcon";
 import { sellerPhone, sellerPhoneHref } from "@/components/products/sellerPhone";
 import styles from "./orderDetails.module.css";
+import DeliveryProgress from "./DeliveryProgress";
 
 export default function BuyerDeliveryTracking({ order, checkedAt, refreshing, reload }: {
   order: BuyerOrder; checkedAt: string; refreshing: boolean; reload: () => void;
@@ -57,11 +58,12 @@ export default function BuyerDeliveryTracking({ order, checkedAt, refreshing, re
     {tracking.required === false ? <p className={styles.caption}>No rider delivery is required for this order.</p> : <>
       <div className={styles.trackingHero}>
         <span className={styles.trackingIcon}><ShopperIcon name="truck" size={26} /></span>
-        <div><dl><dt>Delivery status</dt><dd>{orderDeliveryLabel(tracking)}</dd></dl>{!tracking.id ? <p>Your delivery is being arranged.</p> : null}</div>
+        <div><dl><dt>Delivery status</dt><dd>{current?.error && !tracking.status ? "Tracking unavailable" : orderDeliveryLabel(tracking)}</dd></dl>{!tracking.id && !current?.error ? <p>Your delivery is being arranged.</p> : null}</div>
       </div>
+      <DeliveryProgress tracking={tracking} />
       <div className={styles.rider}>
         <span className={styles.icon}><ShopperIcon name="user" size={18} /></span>
-        <dl><div><dt>Assigned rider</dt><dd>{tracking.riderId ? current?.rider?.name || (current ? "Rider assigned; awaiting details" : "Loading rider details...") : "Awaiting rider assignment"}</dd></div>
+        <dl><div><dt>Assigned rider</dt><dd>{tracking.riderId ? current?.rider?.name || (current ? "Rider assigned; awaiting details" : "Loading rider details...") : current?.error ? "Rider assignment unavailable" : "Awaiting rider assignment"}</dd></div>
           {tracking.riderId ? <div><dt>Rider contact</dt><dd>{sellerPhone(current?.rider?.phone) ? <a className={styles.callRider} href={sellerPhoneHref(sellerPhone(current?.rider?.phone))} aria-label={`Call rider at ${current?.rider?.phone}`}><ShopperIcon name="phone" size={15} /><span>{current?.rider?.phone}</span></a> : "Contact details pending"}</dd></div> : null}
           {tracking.updatedAt && Number.isFinite(Date.parse(tracking.updatedAt)) ? <div><dt>Delivery updated</dt><dd><time dateTime={tracking.updatedAt}>{new Date(tracking.updatedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time></dd></div> : null}
         </dl>
@@ -70,7 +72,7 @@ export default function BuyerDeliveryTracking({ order, checkedAt, refreshing, re
     </>}
     <div className={styles.destination}><span className={styles.icon}><ShopperIcon name="pin" size={18} /></span><div><h3>Delivery address</h3><address className={styles.address}>{order.address || "Delivery address unavailable"}</address></div></div>
     <div className={styles.trackingFooter}>
-      {checkedAt ? <p>Last checked: <time dateTime={checkedAt}>{new Date(checkedAt).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}</time><br />Updates every 30 seconds while this page is visible.</p> : <p>Check back for the latest delivery updates.</p>}
+      {checkedAt ? <p>Last checked: <time dateTime={checkedAt}>{new Date(checkedAt).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Lagos" })}</time><br />Checks for updates every 15 seconds while this page is visible.</p> : <p>Check back for the latest delivery updates.</p>}
     </div>
   </section>;
 }

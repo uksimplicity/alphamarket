@@ -8,6 +8,7 @@ import { useAuthUser } from "@/components/auth/useAuthUser";
 import { orderPricing, type OrderPricing } from "./orderPricing";
 import { accountStamp, checkAccount } from "./localAccountData";
 import { orderDelivery } from "@/components/vendor/orderDelivery";
+import { loadOrderRiderTracking } from "./orderRiderTracking";
 
 type Row = Record<string, unknown>;
 function record(value: unknown): Row { return value && typeof value === "object" && !Array.isArray(value) ? value as Row : {}; }
@@ -23,6 +24,7 @@ export type BuyerOrder = {
   total: number | null; address: string; createdAt: string;
   pricing: OrderPricing;
   delivery: ReturnType<typeof orderDelivery>;
+  deliveryError?: string;
   items: Array<{ id: string; name: string; qty: number; price: number | null }>;
 };
 
@@ -91,14 +93,29 @@ export function useBuyerOrders(id?: string, offset = 0, pageSize = 100) {
         const rows = id ? [data] : Array.isArray(data) ? data : root.orders ?? root.items ?? root.rows ?? [];
         const parsed = (Array.isArray(rows) ? rows : []).map(parseBuyerOrder).filter((order): order is BuyerOrder => order !== null);
         if (id && parsed.some(order => order.id !== id)) throw new Error("The returned order does not match this order.");
-        if (!controller.signal.aborted) { setOrders(parsed); setError(""); setCheckedAt(new Date().toISOString()); }
+        if (!controller.signal.aborted) { setOrders(parsed); setError(""); }
+        if (!id) {
+          const request = async (path: string) => {
+            const result = await fetch(path, { headers: { Authorization: `Bearer ${auth.access_token.replace(/^Bearer\s+/i, "").trim()}` }, cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]) });
+            const data = await result.json(); checkAccount(stamp);
+            if (!result.ok || data?.success === false) throw new Error(paymentError(data, "Delivery tracking is unavailable."));
+            return data;
+          };
+          const enriched = await Promise.all(parsed.map(async order => {
+            const result = await loadOrderRiderTracking(request, order.delivery, order.id, false);
+            return { ...order, delivery: result.tracking, deliveryError: result.riderError };
+          }));
+          checkAccount(stamp);
+          if (!controller.signal.aborted) setOrders(enriched);
+        }
+        if (!controller.signal.aborted) setCheckedAt(new Date().toISOString());
       } catch (err) {
         if (!controller.signal.aborted) { setOrders([]); setCheckedAt(""); setError(err instanceof Error ? err.message : "Could not load your orders."); }
       } finally { inFlight = false; if (!controller.signal.aborted) { setLoading(false); setRefreshing(false); } }
     }
     void load();
     const visibleRefresh = () => { if (document.visibilityState === "visible") void load(); };
-    const timer = window.setInterval(visibleRefresh, 30000);
+    const timer = window.setInterval(visibleRefresh, 15000);
     window.addEventListener("focus", visibleRefresh);
     document.addEventListener("visibilitychange", visibleRefresh);
     return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", visibleRefresh); document.removeEventListener("visibilitychange", visibleRefresh); };

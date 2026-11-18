@@ -29,7 +29,8 @@ export default function OrdersPage() {
   return (
     <div className="grid gap-6">
       <Card>
-        <SectionTitle title="My Orders" subtitle="Follow your order and payment progress." />
+        <SectionTitle title="My Orders" subtitle="Follow your orders from payment through delivery." />
+        <p className="mt-2 text-xs text-slate-500">Delivery updates are checked every 15 seconds while this page is visible.</p>
         {loading ? <p className="mt-4 text-sm">Loading orders...</p> : null}
         {error ? <div role="alert" className="mt-4 text-red-700">{error} <Button onClick={reload}>Retry</Button></div> : null}
         <div className="mt-4 space-y-4">
@@ -41,12 +42,12 @@ export default function OrdersPage() {
             orders.map((order) => (
               <div
                 key={order.id}
-                className="rounded-2xl border border-slate-200 bg-white p-4"
+                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-200"
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-slate-800">
-                      Order {order.id}
+                      Order #{order.id.slice(-8).toUpperCase()}
                     </div>
                     <div className="text-xs text-slate-500">
                       <BuyerOrderSeller order={order} />
@@ -60,14 +61,15 @@ export default function OrdersPage() {
                       href={`/dashboard/orders/${order.id}`}
                       className="text-xs font-semibold text-brand"
                     >
-                      View Details
+                      View order →
                     </Link>
                   </div>
                 </div>
-                <div className="mt-4 space-y-3">
-                  <p className="text-sm capitalize">Order: {order.status.replaceAll("_", " ")}</p>
-                  <p className="text-sm capitalize">Payment: {order.paymentStatus.replaceAll("_", " ")}</p>
-                  <p className="text-sm">Delivery: <span className="font-medium text-slate-800">{orderDeliveryLabel(order.delivery)}</span></p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <p className="rounded-xl bg-slate-50 p-3 text-sm capitalize"><span className="block text-xs text-slate-500">Order</span>{order.status.replaceAll("_", " ")}</p>
+                  <p className="rounded-xl bg-slate-50 p-3 text-sm capitalize"><span className="block text-xs text-slate-500">Payment</span>{order.paymentStatus.replaceAll("_", " ")}</p>
+                  <p className="rounded-xl bg-blue-50 p-3 text-sm"><span className="block text-xs text-blue-600">Delivery</span><span className="font-medium text-slate-800">{order.deliveryError && !order.delivery.status ? "Tracking unavailable" : orderDeliveryLabel(order.delivery)}</span></p>
+                  {order.deliveryError ? <p className="text-xs text-amber-700">Latest delivery tracking is unavailable. Open the order for details.</p> : null}
                   {["delivered", "confirmed"].includes(order.status) ? <ReviewDraftButton orderId={order.id} /> : null}
                   {order.paymentStatus === "pending" && order.status !== "cancelled" ? <Button onClick={() => payOrder(order)}>Resume payment</Button> : null}
                 </div>
