@@ -480,6 +480,24 @@
   border-bottom: 1px solid #dce8ff;
 }
 
+.customerDetailsLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid #cbd9fa;
+  border-radius: 9px;
+  background: #f8faff;
+  color: #3158c9;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.customerDetailsLink:hover { background: #edf3ff; border-color: #96afea; }
+.customerDetailsLink:focus-visible { outline: 2px solid #3158c9; outline-offset: 3px; }
+.deliveryUpdateTime { display: block; margin-top: 6px; color: #66758b; font-size: 11px; }
+
 .pill {
   padding: 4px 8px;
   border-radius: 999px;
@@ -785,4 +803,3 @@
     min-width: 560px;
   }
 }
-

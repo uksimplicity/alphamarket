@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { getAuth } from "@/components/auth/authStorage";
+import { authGeneration, getAuth } from "@/components/auth/authStorage";
 import { useAuthUser } from "@/components/auth/useAuthUser";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 import styles from "@/components/vendor/vendor.module.css";
@@ -12,6 +12,8 @@ import { needsFulfillment, type SellerOrder } from "@/components/vendor/sellerDa
 import { orderDeliveryLabel } from "@/components/vendor/orderDelivery";
 import { loadOrderRiderTracking } from "@/components/commerce/orderRiderTracking";
 import { firstName } from "@/components/commerce/firstName";
+import { notificationPage, notificationRequest, type Notification } from "@/components/notifications/notificationClient";
+import { latestDeliveryNotice } from "@/components/notifications/deliveryNoticeSelection";
 
 function createdDate(value: string) {
   const date = new Date(value);
@@ -27,6 +29,8 @@ export default function VendorOrders() {
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const session = `${user?.id || ""}:${authGeneration()}`;
+  const [updates, setUpdates] = useState<{ session: string; items: Notification[] }>({ session: "", items: [] });
   const orders = snapshot.owner === user?.id ? snapshot.orders : null;
 
   useEffect(() => {
@@ -71,6 +75,15 @@ export default function VendorOrders() {
         checkAccount(stamp);
         setSnapshot({ owner, orders: enriched });
         setError("");
+        if (enriched.some(order => order.deliveryError && !order.delivery.status && order.delivery.required !== false)) {
+          try {
+            const payload = await notificationRequest("?limit=100&offset=0", "GET", controller.signal);
+            checkAccount(stamp);
+            if (!controller.signal.aborted) setUpdates({ session, items: notificationPage(payload, 100, 0).items });
+          } catch {
+            if (!controller.signal.aborted) { try { checkAccount(stamp); setUpdates({ session, items: [] }); } catch { /* Account changed. */ } }
+          }
+        }
       } catch (err) {
         if (controller.signal.aborted) return;
         setError(err instanceof Error ? err.message : "Failed to load orders.");
@@ -86,7 +99,7 @@ export default function VendorOrders() {
     window.addEventListener("focus", visibleRefresh);
     document.addEventListener("visibilitychange", visibleRefresh);
     return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", visibleRefresh); document.removeEventListener("visibilitychange", visibleRefresh); };
-  }, [user?.id, revision]);
+  }, [user?.id, revision, session]);
 
   const summary = useMemo(() => ({
     total: orders?.length ?? "—",
@@ -142,23 +155,25 @@ export default function VendorOrders() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((order) => (
+                {orders.map((order) => {
+                  const update = order.deliveryError && !order.delivery.status && order.delivery.required !== false && updates.session === session ? latestDeliveryNotice(updates.items, order.id) : null;
+                  return (
                   <tr key={order.id}>
                     <td>
                       <Link to={`/vendor/orders/${encodeURIComponent(order.id)}`} className="text-brand">
                         {order.orderNumber || order.id}
                       </Link>
                     </td>
-                    <td>{order.customer === "Customer" ? <Link to={`/vendor/orders/${encodeURIComponent(order.id)}`}>View customer details</Link> : firstName(order.customer)}</td>
+                    <td>{order.customer === "Customer" ? <Link className={styles.customerDetailsLink} to={`/vendor/orders/${encodeURIComponent(order.id)}`} aria-label={`View customer details for order ${order.orderNumber || order.id}`}>View customer details <span aria-hidden="true">↗</span></Link> : firstName(order.customer)}</td>
                     <td>{order.pricing.issues.length ? <span title={order.pricing.issues.join(" ")}>Pricing needs review</span> : pricingMoney(order.pricing.sellerProceeds)}</td>
                     <td><span className={styles.pill}>{order.paymentStatus.replaceAll("_", " ")}</span></td>
                     <td>
                       <span className={styles.pill}>{order.status}</span>
                     </td>
-                    <td><span className={styles.pill}>{order.deliveryError && !order.delivery.status ? "Tracking unavailable" : orderDeliveryLabel(order.delivery)}</span>{order.deliveryError && order.delivery.status ? <small> Latest update unavailable</small> : null}</td>
+                    <td><span className={styles.pill}>{update?.title || (order.deliveryError && !order.delivery.status ? "Tracking unavailable" : orderDeliveryLabel(order.delivery))}</span>{update ? <small className={styles.deliveryUpdateTime}>Updated <time dateTime={update.date}>{new Date(update.date).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time></small> : order.deliveryError && order.delivery.status ? <small> Latest update unavailable</small> : null}</td>
                     <td>{createdDate(order.createdAt)}</td>
                   </tr>
-                ))}
+                ); })}
               </tbody>
             </table>
           </div>

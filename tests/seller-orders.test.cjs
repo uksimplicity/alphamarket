@@ -103,6 +103,7 @@ function pageHarness(response, component = 'VendorOrders') {
   const chatCalls = [], navigations = [];
   let startChat = async () => { throw new Error('Chat unavailable'); };
   let deliveryNotice = null;
+  let notices = [];
   let cursor = 0;
   let timerId = 0, user = { id: 'seller' };
   const document = { visibilityState: 'visible', addEventListener: (name, fn) => visibilityListeners.set(name, fn), removeEventListener: name => visibilityListeners.delete(name) };
@@ -130,7 +131,7 @@ function pageHarness(response, component = 'VendorOrders') {
         startOrder(...args) { chatCalls.push({ type: 'order', args }); return startChat(...args); }
         startDelivery(...args) { chatCalls.push({ type: 'delivery', args }); return startChat(...args); }
       } };
-      if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'seller-token', user }) };
+      if (name.endsWith('authStorage')) return { getAuth: () => ({ access_token: 'seller-token', user }), authGeneration: () => 1 };
       if (name.endsWith('useAuthUser')) return { useAuthUser: () => user };
       if (name.endsWith('AdminIcon')) return { default: 'icon' };
       if (name.endsWith('localAccountData')) return { accountStamp: () => user.id, checkAccount(stamp) { if (stamp !== user.id) throw new Error('Account changed'); } };
@@ -138,11 +139,12 @@ function pageHarness(response, component = 'VendorOrders') {
       if (name.endsWith('EscrowStatus') || name.endsWith('OrderMoneyBreakdown')) return { default: 'status-component' };
       if (name.endsWith('DeliveryProgress')) return { default: 'delivery-progress' };
       if (name.endsWith('OrderDeliveryNotice')) return { useOrderDeliveryNotice: (_id, _refresh, enabled) => enabled ? deliveryNotice : null };
+      if (name.endsWith('notificationClient')) return { notificationRequest: async () => notices, notificationPage: items => ({ items }) };
       if (name.startsWith('@/')) return load('src/' + name.slice(2) + '.ts');
       throw new Error(name);
     },
   });
-  return { effects, calls, timers, document, focusListeners, visibilityListeners, chatCalls, navigations, chat: fn => { startChat = fn; }, notice: value => { deliveryNotice = value; }, changeUser: id => { user = { id }; }, render() { cursor = 0; return loaded.exports.default(); } };
+  return { effects, calls, timers, document, focusListeners, visibilityListeners, chatCalls, navigations, chat: fn => { startChat = fn; }, notice: value => { deliveryNotice = value; }, notices: value => { notices = value; }, changeUser: id => { user = { id }; }, render() { cursor = 0; return loaded.exports.default(); } };
 }
 function nodes(tree, match) {
   if (Array.isArray(tree)) return tree.flatMap(child => nodes(child, match));
@@ -272,6 +274,19 @@ test('paid seller orders open the buyer and rider conversations without payment 
   nodes(h.render(), node => node.type === 'button' && (node.props['aria-label'] || node.props.children) === 'Chat with buyer')[0].props.onClick(); await settle();
   assert.ok(nodes(h.render(), node => node.props?.role === 'alert' && node.props.children === 'Insufficient permissions').length);
   assert.equal(h.navigations.length, 2);
+  cleanup();
+});
+
+test('seller order list shows only the matching rider update when tracking is denied', async () => {
+  const h = pageHarness(url => url.includes('/marketplace/deliveries/')
+    ? Response.json({ error: 'Denied' }, { status: 403 })
+    : Response.json({ data: { orders: [{ ...fixture, BuyerName: 'Ada', DeliveryID: 'delivery', RequiresDelivery: true }] } }));
+  h.notices([{ title: 'Rider on the way for pickup', type: 'delivery_update', date: '2026-11-17T12:23:09Z', data: { order_id: 'order-uuid' } },
+    { title: 'Delivery completed', type: 'delivery_update', date: '2026-11-18T12:23:09Z', data: { order_id: 'other-order' } }]);
+  h.render(); const cleanup = h.effects[0](); await settle(); await settle();
+  const tree = h.render();
+  assert.ok(nodes(tree, node => node.props?.children === 'Rider on the way for pickup').length);
+  assert.equal(nodes(tree, node => node.props?.children === 'Delivery completed').length, 0);
   cleanup();
 });
 
