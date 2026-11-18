@@ -19,6 +19,7 @@ import Icon from "@/components/admin/AdminIcon";
 import styles from "@/components/vendor/vendor.module.css";
 import detail from "@/components/vendor/sellerOrderDetail.module.css";
 import DeliveryProgress from "@/components/commerce/DeliveryProgress";
+import { firstName } from "@/components/commerce/firstName";
 
 export default function VendorOrderDetail() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -102,7 +103,7 @@ export default function VendorOrderDetail() {
       id: String(order.id ?? order.order_id ?? orderId ?? "-"),
       reference: String(order.order_number ?? order.orderNumber ?? order.OrderNumber ?? ""),
       status: String(order.status ?? "pending"),
-      customer: customerName(order) || "Name not provided",
+      customer: firstName(customerName(order)) || "Name not provided",
       buyerId: String(order.buyer_id ?? order.buyerId ?? order.BuyerID ?? ""),
       createdAt: String(order.created_at ?? order.createdAt ?? "-"),
       deliveryAddress: String(
@@ -195,7 +196,7 @@ export default function VendorOrderDetail() {
               <div className={detail.contact}><p className={detail.contactLabel}>Buyer</p><p className={detail.contactName}>{summary.customer}</p><p className={detail.muted}>Questions about this order</p>
                 <button type="button" aria-label="Chat with buyer" className={detail.chat} disabled={openingChat} onClick={() => void openChat("buyer")}><Icon name="chat" size={14} /><span>Chat with buyer</span></button>
               </div>
-              {tracking?.required !== false ? <div className={detail.contact}><p className={detail.contactLabel}>Assigned rider</p><p className={detail.contactName}>{tracking?.riderId ? current?.rider?.name || "Assigned; name not reported" : current?.riderError ? "Rider assignment unavailable." : "Rider assignment has not been reported."}</p>
+              {tracking?.required !== false ? <div className={detail.contact}><p className={detail.contactLabel}>Assigned rider</p><p className={detail.contactName}>{tracking?.riderId ? firstName(current?.rider?.name) || "Assigned; name not reported" : current?.riderError ? "Rider assignment unavailable." : "Rider assignment has not been reported."}</p>
                 {tracking?.riderId ? <span className={detail.phone}>{current?.rider?.phone || "Not reported"}</span> : null}
                 <button type="button" aria-label="Chat with rider" className={detail.chat} disabled={openingChat || !tracking?.id} onClick={() => void openChat("rider")}><Icon name="chat" size={14} /><span>Chat with rider</span></button>
               </div> : null}

@@ -12,6 +12,7 @@ import ShopperIcon from "@/components/marketplace/ShopperIcon";
 import { sellerPhone, sellerPhoneHref } from "@/components/products/sellerPhone";
 import styles from "./orderDetails.module.css";
 import DeliveryProgress from "./DeliveryProgress";
+import { firstName } from "./firstName";
 
 export default function BuyerDeliveryTracking({ order, checkedAt, refreshing, reload }: {
   order: BuyerOrder; checkedAt: string; refreshing: boolean; reload: () => void;
@@ -63,7 +64,7 @@ export default function BuyerDeliveryTracking({ order, checkedAt, refreshing, re
       <DeliveryProgress tracking={tracking} />
       <div className={styles.rider}>
         <span className={styles.icon}><ShopperIcon name="user" size={18} /></span>
-        <dl><div><dt>Assigned rider</dt><dd>{tracking.riderId ? current?.rider?.name || (current ? "Rider assigned; awaiting details" : "Loading rider details...") : current?.error ? "Rider assignment unavailable" : "Awaiting rider assignment"}</dd></div>
+        <dl><div><dt>Assigned rider</dt><dd>{tracking.riderId ? firstName(current?.rider?.name) || (current ? "Rider assigned; awaiting details" : "Loading rider details...") : current?.error ? "Rider assignment unavailable" : "Awaiting rider assignment"}</dd></div>
           {tracking.riderId ? <div><dt>Rider contact</dt><dd>{sellerPhone(current?.rider?.phone) ? <a className={styles.callRider} href={sellerPhoneHref(sellerPhone(current?.rider?.phone))} aria-label={`Call rider at ${current?.rider?.phone}`}><ShopperIcon name="phone" size={15} /><span>{current?.rider?.phone}</span></a> : "Contact details pending"}</dd></div> : null}
           {tracking.updatedAt && Number.isFinite(Date.parse(tracking.updatedAt)) ? <div><dt>Delivery updated</dt><dd><time dateTime={tracking.updatedAt}>{new Date(tracking.updatedAt).toLocaleString("en-NG", { timeZone: "Africa/Lagos" })}</time></dd></div> : null}
         </dl>

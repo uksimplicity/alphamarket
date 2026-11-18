@@ -38,7 +38,7 @@ export function parseBuyerOrder(payload: unknown): BuyerOrder | null {
     id, buyerId: text(row.buyer_id ?? row.buyerId ?? row.BuyerID ?? record(row.buyer).id),
     status: text(row.status ?? row.Status).toLowerCase() || "pending", paymentStatus: orderPaymentStatus(row), escrowStatus: escrowStatusFromOrder(row),
     sellerId: text(row.seller_id ?? row.sellerId ?? row.SellerID ?? record(row.seller ?? row.Seller).id ?? record(row.seller ?? row.Seller).ID).trim(),
-    vendor: [row.seller_name, row.sellerName, row.SellerName, row.vendor_name, record(row.seller ?? row.Seller).name, record(row.seller ?? row.Seller).Name].map(text).map(value => value.trim()).find(Boolean) || "Seller",
+    vendor: [row.seller_first_name, row.sellerFirstName, row.SellerFirstName, record(row.seller ?? row.Seller).first_name, record(row.seller ?? row.Seller).firstName, record(row.seller ?? row.Seller).FirstName, row.seller_name, row.sellerName, row.SellerName, row.vendor_name, record(row.seller ?? row.Seller).name, record(row.seller ?? row.Seller).Name].map(text).map(value => value.trim()).find(Boolean) || "Seller",
     total: orderPricing(row).buyerTotal, pricing: orderPricing(row), delivery: orderDelivery(row),
     address: text(row.dropoff_address ?? row.dropoffAddress ?? row.address ?? row.DeliveryAddress),
     createdAt: text(row.created_at ?? row.createdAt ?? row.CreatedAt),

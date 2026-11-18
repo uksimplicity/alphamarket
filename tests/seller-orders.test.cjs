@@ -135,6 +135,7 @@ function pageHarness(response, component = 'VendorOrders') {
       if (name.endsWith('localAccountData')) return { accountStamp: () => user.id, checkAccount(stamp) { if (stamp !== user.id) throw new Error('Account changed'); } };
       if (name.endsWith('.css')) return { default: new Proxy({}, { get: (_, key) => key }) };
       if (name.endsWith('EscrowStatus') || name.endsWith('OrderMoneyBreakdown')) return { default: 'status-component' };
+      if (name.endsWith('DeliveryProgress')) return { default: 'delivery-progress' };
       if (name.startsWith('@/')) return load('src/' + name.slice(2) + '.ts');
       throw new Error(name);
     },
@@ -233,7 +234,7 @@ test('seller summary separates unpaid orders from fulfillment and displays refer
   h.render(); h.effects[0](); await settle(); await settle();
   const tree = h.render();
   assert.deepEqual(nodes(tree, node => node.props?.className === 'statValue').map(node => node.props.children), [3, 1, 1, 0]);
-  assert.ok(nodes(tree, node => node.props?.children === 'Actual Buyer').length);
+  assert.ok(nodes(tree, node => node.props?.children === 'Actual').length);
   assert.ok(nodes(tree, node => node.props?.children === 'Pricing needs review').length);
   const link = nodes(tree, node => node.type === 'link' && node.props.children === 'ORD-paid')[0];
   assert.equal(link.props.to, '/vendor/orders/order-uuid');
@@ -298,8 +299,8 @@ test('seller tracking queries only the assigned rider and displays backend progr
   const tree = h.render();
   assert.deepEqual(h.calls.map(call => call.url), ['/api/seller/orders/order-uuid', '/api/marketplace/grpc/riders/rider%20one']);
   assert.ok(h.calls.every(call => call.init.headers.Authorization === 'Bearer seller-token' && call.init.cache === 'no-store'));
-  for (const text of ['Example Rider', '08000000000', 'Heading to pickup']) assert.ok(nodes(tree, node => node.props?.children === text).length, text);
-  assert.equal([...h.timers.values()][0].ms, 30000);
+  for (const text of ['Example', '08000000000', 'Heading to pickup']) assert.ok(nodes(tree, node => node.props?.children === text).length, text);
+  assert.equal([...h.timers.values()][0].ms, 15000);
   cleanup();
   assert.equal(h.timers.size, 0);
   assert.equal(h.focusListeners.size, 0);
@@ -313,7 +314,7 @@ test('seller order with only DeliveryID resolves delivery assignment before fetc
     : { data: { ...fixture, DeliveryID: 'delivery', Status: 'processing' } }), 'VendorOrderDetail');
   h.render(); const cleanup = h.effects[0](); await settle();
   const tree = h.render();
-  for (const value of ['Delivery Rider', '08000000000', 'On the way to buyer']) assert.ok(nodes(tree, node => node.props?.children === value).length, value);
+  for (const value of ['Delivery', '08000000000', 'On the way to buyer']) assert.ok(nodes(tree, node => node.props?.children === value).length, value);
   assert.deepEqual(h.calls.map(call => call.url), ['/api/seller/orders/order-uuid', '/api/marketplace/deliveries/delivery', '/api/marketplace/grpc/riders/rider']);
   assert.ok(h.calls.every(call => call.init.headers.Authorization === 'Bearer seller-token'));
   cleanup();
@@ -323,7 +324,7 @@ test('missing assignment is explicit; hidden pages do not poll and refreshed ass
   let assigned = false;
   const h = pageHarness(url => url.includes('/grpc/riders/')
     ? Response.json({ data: { id: 'rider-2', name: 'New Rider' } })
-    : url.includes('/marketplace/deliveries/') ? Response.json({ data: { id: 'delivery-1', order_id: 'order-uuid', status: 'requested' } })
+    : url.includes('/marketplace/deliveries/') ? Response.json({ data: { id: 'delivery-1', order_id: 'order-uuid', status: 'requested', ...(assigned ? { rider_id: 'rider-2' } : {}) } })
     : Response.json({ data: { ...fixture, delivery_id: 'delivery-1', ...(assigned ? { rider_id: 'rider-2' } : {}) } }), 'VendorOrderDetail');
   h.render(); h.effects[0](); await settle();
   assert.equal(h.calls.length, 2);
@@ -332,9 +333,9 @@ test('missing assignment is explicit; hidden pages do not poll and refreshed ass
   const poll = [...h.timers.values()][0].fn;
   h.document.visibilityState = 'hidden'; poll(); await settle();
   assert.equal(h.calls.length, 2);
-  assigned = true; h.document.visibilityState = 'visible'; poll(); await settle();
-  assert.equal(h.calls.length, 4);
-  assert.ok(nodes(h.render(), node => node.props?.children === 'New Rider').length);
+  assigned = true; h.document.visibilityState = 'visible'; poll(); await settle(); await settle();
+  assert.equal(h.calls.length, 5);
+  assert.ok(nodes(h.render(), node => node.props?.children === 'New').length);
 });
 
 test('rider lookup failure preserves order details, clears old rider contact and offers refresh', async () => {
@@ -343,12 +344,12 @@ test('rider lookup failure preserves order details, clears old rider contact and
     ? failed ? Response.json({ error: 'Rider service unavailable' }, { status: 503 }) : Response.json({ data: { id: 'rider', name: 'Old Rider', phone: '08000000000' } })
     : Response.json({ data: { ...fixture, rider_id: 'rider' } }), 'VendorOrderDetail');
   h.render(); h.effects[0](); await settle();
-  assert.ok(nodes(h.render(), node => node.props?.children === 'Old Rider').length);
+  assert.ok(nodes(h.render(), node => node.props?.children === 'Old').length);
   failed = true; [...h.timers.values()][0].fn(); await settle();
   const tree = h.render();
   assert.ok(nodes(tree, node => node.props?.children === 'Order Details').length);
   assert.ok(nodes(tree, node => node.props?.role === 'alert').length);
-  assert.equal(nodes(tree, node => node.props?.children === 'Old Rider').length, 0);
+  assert.equal(nodes(tree, node => node.props?.children === 'Old').length, 0);
   assert.ok(nodes(tree, node => node.type === 'button' && node.props.children === 'Refresh tracking').length);
 });
 

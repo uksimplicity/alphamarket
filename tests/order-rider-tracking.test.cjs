@@ -64,6 +64,15 @@ test('delivery denial preserves order tracking; rider denial preserves the resol
   assert.equal(result.tracking.status, 'picking_up'); assert.equal(result.tracking.riderId, 'rider'); assert.equal(result.rider, null); assert.match(result.riderError, /denied/);
 });
 
+test('an assigned rider can be identified from the order even when delivery tracking is denied', async () => {
+  const result = await loadOrderRiderTracking(async path => {
+    if (path.includes('/deliveries/')) throw new Error('Delivery access denied');
+    return { data: { id: 'rider', first_name: 'Ada', last_name: 'Jones' } };
+  }, orderDelivery({ delivery_id: 'delivery', rider_id: 'rider' }), 'order');
+  assert.equal(result.rider.name, 'Ada Jones');
+  assert.match(result.riderError, /Delivery access denied/);
+});
+
 test('delivery proxy uses only customer delivery endpoint with caller auth and preserves access denials', async () => {
   const { GET } = load('src/app/api/marketplace/deliveries/[id]/route.ts');
   const previousFetch = global.fetch, previousBase = process.env.NEXT_PUBLIC_API_BASE_URL;

@@ -11,6 +11,7 @@ import { loadOrderCustomerNames, loadSellerOrders } from "@/components/vendor/se
 import { needsFulfillment, type SellerOrder } from "@/components/vendor/sellerData";
 import { orderDeliveryLabel } from "@/components/vendor/orderDelivery";
 import { loadOrderRiderTracking } from "@/components/commerce/orderRiderTracking";
+import { firstName } from "@/components/commerce/firstName";
 
 function createdDate(value: string) {
   const date = new Date(value);
@@ -148,7 +149,7 @@ export default function VendorOrders() {
                         {order.orderNumber || order.id}
                       </Link>
                     </td>
-                    <td>{order.customer === "Customer" ? <Link to={`/vendor/orders/${encodeURIComponent(order.id)}`}>View customer details</Link> : order.customer}</td>
+                    <td>{order.customer === "Customer" ? <Link to={`/vendor/orders/${encodeURIComponent(order.id)}`}>View customer details</Link> : firstName(order.customer)}</td>
                     <td>{order.pricing.issues.length ? <span title={order.pricing.issues.join(" ")}>Pricing needs review</span> : pricingMoney(order.pricing.sellerProceeds)}</td>
                     <td><span className={styles.pill}>{order.paymentStatus.replaceAll("_", " ")}</span></td>
                     <td>

@@ -1,4 +1,4 @@
-import { getAuth } from "@/components/auth/authStorage";
+﻿import { getAuth } from "@/components/auth/authStorage";
 import { accountStamp, checkAccount } from "@/components/commerce/localAccountData";
 export type ChatUser = { id: string; name: string; role: string };
 export type ChatThread = { id: string; peer: ChatUser; type: string; status: string; contextId: string; last_message: string; updated_at: string; unread: number };
@@ -9,7 +9,7 @@ function string(value: unknown): string { if (typeof value !== "string") throw n
 function id(value: unknown): string { const result = string(value); if (!result.trim()) throw new Error(); return result; }
 function date(value: unknown): string { const result = string(value); if (!Number.isFinite(Date.parse(result))) throw new Error(); return result; }
 function list<T>(value: unknown, decode: (value: unknown) => T): T[] { if (!Array.isArray(value)) throw new Error(); return value.map(decode); }
-function user(value: unknown): ChatUser { const row = record(value); return { id: id(row.id), name: string(row.name), role: row.role === undefined ? "" : string(row.role) }; }
+function user(value: unknown): ChatUser { const row = record(value); const full = typeof row.name === "string" ? row.name : [row.first_name ?? row.firstName, row.last_name ?? row.lastName].filter(part => typeof part === "string" && part.trim()).join(" "); return { id: id(row.id), name: full, role: row.role === undefined ? "" : string(row.role) }; }
 export function decodeThread(value: unknown, myId: string): ChatThread {
   const row = record(value);
   const participants = list(row.participants, value => { const p = record(value); return { id: id(p.user_id), name: string(p.name), role: string(p.role) }; });

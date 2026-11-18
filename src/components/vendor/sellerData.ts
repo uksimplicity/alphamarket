@@ -110,7 +110,7 @@ export function customerName(row: Row) {
   const buyer = asRow(row.customer ?? row.buyer ?? row.Buyer ?? row.Customer);
   const profile = asRow(buyer.profile);
   return [row.customer_name, row.customerName, row.CustomerName, row.buyer_name, row.buyerName, row.BuyerName, buyer.name, buyer.Name, buyer.full_name, profile.name,
-    [text(buyer.first_name ?? buyer.firstName ?? buyer.FirstName ?? profile.first_name), text(buyer.last_name ?? buyer.lastName ?? buyer.LastName ?? profile.last_name)].filter(Boolean).join(" ")]
+    [text(buyer.first_name ?? buyer.firstName ?? buyer.FirstName ?? profile.first_name ?? row.buyer_first_name ?? row.buyerFirstName ?? row.BuyerFirstName ?? row.customer_first_name ?? row.customerFirstName), text(buyer.last_name ?? buyer.lastName ?? buyer.LastName ?? profile.last_name)].filter(Boolean).join(" ")]
     .map(text).find(value => value && value.toLowerCase() !== "customer") || "";
 }
 export function isPaid(order: SellerOrder) { return order.paymentStatus === "paid"; }

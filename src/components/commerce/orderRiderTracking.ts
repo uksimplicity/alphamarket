@@ -33,10 +33,16 @@ export async function loadOrderRiderTracking(
         accepted: resolved.accepted || tracking.accepted, acceptedAt: resolved.acceptedAt || tracking.acceptedAt,
         updatedAt: resolved.updatedAt || tracking.updatedAt };
     }
-    if (includeRider && tracking.riderId) rider = assignedRider(await request(`/api/marketplace/grpc/riders/${encodeURIComponent(tracking.riderId)}`), tracking.riderId);
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") throw error;
     riderError = error instanceof Error ? error.message : "Delivery and rider details could not be loaded.";
+  }
+  if (includeRider && tracking.riderId) {
+    try { rider = assignedRider(await request(`/api/marketplace/grpc/riders/${encodeURIComponent(tracking.riderId)}`), tracking.riderId); }
+    catch (error) {
+      if (error instanceof Error && error.name === "AbortError") throw error;
+      riderError = [riderError, error instanceof Error ? error.message : "Rider details could not be loaded."].filter(Boolean).join(" ");
+    }
   }
   return { tracking, rider, riderError };
 }
