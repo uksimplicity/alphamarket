@@ -60,7 +60,7 @@ test('rider proxy failures are explicit and never fabricated profiles', async ()
 test('detail client surfaces backend status/reason and rejects mismatched or missing rider identities', async () => {
   const client = load('src/components/admin/riderClient.ts');
   for (const [status, payload, pattern] of [
-    [403, { success: false, error: 'Insufficient permissions' }, /does not have permission.*HTTP 403/],
+    [403, { success: false, error: 'Insufficient permissions' }, /denied this request \(HTTP 403\)/],
     [404, { error: 'Rider profile not found' }, /Rider profile not found.*HTTP 404/],
     [200, { success: false, message: 'gRPC unavailable' }, /gRPC unavailable.*HTTP 200/],
     [200, { data: { id: 'another-rider' } }, /does not match/],

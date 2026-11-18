@@ -42,7 +42,7 @@ export async function fetchRiderDetails(id: string, signal: AbortSignal): Promis
   const root = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
   if (!response.ok || root.success === false) {
     const reason = typeof root.error === "string" ? root.error : typeof root.message === "string" ? root.message : "Rider details are unavailable.";
-    if (response.status === 403) throw new Error("Your account does not have permission to load additional rider details (HTTP 403). The submitted queue information is still shown. An authorized backend administrator must review access to rider details.");
+    if (response.status === 403) throw new Error("The rider details service denied this request (HTTP 403), although the verification queue is accessible. The backend access rules for this endpoint need investigation. The submitted queue information is still shown.");
     throw new Error(`${reason} (HTTP ${response.status}). The submitted queue information is still shown.`);
   }
   const detail = parseRider(payload);
