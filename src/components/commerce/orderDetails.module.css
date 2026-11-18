@@ -69,3 +69,12 @@
 .alert p { margin: 8px 0 0; overflow-wrap: anywhere; }
 @media (max-width: 900px) { .columns { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 520px) { .page, .main, .aside { gap: 16px; } .hero { padding: 22px; } .heroTop { align-items: flex-start; flex-direction: column; gap: 16px; } .panel { padding: 20px; } .trackingHero { padding: 16px; gap: 12px; } .trackingHero dd { font-size: 15px; } .trackingIcon { width: 40px; height: 40px; } .product { flex-wrap: wrap; } .amount { font-size: 29px; } }
+
+/* A calmer, more readable order view across screen sizes. */
+.hero { background: linear-gradient(120deg, #fff 25%, #f5f7fc); border-color: #e4e9f1; }
+.panel { border-color: #e6eaf1; box-shadow: 0 8px 26px rgba(26, 43, 73, .035); }
+.eyebrow, .trackingHero dt, .rider dt, .destination h3 { font-size: 11px; }
+.caption, .placed, .refresh { font-size: 12px; }
+.trackingFooter p, .security { font-size: 11px; }
+.refresh { min-height: 40px; }
+@media (max-width: 520px) { .hero, .panel { border-radius: 14px; } .panelHeading { margin-bottom: 18px; } }

@@ -72,7 +72,9 @@ export default function VendorOrderDetail() {
         }
         const next = sellerOrderDetail(await request(`/api/seller/orders/${encodeURIComponent(orderId)}`));
         if (controller.signal.aborted) return;
-        const { tracking, rider, riderError } = await loadOrderRiderTracking(request, orderDelivery(next), orderId);
+        const initialTracking = orderDelivery(next);
+        setSnapshot({ key, order: next, tracking: initialTracking, rider: null, riderError: "", error: "", checkedAt: new Date().toISOString() });
+        const { tracking, rider, riderError } = await loadOrderRiderTracking(request, initialTracking, orderId);
         if (controller.signal.aborted) return;
         checkAccount(stamp);
         setSnapshot({ key, order: next, tracking, rider, riderError, error: "", checkedAt: new Date().toISOString() });

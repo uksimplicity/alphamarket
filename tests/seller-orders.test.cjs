@@ -275,6 +275,18 @@ test('paid seller orders open the buyer and rider conversations without payment 
   cleanup();
 });
 
+test('seller order details appear while delivery tracking is still loading', async () => {
+  let finishTracking;
+  const h = pageHarness(url => url.includes('/marketplace/deliveries/')
+    ? new Promise(resolve => { finishTracking = resolve; })
+    : Response.json({ data: { ...fixture, OrderNumber: 'ORD-fast', DeliveryID: 'delivery', RequiresDelivery: true } }), 'VendorOrderDetail');
+  h.render(); const cleanup = h.effects[0](); await settle();
+  assert.ok(nodes(h.render(), node => node.props?.children === 'ORD-fast').length);
+  assert.equal(typeof finishTracking, 'function');
+  finishTracking(Response.json({ data: { id: 'delivery', order_id: 'order-uuid', status: 'requested' } }));
+  await settle(); cleanup();
+});
+
 test('seller escrow displays the PascalCase status even when delivery lookup is denied', async () => {
   const h = pageHarness(url => url.includes('/marketplace/deliveries/')
     ? Response.json({ error: 'Delivery tracking is unavailable to this account' }, { status: 403 })

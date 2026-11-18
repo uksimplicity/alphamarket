@@ -9,20 +9,18 @@ import {
   useCart,
 } from "@/components/commerce/store";
 import { Card } from "@/components/dashboard/ui";
-import { popularProducts } from "@/components/products/catalog";
 import styles from "./page.module.css";
 
 export default function CartPage() {
   const cart = useCart();
   const subtotal = formatCurrency(cartSubtotal(cart));
   const cartCount = cart.items.reduce((count, item) => count + item.qty, 0);
-  const savedItems = popularProducts.slice(0, 2);
 
   return (
     <div className={styles.cartPage}>
       <div className={styles.cartHeader}>
         <div>
-          <h1>Shopping Carts ({cartCount})</h1>
+          <h1>Your cart ({cartCount})</h1>
           <p>Review items, adjust quantities, and proceed to checkout.</p>
         </div>
         <Link href="/dashboard/home" className={styles.cartHeaderLink}>
@@ -61,7 +59,7 @@ export default function CartPage() {
                           <button
                             type="button"
                             onClick={() => updateCartQty(item.id, item.qty - 1)}
-                            aria-label="Decrease quantity"
+                            aria-label={`Decrease quantity of ${item.name}`}
                           >
                             -
                           </button>
@@ -69,7 +67,7 @@ export default function CartPage() {
                           <button
                             type="button"
                             onClick={() => updateCartQty(item.id, item.qty + 1)}
-                            aria-label="Increase quantity"
+                            aria-label={`Increase quantity of ${item.name}`}
                           >
                             +
                           </button>
@@ -83,7 +81,7 @@ export default function CartPage() {
                     <button
                       className={`${styles.cartItemRemove} action-icon-delete`}
                       onClick={() => removeFromCart(item.id)}
-                      aria-label="Remove item"
+                      aria-label={`Remove ${item.name} from cart`}
                     >
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path
@@ -122,35 +120,13 @@ export default function CartPage() {
               href={cart.items.length === 0 ? "/dashboard/home" : "/dashboard/checkout?cart=1"}
               className={styles.checkoutButton}
             >
-              Checkout
+              {cart.items.length === 0 ? "Browse products" : "Continue to checkout"}
             </Link>
           </div>
         </Card>
       </div>
 
-      <div className={styles.savedSection}>
-        <div className={styles.savedHeader}>
-          <h2>Saved Products ({savedItems.length})</h2>
-          <button className={styles.savedLink} type="button">
-            View All
-          </button>
-        </div>
-        <div className={styles.savedGrid}>
-          {savedItems.map((item) => (
-            <div key={item.id} className={styles.savedCard}>
-              <div className={styles.savedImage}>
-                <img src={item.image} alt={item.title} />
-                {item.badge ? <span className={styles.savedBadge}>{item.badge}</span> : null}
-              </div>
-              <div className={styles.savedBody}>
-                <div className={styles.savedTitle}>{item.title}</div>
-                <div className={styles.savedPrice}>{item.price}</div>
-                <div className={styles.savedMeta}>In stock</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <div className={styles.savedSection}><div className={styles.savedHeader}><h2>Saved items</h2><Link href="/dashboard/wishlist" className={styles.savedLink}>View saved items</Link></div></div>
     </div>
   );
 }

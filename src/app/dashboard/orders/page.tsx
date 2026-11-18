@@ -58,7 +58,7 @@ export default function OrdersPage() {
                       {order.total === null ? "Total unavailable" : formatCurrency(order.total)}
                     </div>
                     <Link
-                      href={`/dashboard/orders/${order.id}`}
+                      href={`/dashboard/orders/${encodeURIComponent(order.id)}`}
                       className="text-xs font-semibold text-brand"
                     >
                       View order →

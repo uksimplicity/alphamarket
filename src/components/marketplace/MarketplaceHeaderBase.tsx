@@ -86,7 +86,7 @@ export default function MarketplaceHeaderBase({
             Alerts
           </div>
           <div className={styles.iconLabel}>
-            <LinkComponent className={styles.iconBtn} aria-label="Orders" href="/dashboard/orders">
+            <LinkComponent className={styles.iconBtn} aria-label="Orders" href={isSellerRole(user?.role) ? "/vendor/orders" : "/dashboard/orders"}>
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   d="M4 6h16M4 12h16M4 18h10"

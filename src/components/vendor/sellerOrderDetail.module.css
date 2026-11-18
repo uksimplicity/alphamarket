@@ -55,3 +55,12 @@
 .page button:focus-visible, .page summary:focus-visible { outline: 2px solid #5176fb; outline-offset: 4px; }
 @media (max-width: 900px) { .columns { grid-template-columns: minmax(0, 1fr); } .aside { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 520px) { .page { gap: 16px; } .hero { padding: 22px; } .panel { padding: 20px; } .contacts { grid-template-columns: minmax(0, 1fr); gap: 20px; } .contact + .contact { border-left: 0; border-top: 1px solid #edf0f6; padding-left: 0; padding-top: 20px; } .chat { width: 100%; } .status { padding: 16px; } .amount { font-size: 29px; } }
+
+/* Match the buyer order view with a quieter, more legible hierarchy. */
+.hero { background: linear-gradient(120deg, #fff 25%, #f5f7fc); border-color: #e4e9f1; }
+.panel { border-color: #e6eaf1; box-shadow: 0 8px 26px rgba(26, 43, 73, .035); }
+.eyebrow, .statusLabel, .contactLabel { font-size: 11px; }
+.refresh, .muted { font-size: 12px; }
+.refresh { min-height: 40px; }
+.sync { font-size: 11px; }
+@media (max-width: 520px) { .hero, .panel { border-radius: 14px; } .heading { margin-bottom: 18px; } }
