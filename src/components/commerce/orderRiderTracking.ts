@@ -26,7 +26,7 @@ export async function loadOrderRiderTracking(
   let riderError = "";
   if (tracking.required === false) return { tracking, rider, riderError };
   try {
-    if (!tracking.riderId && tracking.id) {
+    if (tracking.id) {
       const delivery = deliveryRecord(await request(`/api/marketplace/deliveries/${encodeURIComponent(tracking.id)}`), tracking.id, orderId);
       const resolved = orderDelivery({ delivery });
       tracking = { ...tracking, riderId: resolved.riderId, status: resolved.status || tracking.status,

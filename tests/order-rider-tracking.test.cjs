@@ -29,6 +29,21 @@ test('unassigned deliveries do not query riders; no-delivery orders do not query
   assert.equal(calls.length, 1);
 });
 
+test('delivery progress is refreshed even when the order already has an assigned rider', async () => {
+  for (const status of ['picking_up', 'on_the_way', 'delivered', 'completed']) {
+    const calls = [];
+    const result = await loadOrderRiderTracking(async path => {
+      calls.push(path);
+      return path.includes('/deliveries/')
+        ? { data: { id: 'delivery', order_id: 'order', rider_id: 'rider', status } }
+        : { data: { id: 'rider', name: 'Rider' } };
+    }, orderDelivery({ delivery_id: 'delivery', rider_id: 'rider', delivery_status: 'assigned' }), 'order');
+    assert.equal(result.tracking.status, status);
+    assert.equal(calls[0], '/api/marketplace/deliveries/delivery');
+    assert.equal(calls[1], '/api/marketplace/grpc/riders/rider');
+  }
+});
+
 test('wrong delivery, wrong order, missing identity and logical failures cannot disclose a rider', async () => {
   for (const payload of [{ data: { id: 'other', rider_id: 'private' } }, { data: { id: 'delivery', order_id: 'other', rider_id: 'private' } }, { data: { rider_id: 'private' } }, { success: false, error: 'Unauthorized' }]) {
     let calls = 0;
