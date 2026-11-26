@@ -8,6 +8,7 @@ import { useAuthUser } from "@/components/auth/useAuthUser";
 import { orderPricing, type OrderPricing } from "./orderPricing";
 import { accountStamp, checkAccount } from "./localAccountData";
 import { orderDelivery } from "@/components/vendor/orderDelivery";
+import { productImage } from "@/components/products/productMedia";
 import { loadOrderRiderTracking } from "./orderRiderTracking";
 
 type Row = Record<string, unknown>;
@@ -25,7 +26,7 @@ export type BuyerOrder = {
   pricing: OrderPricing;
   delivery: ReturnType<typeof orderDelivery>;
   deliveryError?: string;
-  items: Array<{ id: string; name: string; qty: number; price: number | null }>;
+  items: Array<{ id: string; name: string; qty: number; price: number | null; image: string }>;
 };
 
 export function parseBuyerOrder(payload: unknown): BuyerOrder | null {
@@ -47,6 +48,7 @@ export function parseBuyerOrder(payload: unknown): BuyerOrder | null {
       return {
         id: text(item.product_id ?? item.productId ?? item.ProductID ?? product.id ?? product.ID ?? item.id ?? item.ID),
         name: text(item.product_name ?? item.ProductName ?? item.name ?? item.Name ?? product.name ?? product.Name) || "Product",
+        image: productImage({ ...item, ...product }, ""),
         qty: Number(item.quantity ?? item.Quantity ?? item.qty ?? 1),
         price: amount(item.unit_price ?? item.unitPrice ?? item.UnitPrice ?? item.price ?? item.Price),
       };

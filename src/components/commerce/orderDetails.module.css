@@ -1,4 +1,4 @@
-.page { max-width: 1180px; margin: 0 auto; display: grid; gap: 22px; color: #1a2b49; }
+﻿.page { max-width: 1180px; margin: 0 auto; display: grid; gap: 22px; color: #1a2b49; }
 .back { display: inline-flex; align-items: center; gap: 7px; width: fit-content; font-size: 13px; color: #718098; text-decoration: none; }
 .back svg { transform: rotate(180deg); }
 .back:hover { color: #345cff; }
@@ -78,3 +78,5 @@
 .trackingFooter p, .security { font-size: 11px; }
 .refresh { min-height: 40px; }
 @media (max-width: 520px) { .hero, .panel { border-radius: 14px; } .panelHeading { margin-bottom: 18px; } }
+
+.productImage { width: 64px; height: 64px; object-fit: contain; flex-shrink: 0; border-radius: 10px; background: #f5f7fb; }

@@ -803,3 +803,5 @@
     min-width: 560px;
   }
 }
+
+.statCard { border-radius: 16px; }

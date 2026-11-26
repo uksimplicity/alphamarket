@@ -96,7 +96,7 @@ export default function OrderDetailPage() {
         <div>
           {order.items.map((product) => (
             <div key={product.id} className={styles.product}>
-              <span className={styles.icon}><ShopperIcon name="orders" size={17} /></span>
+              {product.image ? <img src={product.image} alt="" className={styles.productImage} /> : <span className={styles.icon}><ShopperIcon name="orders" size={17} /></span>}
               <span className={styles.productName}>{product.name}<small>Quantity: {product.qty}</small></span>
               <strong>{product.price === null ? "" : formatCurrency(product.price * product.qty)}</strong>
             </div>

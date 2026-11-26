@@ -382,3 +382,8 @@
     justify-self: end;
   }
 }
+
+/* Keep product images visible and controls easy to use on touch screens. */
+.cartItemMedia img { object-fit: contain; }
+.qtyControl button, .cartItemRemove { min-width: 44px; min-height: 44px; }
+.cartItemTitle { overflow-wrap: anywhere; }

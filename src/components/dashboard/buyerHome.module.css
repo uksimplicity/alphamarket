@@ -18,3 +18,12 @@
 .productLocation { display: flex; align-items: flex-start; gap: 5px; min-width: 0; color: #50698c; font-size: 11px; font-weight: 500; line-height: 1.5; }
 .productLocation > svg { flex-shrink: 0; margin-top: 1px; color: #527be1; }
 .productLocation > span { min-width: 0; overflow-wrap: anywhere; }
+
+/* Readable, touch-friendly product cards. */
+.productCard { border-radius: 16px; }
+.productVisual img { object-fit: contain; }
+.productTitle { font-size: 14px; line-height: 1.45; min-height: 41px; font-weight: 600; }
+.productCategory, .productSeller, .viewProduct { font-size: 11px; }
+.productBottom > strong { font-size: 15px; }
+.saveButton, .productBottom > button { min-width: 40px; min-height: 40px; }
+@media (max-width: 640px) { .productTitle { font-size: 13px; min-height: 38px; } .productCategory, .productSeller, .viewProduct { font-size: 10px; } .saveButton { width: 40px; height: 40px; } }

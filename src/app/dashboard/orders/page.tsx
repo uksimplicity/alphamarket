@@ -40,40 +40,30 @@ export default function OrdersPage() {
             </div>
           ) : (
             orders.map((order) => (
-              <div
-                key={order.id}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-200"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-800">
-                      Order #{order.id.slice(-8).toUpperCase()}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      <BuyerOrderSeller order={order} />
-                    </div>
+              <article key={order.id} className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-blue-200 sm:p-5">
+                <div className="flex items-start gap-4">
+                  <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-50 text-slate-400 sm:h-24 sm:w-24">
+                    {order.items[0]?.image ? <img src={order.items[0].image} alt="" className="h-full w-full object-contain" /> : <span aria-hidden="true" className="text-2xl">?</span>}
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-sm font-semibold text-slate-800">
-                      {order.total === null ? "Total unavailable" : formatCurrency(order.total)}
-                    </div>
-                    <Link
-                      href={`/dashboard/orders/${encodeURIComponent(order.id)}`}
-                      className="text-xs font-semibold text-brand"
-                    >
-                      View order →
+                  <div className="min-w-0 flex-1">
+                    <Link href={'/dashboard/orders/' + encodeURIComponent(order.id)} className="block text-base font-semibold text-slate-900 hover:text-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
+                      {order.items[0]?.name || "Order details"}{order.items.length > 1 ? ' + ' + (order.items.length - 1) + ' more' : ""}
                     </Link>
+                    <p className="mt-1 text-xs text-slate-500">Order #{order.id.slice(-8).toUpperCase()} ? <BuyerOrderSeller order={order} /></p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                      <span className={'rounded-lg px-2.5 py-1 font-semibold capitalize ' + (["delivered", "confirmed"].includes(order.status) ? "bg-green-50 text-green-700" : ["cancelled", "returned", "failed"].includes(order.status) ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700")}>{order.status.replaceAll("_", " ")}</span>
+                      <span className="text-slate-600">{order.deliveryError && !order.delivery.status ? "Tracking unavailable" : orderDeliveryLabel(order.delivery)}</span>
+                    </div>
+                    {order.deliveryError ? <p className="mt-2 text-xs text-amber-700">Latest delivery tracking is unavailable. Open the order for details.</p> : null}
                   </div>
+                  <div className="hidden text-right sm:block"><p className="font-semibold text-slate-800">{order.total === null ? "Total unavailable" : formatCurrency(order.total)}</p><p className="mt-1 text-xs capitalize text-slate-500">Payment: {order.paymentStatus.replaceAll("_", " ")}</p></div>
                 </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <p className="rounded-xl bg-slate-50 p-3 text-sm capitalize"><span className="block text-xs text-slate-500">Order</span>{order.status.replaceAll("_", " ")}</p>
-                  <p className="rounded-xl bg-slate-50 p-3 text-sm capitalize"><span className="block text-xs text-slate-500">Payment</span>{order.paymentStatus.replaceAll("_", " ")}</p>
-                  <p className="rounded-xl bg-blue-50 p-3 text-sm"><span className="block text-xs text-blue-600">Delivery</span><span className="font-medium text-slate-800">{order.deliveryError && !order.delivery.status ? "Tracking unavailable" : orderDeliveryLabel(order.delivery)}</span></p>
-                  {order.deliveryError ? <p className="text-xs text-amber-700">Latest delivery tracking is unavailable. Open the order for details.</p> : null}
-                  {["delivered", "confirmed"].includes(order.status) ? <ReviewDraftButton orderId={order.id} /> : null}
-                  {order.paymentStatus === "pending" && order.status !== "cancelled" ? <Button onClick={() => payOrder(order)}>Resume payment</Button> : null}
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+                  <span className="text-sm font-semibold text-slate-800 sm:hidden">{order.total === null ? "Total unavailable" : formatCurrency(order.total)} <span className="text-xs font-normal capitalize text-slate-500">? Payment: {order.paymentStatus.replaceAll("_", " ")}</span></span>
+                  <Link href={'/dashboard/orders/' + encodeURIComponent(order.id)} className="text-sm font-semibold text-brand">View order ?</Link>
+                  <div className="flex flex-wrap gap-2">{["delivered", "confirmed"].includes(order.status) ? <ReviewDraftButton orderId={order.id} /> : null}{order.paymentStatus === "pending" && order.status !== "cancelled" ? <Button onClick={() => payOrder(order)}>Resume payment</Button> : null}</div>
                 </div>
-              </div>
+              </article>
             ))
           )}
         </div>
